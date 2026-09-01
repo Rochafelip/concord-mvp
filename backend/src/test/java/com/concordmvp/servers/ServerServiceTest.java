@@ -338,7 +338,7 @@ class ServerServiceTest {
         verify(realtimeEventPublisher).broadcast(eq(Set.of(ownerId, otherMemberId)), eventCaptor.capture());
         assertThat(eventCaptor.getValue().type()).isEqualTo(WsEventType.SERVER_DELETE);
 
-        // Canonical cascade order (docs/DECISIONS.md D11): channels -> members -> invite -> server.
+        // Canonical cascade order (docs/DECISIONS.md D11): channels -> invite -> members -> server.
         InOrder inOrder = inOrder(channelRepository, serverInviteRepository, serverMemberRepository, serverRepository);
         inOrder.verify(channelRepository).deleteByServerId(serverId);
         inOrder.verify(serverInviteRepository).delete(invite);
