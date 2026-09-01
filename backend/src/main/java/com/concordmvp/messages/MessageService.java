@@ -84,20 +84,39 @@ public class MessageService {
 
         Set<UUID> recipients = currentMemberIds(channel.getServerId());
         MessageResponse payload = toResponse(saved, author);
+        // WARNING: MESSAGE_CREATE is broadcast here, before this @Transactional method returns
+        // and the transaction commits (docs/DATABASE.md §34 specifies persist -> commit ->
+        // broadcast). If commit fails after this point, clients will have seen a message that
+        // was never actually persisted. Same risk class as the broadcast-before-commit warning
+        // in ServerService.deleteServer — a proper fix (e.g. deferring this to a
+        // @TransactionalEventListener(phase = AFTER_COMMIT)) is a deliberate future decision,
+        // not something to sneak in here.
         realtimeEventPublisher.broadcast(recipients, new WsEvent(WsEventType.MESSAGE_CREATE, payload));
 
         return saved;
     }
 
-    public List<MessageResponse> getHistory(UUID channelId, Instant before, int limit, UUID requesterId) {
+    /**
+     * @param before   exclusive upper bound on {@code createdAt} for the compound cursor; {@code
+     *                 null} for the first (most recent) page.
+     * @param beforeId tiebreak for messages sharing {@code before}'s exact timestamp — required
+     *                 whenever {@code before} is non-null (paired with the last message's id
+     *                 from the previous page), since a timestamp alone cannot disambiguate
+     *                 messages created in the same instant.
+     */
+    public List<MessageResponse> getHistory(UUID channelId, Instant before, UUID beforeId, int limit, UUID requesterId) {
         channelService.getChannel(channelId, requesterId);
+
+        if (before != null && beforeId == null) {
+            throw new BadRequestException("beforeId is required when before is provided");
+        }
 
         int effectiveLimit = limit <= 0 ? DEFAULT_HISTORY_LIMIT : Math.min(limit, MAX_HISTORY_LIMIT);
         Pageable page = PageRequest.of(0, effectiveLimit);
 
         List<Message> messages = before == null
                 ? messageRepository.findByChannelIdOrderByCreatedAtDescIdDesc(channelId, page)
-                : messageRepository.findByChannelIdAndCreatedAtBeforeOrderByCreatedAtDescIdDesc(channelId, before, page);
+                : messageRepository.findPageBefore(channelId, before, beforeId, page);
 
         List<Message> chronological = new ArrayList<>(messages);
         Collections.reverse(chronological);

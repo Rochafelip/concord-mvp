@@ -16,6 +16,12 @@ import java.util.UUID;
  * Read-only REST access to message history. There is deliberately NO {@code POST} endpoint here
  * — sending a message happens over WebSocket only, via {@code MESSAGE_CREATE}
  * (docs/ARCHITECTURE.md §18); see {@code realtime.ChatWebSocketHandler}.
+ *
+ * <p>Pagination uses a compound {@code (before, beforeId)} cursor rather than a bare timestamp:
+ * two messages can share the exact same {@code createdAt}, so a timestamp alone can't
+ * unambiguously mark a page boundary. Clients requesting an older page pass both {@code before}
+ * and {@code beforeId} from the oldest message of the page they already have; {@code beforeId}
+ * is required whenever {@code before} is provided.
  */
 @RestController
 public class MessageController {
@@ -29,8 +35,9 @@ public class MessageController {
     @GetMapping("/api/v1/channels/{channelId}/messages")
     public List<MessageResponse> getHistory(@PathVariable UUID channelId,
                                              @RequestParam(required = false) Instant before,
+                                             @RequestParam(required = false) UUID beforeId,
                                              @RequestParam(required = false) Integer limit) {
         int effectiveLimit = limit == null ? 0 : limit;
-        return messageService.getHistory(channelId, before, effectiveLimit, CurrentUser.id());
+        return messageService.getHistory(channelId, before, beforeId, effectiveLimit, CurrentUser.id());
     }
 }

@@ -22,6 +22,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -192,7 +193,7 @@ class MessageServiceTest {
         when(channelService.getChannel(channelId, requesterId))
                 .thenThrow(new ForbiddenException("Not a member of this server"));
 
-        assertThatThrownBy(() -> messageService.getHistory(channelId, null, 50, requesterId))
+        assertThatThrownBy(() -> messageService.getHistory(channelId, null, null, 50, requesterId))
                 .isInstanceOf(ForbiddenException.class);
     }
 
@@ -213,26 +214,90 @@ class MessageServiceTest {
         when(messageRepository.findByChannelIdOrderByCreatedAtDescIdDesc(eq(channelId), any()))
                 .thenReturn(List.of(newest, middle, oldest));
 
-        List<MessageResponse> result = messageService.getHistory(channelId, null, 50, requesterId);
+        List<MessageResponse> result = messageService.getHistory(channelId, null, null, 50, requesterId);
 
         assertThat(result).extracting(MessageResponse::content)
                 .containsExactly("oldest", "middle", "newest");
     }
 
     @Test
-    void getHistory_beforeCursor_usesCreatedAtBeforeQuery() {
+    void getHistory_beforeCursor_usesCompoundCursorQuery() {
         UUID channelId = UUID.randomUUID();
         UUID serverId = UUID.randomUUID();
         UUID requesterId = UUID.randomUUID();
         Instant before = Instant.now();
+        UUID beforeId = UUID.randomUUID();
         when(channelService.getChannel(channelId, requesterId)).thenReturn(channel(channelId, serverId));
-        when(messageRepository.findByChannelIdAndCreatedAtBeforeOrderByCreatedAtDescIdDesc(eq(channelId), eq(before), any()))
+        when(messageRepository.findPageBefore(eq(channelId), eq(before), eq(beforeId), any()))
                 .thenReturn(List.of());
 
-        List<MessageResponse> result = messageService.getHistory(channelId, before, 50, requesterId);
+        List<MessageResponse> result = messageService.getHistory(channelId, before, beforeId, 50, requesterId);
 
         assertThat(result).isEmpty();
         verify(messageRepository, never()).findByChannelIdOrderByCreatedAtDescIdDesc(any(), any());
+    }
+
+    @Test
+    void getHistory_beforeWithoutBeforeId_throwsBadRequest() {
+        UUID channelId = UUID.randomUUID();
+        UUID serverId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        when(channelService.getChannel(channelId, requesterId)).thenReturn(channel(channelId, serverId));
+
+        assertThatThrownBy(() -> messageService.getHistory(channelId, Instant.now(), null, 50, requesterId))
+                .isInstanceOf(BadRequestException.class);
+
+        verifyNoInteractions(messageRepository);
+    }
+
+    /**
+     * Locks the fix for the pagination-skip bug: filtering older pages on {@code createdAt <
+     * before} alone silently drops messages that share the exact same {@code createdAt} as the
+     * cursor whenever they land on the wrong side of a page split (verified against a real
+     * Postgres instance during code review). The compound {@code (before, beforeId)} cursor,
+     * translated by {@code findPageBefore}'s JPQL into {@code createdAt < :before OR (createdAt =
+     * :before AND id < :beforeId)}, must receive both pieces so no message sharing the boundary
+     * timestamp is skipped or duplicated across the two pages.
+     */
+    @Test
+    void getHistory_paginatesAcrossSameTimestampBoundary_noSkipOrDuplicate() {
+        UUID channelId = UUID.randomUUID();
+        UUID serverId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        UUID authorId = UUID.randomUUID();
+        when(channelService.getChannel(channelId, requesterId)).thenReturn(channel(channelId, serverId));
+        when(userRepository.findAllById(any())).thenReturn(List.of(user(authorId, "bob", "Bob")));
+
+        Instant boundary = Instant.now();
+        // Three messages share the exact same createdAt; ids are used to order/split them.
+        UUID idA = UUID.fromString("00000000-0000-0000-0000-00000000000a"); // newest of the three
+        UUID idB = UUID.fromString("00000000-0000-0000-0000-000000000009"); // last item of page 1
+        UUID idC = UUID.fromString("00000000-0000-0000-0000-000000000008"); // must surface on page 2
+
+        Message a = newMessage(channelId, authorId, "a", boundary, idA);
+        Message b = newMessage(channelId, authorId, "b", boundary, idB);
+        Message c = newMessage(channelId, authorId, "c", boundary, idC);
+
+        // Page 1: newest-first, page size 2 -> [a, b]. b is the last item, so it becomes the
+        // cursor (before=boundary, beforeId=idB) for page 2.
+        when(messageRepository.findByChannelIdOrderByCreatedAtDescIdDesc(eq(channelId), any()))
+                .thenReturn(List.of(a, b));
+        // Page 2 must use the compound cursor (createdAt = boundary AND id < idB) to surface c —
+        // a plain "createdAt < boundary" filter would incorrectly skip it.
+        when(messageRepository.findPageBefore(eq(channelId), eq(boundary), eq(idB), any()))
+                .thenReturn(List.of(c));
+
+        List<MessageResponse> page1 = messageService.getHistory(channelId, null, null, 2, requesterId);
+        List<MessageResponse> page2 = messageService.getHistory(channelId, boundary, idB, 2, requesterId);
+
+        assertThat(page1).extracting(MessageResponse::content).containsExactly("b", "a");
+        assertThat(page2).extracting(MessageResponse::content).containsExactly("c");
+
+        // No overlap and nothing missing across the two pages.
+        List<UUID> allIds = new ArrayList<>();
+        page1.forEach(m -> allIds.add(m.id()));
+        page2.forEach(m -> allIds.add(m.id()));
+        assertThat(allIds).containsExactlyInAnyOrder(idA, idB, idC);
     }
 
     @Test
@@ -244,7 +309,7 @@ class MessageServiceTest {
         when(messageRepository.findByChannelIdOrderByCreatedAtDescIdDesc(eq(channelId), any()))
                 .thenReturn(List.of());
 
-        messageService.getHistory(channelId, null, 1000, requesterId);
+        messageService.getHistory(channelId, null, null, 1000, requesterId);
 
         ArgumentCaptor<org.springframework.data.domain.Pageable> pageableCaptor =
                 ArgumentCaptor.forClass(org.springframework.data.domain.Pageable.class);
@@ -261,7 +326,7 @@ class MessageServiceTest {
         when(messageRepository.findByChannelIdOrderByCreatedAtDescIdDesc(eq(channelId), any()))
                 .thenReturn(List.of());
 
-        messageService.getHistory(channelId, null, 0, requesterId);
+        messageService.getHistory(channelId, null, null, 0, requesterId);
 
         ArgumentCaptor<org.springframework.data.domain.Pageable> pageableCaptor =
                 ArgumentCaptor.forClass(org.springframework.data.domain.Pageable.class);
@@ -270,8 +335,12 @@ class MessageServiceTest {
     }
 
     private Message newMessage(UUID channelId, UUID authorId, String content, Instant createdAt) {
+        return newMessage(channelId, authorId, content, createdAt, UUID.randomUUID());
+    }
+
+    private Message newMessage(UUID channelId, UUID authorId, String content, Instant createdAt, UUID id) {
         Message message = new Message();
-        message.setId(UUID.randomUUID());
+        message.setId(id);
         message.setChannelId(channelId);
         message.setAuthorId(authorId);
         message.setContent(content);
