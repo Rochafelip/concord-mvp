@@ -1,5 +1,6 @@
 package com.concordmvp.servers;
 
+import com.concordmvp.channels.ChannelRepository;
 import com.concordmvp.common.exception.BadRequestException;
 import com.concordmvp.common.exception.ForbiddenException;
 import com.concordmvp.common.exception.ResourceNotFoundException;
@@ -47,13 +48,16 @@ class ServerServiceTest {
     private ServerInviteRepository serverInviteRepository;
 
     @Mock
+    private ChannelRepository channelRepository;
+
+    @Mock
     private RealtimeEventPublisher realtimeEventPublisher;
 
     private ServerService serverService;
 
     @BeforeEach
     void setUp() {
-        serverService = new ServerService(serverRepository, serverMemberRepository, serverInviteRepository, realtimeEventPublisher);
+        serverService = new ServerService(serverRepository, serverMemberRepository, serverInviteRepository, channelRepository, realtimeEventPublisher);
     }
 
     /** Mimics JPA assigning an id on save/persist for a {@link Server} that doesn't already have one. */
@@ -320,6 +324,7 @@ class ServerServiceTest {
 
         // Sanity: no deletion has happened by the time broadcast fires.
         doAnswer(invocation -> {
+            verify(channelRepository, never()).deleteByServerId(any());
             verify(serverInviteRepository, never()).delete(any());
             verify(serverMemberRepository, never()).deleteAll(anySet());
             verify(serverMemberRepository, never()).delete(any());
@@ -333,7 +338,9 @@ class ServerServiceTest {
         verify(realtimeEventPublisher).broadcast(eq(Set.of(ownerId, otherMemberId)), eventCaptor.capture());
         assertThat(eventCaptor.getValue().type()).isEqualTo(WsEventType.SERVER_DELETE);
 
-        InOrder inOrder = inOrder(serverInviteRepository, serverMemberRepository, serverRepository);
+        // Canonical cascade order (docs/DECISIONS.md D11): channels -> members -> invite -> server.
+        InOrder inOrder = inOrder(channelRepository, serverInviteRepository, serverMemberRepository, serverRepository);
+        inOrder.verify(channelRepository).deleteByServerId(serverId);
         inOrder.verify(serverInviteRepository).delete(invite);
         inOrder.verify(serverMemberRepository).deleteAll(any());
         inOrder.verify(serverRepository).delete(server);

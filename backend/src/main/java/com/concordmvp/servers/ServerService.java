@@ -1,5 +1,6 @@
 package com.concordmvp.servers;
 
+import com.concordmvp.channels.ChannelRepository;
 import com.concordmvp.common.exception.BadRequestException;
 import com.concordmvp.common.exception.ForbiddenException;
 import com.concordmvp.common.exception.ResourceNotFoundException;
@@ -32,16 +33,19 @@ public class ServerService {
     private final ServerRepository serverRepository;
     private final ServerMemberRepository serverMemberRepository;
     private final ServerInviteRepository serverInviteRepository;
+    private final ChannelRepository channelRepository;
     private final RealtimeEventPublisher realtimeEventPublisher;
     private final SecureRandom secureRandom = new SecureRandom();
 
     public ServerService(ServerRepository serverRepository,
                           ServerMemberRepository serverMemberRepository,
                           ServerInviteRepository serverInviteRepository,
+                          ChannelRepository channelRepository,
                           RealtimeEventPublisher realtimeEventPublisher) {
         this.serverRepository = serverRepository;
         this.serverMemberRepository = serverMemberRepository;
         this.serverInviteRepository = serverInviteRepository;
+        this.channelRepository = channelRepository;
         this.realtimeEventPublisher = realtimeEventPublisher;
     }
 
@@ -160,8 +164,9 @@ public class ServerService {
         // method — a proper fix (e.g. deferring the broadcast to
         // @TransactionalEventListener(phase = AFTER_COMMIT)) is a deliberate decision for
         // whoever implements this, not something to sneak in incidentally.
-        // TODO(Task 5): delete this server's channels here, before deleting members/invite/server.
-        // TODO(Task 6): delete those channels' messages here too, before deleting the channels.
+        // TODO(Task 6): delete this server's channels' messages here, immediately before the
+        // channelRepository.deleteByServerId(serverId) call below.
+        channelRepository.deleteByServerId(serverId);
 
         serverInviteRepository.findByServerId(serverId).ifPresent(serverInviteRepository::delete);
         serverMemberRepository.deleteAll(serverMemberRepository.findByServerId(serverId));
