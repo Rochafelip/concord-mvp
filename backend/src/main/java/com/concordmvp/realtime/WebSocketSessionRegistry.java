@@ -21,9 +21,15 @@ public class WebSocketSessionRegistry {
     private final ConcurrentHashMap<UUID, Set<WebSocketSession>> sessionsByUserId = new ConcurrentHashMap<>();
 
     public void register(UUID userId, WebSocketSession session) {
-        sessionsByUserId
-                .computeIfAbsent(userId, id -> ConcurrentHashMap.newKeySet())
-                .add(session);
+        // Atomic compute (rather than computeIfAbsent + separate add) so this can never race
+        // with unregister()'s atomic computeIfPresent — otherwise a concurrent unregister of
+        // the user's last session could detach the set from the map between this method's
+        // lookup and its add(), silently dropping the new session.
+        sessionsByUserId.compute(userId, (id, sessions) -> {
+            Set<WebSocketSession> target = sessions == null ? ConcurrentHashMap.newKeySet() : sessions;
+            target.add(session);
+            return target;
+        });
     }
 
     public void unregister(UUID userId, WebSocketSession session) {
