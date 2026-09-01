@@ -1,19 +1,30 @@
 import { Outlet } from 'react-router-dom';
 import { Avatar } from '../components/Avatar';
 import { Button } from '../components/Button';
+import { ErrorBanner } from '../components/ErrorBanner';
 import { useAuthStore } from '../features/auth/authStore';
 import { ServerSidebar } from '../features/servers/ServerSidebar';
+import { useRealtimeSync } from '../hooks/useRealtimeSync';
+import { useNotificationStore } from '../stores/notificationStore';
 
 /**
  * Authenticated-area layout: a header with the current user and a logout button, the
  * persistent ServerSidebar (far-left server rail, visible across every nested /app route),
  * and an <Outlet/> for the rest — server/channel-specific layout lives in ServerLayout,
  * nested one level deeper under /app/servers/:serverId.
+ *
+ * Also the single mount point for useRealtimeSync: AppShell only renders once authenticated
+ * (per ProtectedRoute), so this is the right place to own the WebSocket connection's lifecycle
+ * for the whole authenticated area.
  */
 export function AppShell() {
   const token = useAuthStore((state) => state.token);
   const user = useAuthStore((state) => state.user);
   const logout = useAuthStore((state) => state.logout);
+
+  useRealtimeSync();
+  const notification = useNotificationStore((state) => state.message);
+  const clearNotification = useNotificationStore((state) => state.clear);
 
   return (
     <div className="flex h-screen flex-col">
@@ -37,6 +48,22 @@ export function AppShell() {
           </div>
         )}
       </header>
+
+      {notification && (
+        <div className="flex flex-shrink-0 items-center gap-2 px-4 pt-2">
+          <div className="flex-1">
+            <ErrorBanner message={notification} />
+          </div>
+          <button
+            type="button"
+            aria-label="Dismiss notification"
+            onClick={clearNotification}
+            className="text-red-700 hover:text-red-900"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       <div className="flex flex-1 overflow-hidden">
         <ServerSidebar />
