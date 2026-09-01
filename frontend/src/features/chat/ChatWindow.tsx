@@ -20,8 +20,12 @@ export function ChatWindow() {
           {channel ? `# ${channel.name}` : 'Loading…'}
         </span>
       </div>
-      <MessageList channelId={channelId} />
-      <MessageInput channelId={channelId} />
+      {/* key={channelId} forces a full remount on channel switch. Without it, client-side
+          navigation only changes props, not identity — MessageList's scroll-state refs (e.g. a
+          load-older-messages fetch still pending from the PREVIOUS channel) and MessageInput's
+          draft text would otherwise carry over into the newly selected channel. */}
+      <MessageList key={channelId} channelId={channelId} />
+      <MessageInput key={channelId} channelId={channelId} />
     </div>
   );
 }

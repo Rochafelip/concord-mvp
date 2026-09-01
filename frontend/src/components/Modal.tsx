@@ -7,8 +7,8 @@ interface ModalProps {
 }
 
 /**
- * Minimal placeholder — nothing in this task needs a modal yet. Later features
- * (e.g. create-server, create-channel dialogs) can build on this.
+ * Minimal shared modal shell — backdrop + centered panel, closes on backdrop click. Used by
+ * the create-server, join-server, create-channel, and server-settings dialogs.
  */
 export function Modal({ open, onClose, children }: ModalProps) {
   if (!open) return null;
