@@ -1,0 +1,18 @@
+server:
+  port: 8080
+
+spring:
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/concordmvp}
+    username: ${DATABASE_USERNAME:concordmvp}
+    password: ${DATABASE_PASSWORD:concordmvp}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+
+jwt:
+  secret: ${JWT_SECRET:dev-only-secret-do-not-use-in-production-change-me}
+  expiration-days: 30
