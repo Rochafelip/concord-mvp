@@ -491,7 +491,13 @@ CHANNEL_DELETE
 
 SERVER_MEMBER_JOIN
 SERVER_MEMBER_LEAVE
+
+SERVER_DELETE
+SERVER_OWNER_CHANGE
 ```
+
+`SERVER_DELETE` and `SERVER_OWNER_CHANGE` were added to this vocabulary
+during Phase 1 planning — see `docs/DECISIONS.md` D15.
 
 The exact protocol is defined in:
 

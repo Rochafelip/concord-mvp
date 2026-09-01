@@ -249,3 +249,23 @@ column is added to `users` for the name shown in the UI, independent of
 **Consequences**: `DATABASE.md` users table gains a `display_name` column
 (required, no uniqueness constraint — same as `username`). No `UNIQUE`
 constraint is added on `username`, unlike `email`, which stays unique.
+
+---
+
+## D15 — WebSocket events for server deletion and owner change
+
+**Context**: The WebSocket event vocabulary documented in `ARCHITECTURE.md`
+§16 did not originally include events for a server being deleted or its
+ownership changing. During Phase 1 planning (`realtime/` package build-out),
+the project owner was asked whether members should find out about these
+instantly, over the WebSocket connection, or only on their next page
+refresh, and chose instant updates.
+
+**Decision**: Add `SERVER_DELETE` and `SERVER_OWNER_CHANGE` to the
+WebSocket event vocabulary. `ServerService` (built in a later task) will
+broadcast these to affected members via `RealtimeEventPublisher`.
+
+**Consequences**: Two new event types are added to the documented
+vocabulary (`ARCHITECTURE.md` §16, `TECH_STACK.md` §10). The frontend (a
+later task) subscribes to them to update its UI live instead of relying on
+a refetch.
