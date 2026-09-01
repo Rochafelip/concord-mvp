@@ -1,32 +1,31 @@
-# React + TypeScript + Vite
+# Concord frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+React + TypeScript + Vite single-page app for Concord.
 
-Currently, two official plugins are available:
+## Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- Vite, React, TypeScript
+- Tailwind CSS
+- React Router
+- TanStack Query (server state)
+- Zustand (client state, e.g. auth session)
+- Vitest + React Testing Library
 
-## React Compiler
+## Development
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm install
+npm run dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+The dev server proxies `/api` and `/ws` to the backend at `http://localhost:8080`
+(see `vite.config.ts`), so the app should always call relative paths like
+`/api/v1/...` rather than a hardcoded backend URL.
+
+## Scripts
+
+- `npm run dev` — start the dev server
+- `npm run build` — type-check and build a production bundle into `dist/`
+- `npm run lint` — run ESLint
+- `npm run test` — run Vitest in watch mode (`npm run test -- --run` for a single CI run)
+- `npm run preview` — preview the production build locally
