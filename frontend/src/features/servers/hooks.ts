@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
+import { useAuthStore } from '../auth/authStore';
 import * as api from './api';
 
 export function useServers() {
@@ -15,6 +16,18 @@ export function useServer(serverId: string | undefined) {
     queryFn: () => api.getServer(serverId!),
     enabled: serverId != null,
   });
+}
+
+/**
+ * Whether the current user owns the given server. Shared by every call site that needs to
+ * gate owner-only UI (ChannelSidebar's "create channel", ServerSettingsPanel's invite/
+ * transfer/delete actions, and future ones) instead of each re-deriving it from `useServer`
+ * + `authStore` independently.
+ */
+export function useIsServerOwner(serverId: string | undefined): boolean {
+  const currentUserId = useAuthStore((state) => state.user?.id);
+  const { data: server } = useServer(serverId);
+  return server != null && currentUserId != null && server.ownerId === currentUserId;
 }
 
 export function useServerMembers(serverId: string | undefined) {

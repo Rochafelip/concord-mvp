@@ -8,6 +8,7 @@ import { useAuthStore } from '../auth/authStore';
 import {
   useDeleteServer,
   useInvite,
+  useIsServerOwner,
   useLeaveServer,
   useRegenerateInvite,
   useServer,
@@ -31,12 +32,15 @@ interface ServerSettingsPanelProps {
 export function ServerSettingsPanel({ serverId, open, onClose }: ServerSettingsPanelProps) {
   const currentUserId = useAuthStore((state) => state.user?.id);
   const { data: server } = useServer(serverId);
-  const { data: members } = useServerMembers(serverId);
+  // Gated on `open`: this panel is always mounted (Modal just hides its DOM when closed), so
+  // without this these would fire a members/invite GET as soon as any server is opened,
+  // before the settings panel has ever been clicked open.
+  const { data: members } = useServerMembers(open ? serverId : undefined);
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
 
-  const isOwner = server != null && currentUserId != null && server.ownerId === currentUserId;
+  const isOwner = useIsServerOwner(serverId);
 
-  const inviteQuery = useInvite(isOwner ? serverId : undefined);
+  const inviteQuery = useInvite(open && isOwner ? serverId : undefined);
   const regenerateInviteMutation = useRegenerateInvite(serverId);
   const transferOwnershipMutation = useTransferOwnership(serverId);
   const deleteServerMutation = useDeleteServer();

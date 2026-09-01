@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { useAuthStore } from '../auth/authStore';
-import { useServer } from '../servers/hooks';
+import { useIsServerOwner, useServer } from '../servers/hooks';
 import { ServerSettingsPanel } from '../servers/ServerSettingsPanel';
 import { CreateChannelModal } from './CreateChannelModal';
 import { useChannels } from './hooks';
@@ -19,15 +18,14 @@ function channelLinkClassName(isSelected: boolean) {
  */
 export function ChannelSidebar() {
   const { serverId, channelId } = useParams<{ serverId: string; channelId?: string }>();
-  const currentUserId = useAuthStore((state) => state.user?.id);
   const { data: server } = useServer(serverId);
   const { data: channels } = useChannels(serverId);
+  const isOwner = useIsServerOwner(serverId);
   const [createOpen, setCreateOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   if (!serverId) return null;
 
-  const isOwner = server != null && currentUserId != null && server.ownerId === currentUserId;
   const textChannels = (channels ?? []).filter((channel) => channel.type === 'TEXT');
   const voiceChannels = (channels ?? []).filter((channel) => channel.type === 'VOICE');
 
