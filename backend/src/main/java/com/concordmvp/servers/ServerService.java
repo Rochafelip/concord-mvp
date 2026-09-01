@@ -1,9 +1,11 @@
 package com.concordmvp.servers;
 
+import com.concordmvp.channels.Channel;
 import com.concordmvp.channels.ChannelRepository;
 import com.concordmvp.common.exception.BadRequestException;
 import com.concordmvp.common.exception.ForbiddenException;
 import com.concordmvp.common.exception.ResourceNotFoundException;
+import com.concordmvp.messages.MessageRepository;
 import com.concordmvp.realtime.RealtimeEventPublisher;
 import com.concordmvp.realtime.WsEvent;
 import com.concordmvp.realtime.WsEventType;
@@ -34,6 +36,7 @@ public class ServerService {
     private final ServerMemberRepository serverMemberRepository;
     private final ServerInviteRepository serverInviteRepository;
     private final ChannelRepository channelRepository;
+    private final MessageRepository messageRepository;
     private final RealtimeEventPublisher realtimeEventPublisher;
     private final SecureRandom secureRandom = new SecureRandom();
 
@@ -41,11 +44,13 @@ public class ServerService {
                           ServerMemberRepository serverMemberRepository,
                           ServerInviteRepository serverInviteRepository,
                           ChannelRepository channelRepository,
+                          MessageRepository messageRepository,
                           RealtimeEventPublisher realtimeEventPublisher) {
         this.serverRepository = serverRepository;
         this.serverMemberRepository = serverMemberRepository;
         this.serverInviteRepository = serverInviteRepository;
         this.channelRepository = channelRepository;
+        this.messageRepository = messageRepository;
         this.realtimeEventPublisher = realtimeEventPublisher;
     }
 
@@ -164,8 +169,11 @@ public class ServerService {
         // method — a proper fix (e.g. deferring the broadcast to
         // @TransactionalEventListener(phase = AFTER_COMMIT)) is a deliberate decision for
         // whoever implements this, not something to sneak in incidentally.
-        // TODO(Task 6): delete this server's channels' messages here, immediately before the
-        // channelRepository.deleteByServerId(serverId) call below.
+        List<UUID> channelIds = channelRepository.findByServerId(serverId).stream()
+                .map(Channel::getId)
+                .toList();
+        messageRepository.deleteByChannelIdIn(channelIds);
+
         channelRepository.deleteByServerId(serverId);
 
         serverInviteRepository.findByServerId(serverId).ifPresent(serverInviteRepository::delete);

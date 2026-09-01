@@ -1,9 +1,11 @@
 package com.concordmvp.servers;
 
+import com.concordmvp.channels.Channel;
 import com.concordmvp.channels.ChannelRepository;
 import com.concordmvp.common.exception.BadRequestException;
 import com.concordmvp.common.exception.ForbiddenException;
 import com.concordmvp.common.exception.ResourceNotFoundException;
+import com.concordmvp.messages.MessageRepository;
 import com.concordmvp.realtime.RealtimeEventPublisher;
 import com.concordmvp.realtime.WsEvent;
 import com.concordmvp.realtime.WsEventType;
@@ -51,13 +53,16 @@ class ServerServiceTest {
     private ChannelRepository channelRepository;
 
     @Mock
+    private MessageRepository messageRepository;
+
+    @Mock
     private RealtimeEventPublisher realtimeEventPublisher;
 
     private ServerService serverService;
 
     @BeforeEach
     void setUp() {
-        serverService = new ServerService(serverRepository, serverMemberRepository, serverInviteRepository, channelRepository, realtimeEventPublisher);
+        serverService = new ServerService(serverRepository, serverMemberRepository, serverInviteRepository, channelRepository, messageRepository, realtimeEventPublisher);
     }
 
     /** Mimics JPA assigning an id on save/persist for a {@link Server} that doesn't already have one. */
@@ -317,13 +322,23 @@ class ServerServiceTest {
         invite.setId(UUID.randomUUID());
         invite.setServerId(serverId);
         invite.setCode("abc123");
+        UUID channelId1 = UUID.randomUUID();
+        UUID channelId2 = UUID.randomUUID();
+        Channel channel1 = new Channel();
+        channel1.setId(channelId1);
+        channel1.setServerId(serverId);
+        Channel channel2 = new Channel();
+        channel2.setId(channelId2);
+        channel2.setServerId(serverId);
 
         when(serverRepository.findById(serverId)).thenReturn(Optional.of(server));
         when(serverMemberRepository.findByServerId(serverId)).thenReturn(List.of(ownerMembership, otherMembership));
         when(serverInviteRepository.findByServerId(serverId)).thenReturn(Optional.of(invite));
+        when(channelRepository.findByServerId(serverId)).thenReturn(List.of(channel1, channel2));
 
         // Sanity: no deletion has happened by the time broadcast fires.
         doAnswer(invocation -> {
+            verify(messageRepository, never()).deleteByChannelIdIn(any());
             verify(channelRepository, never()).deleteByServerId(any());
             verify(serverInviteRepository, never()).delete(any());
             verify(serverMemberRepository, never()).deleteAll(anySet());
@@ -338,8 +353,11 @@ class ServerServiceTest {
         verify(realtimeEventPublisher).broadcast(eq(Set.of(ownerId, otherMemberId)), eventCaptor.capture());
         assertThat(eventCaptor.getValue().type()).isEqualTo(WsEventType.SERVER_DELETE);
 
-        // Canonical cascade order (docs/DECISIONS.md D11): channels -> invite -> members -> server.
-        InOrder inOrder = inOrder(channelRepository, serverInviteRepository, serverMemberRepository, serverRepository);
+        verify(messageRepository).deleteByChannelIdIn(List.of(channelId1, channelId2));
+
+        // Canonical cascade order (docs/DECISIONS.md D11): messages -> channels -> invite -> members -> server.
+        InOrder inOrder = inOrder(messageRepository, channelRepository, serverInviteRepository, serverMemberRepository, serverRepository);
+        inOrder.verify(messageRepository).deleteByChannelIdIn(any());
         inOrder.verify(channelRepository).deleteByServerId(serverId);
         inOrder.verify(serverInviteRepository).delete(invite);
         inOrder.verify(serverMemberRepository).deleteAll(any());

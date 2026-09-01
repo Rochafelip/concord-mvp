@@ -1,5 +1,7 @@
 package com.concordmvp.realtime;
 
+import com.concordmvp.common.exception.ForbiddenException;
+import com.concordmvp.messages.MessageService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -17,8 +19,12 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -27,13 +33,16 @@ class ChatWebSocketHandlerTest {
     @Mock
     private WebSocketSessionRegistry sessionRegistry;
 
+    @Mock
+    private MessageService messageService;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private ChatWebSocketHandler handler;
 
     @BeforeEach
     void setUp() {
-        handler = new ChatWebSocketHandler(sessionRegistry, objectMapper);
+        handler = new ChatWebSocketHandler(sessionRegistry, objectMapper, messageService);
     }
 
     @Test
@@ -77,6 +86,37 @@ class ChatWebSocketHandlerTest {
 
         JsonNode payload = objectMapper.valueToTree(event.payload());
         assertThat(payload.get("message").asText()).contains("SOME_BOGUS_TYPE");
+    }
+
+    @Test
+    void handleTextMessage_messageCreate_valid_callsMessageService_andSendsNothingToSender() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID channelId = UUID.randomUUID();
+        WebSocketSession session = sessionWithUserId(userId);
+
+        handler.handleMessage(session, new TextMessage(
+                "{\"type\":\"MESSAGE_CREATE\",\"payload\":{\"channelId\":\"" + channelId + "\",\"content\":\"hi\"}}"));
+
+        verify(messageService).sendMessage(eq(channelId), eq("hi"), eq(userId));
+        verify(session, never()).sendMessage(any());
+    }
+
+    @Test
+    void handleTextMessage_messageCreate_serviceThrows_sendsErrorFrameToSendingSessionOnly() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID channelId = UUID.randomUUID();
+        WebSocketSession session = sessionWithUserId(userId);
+        when(messageService.sendMessage(eq(channelId), eq("hi"), eq(userId)))
+                .thenThrow(new ForbiddenException("Not a member of this server"));
+
+        handler.handleMessage(session, new TextMessage(
+                "{\"type\":\"MESSAGE_CREATE\",\"payload\":{\"channelId\":\"" + channelId + "\",\"content\":\"hi\"}}"));
+
+        WsEvent event = capturedEvent(session);
+        assertThat(event.type()).isEqualTo(WsEventType.ERROR);
+        JsonNode payload = objectMapper.valueToTree(event.payload());
+        assertThat(payload.get("message").asText()).isEqualTo("Not a member of this server");
+        verifyNoMoreInteractions(sessionRegistry);
     }
 
     private WebSocketSession sessionWithUserId(UUID userId) {
