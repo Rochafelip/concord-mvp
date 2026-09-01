@@ -1,19 +1,26 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppShell } from '../app/AppShell';
+import { ServerLayout } from '../app/ServerLayout';
 import { LoginPage } from '../features/auth/LoginPage';
 import { RegisterPage } from '../features/auth/RegisterPage';
 import { useAuthStore } from '../features/auth/authStore';
 import { ProtectedRoute } from './ProtectedRoute';
 
-// Placeholder for /app/servers/:serverId. The real server/channel sidebar and chat UI are
-// built by a later task — this route just needs to exist and render something minimal.
-function ServerPlaceholder() {
+// Placeholder for /app (no server selected yet).
+function NoServerSelected() {
+  return <div className="p-4 text-gray-500">Select a server</div>;
+}
+
+// Placeholder for /app/servers/:serverId (no channel selected yet).
+function NoChannelSelected() {
   return <div className="p-4 text-gray-500">Select a channel</div>;
 }
 
-// Placeholder for /app/servers/:serverId/channels/:channelId — same reasoning as above.
+// Placeholder for /app/servers/:serverId/channels/:channelId. The real chat UI
+// (features/chat/) is built by a later task — this route just needs to exist and render
+// something minimal for now.
 function ChannelPlaceholder() {
-  return <div className="p-4 text-gray-500">Channel view coming soon</div>;
+  return <div className="p-4 text-gray-500">Chat UI coming soon</div>;
 }
 
 // Catch-all target: send authenticated users back into the app, everyone else to /login.
@@ -36,8 +43,11 @@ export function AppRouter() {
           </ProtectedRoute>
         }
       >
-        <Route path="servers/:serverId" element={<ServerPlaceholder />} />
-        <Route path="servers/:serverId/channels/:channelId" element={<ChannelPlaceholder />} />
+        <Route index element={<NoServerSelected />} />
+        <Route path="servers/:serverId" element={<ServerLayout />}>
+          <Route index element={<NoChannelSelected />} />
+          <Route path="channels/:channelId" element={<ChannelPlaceholder />} />
+        </Route>
       </Route>
 
       <Route path="*" element={<CatchAllRedirect />} />
