@@ -188,6 +188,29 @@ class ServerServiceTest {
                 .isInstanceOf(ForbiddenException.class);
     }
 
+    @Test
+    void regenerateInvite_existingInvite_updatesSameRow_notNewRow() {
+        UUID serverId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        UUID existingInviteId = UUID.randomUUID();
+        ServerInvite existingInvite = new ServerInvite();
+        existingInvite.setId(existingInviteId);
+        existingInvite.setServerId(serverId);
+        existingInvite.setCode("oldcode1");
+
+        when(serverRepository.findById(serverId)).thenReturn(Optional.of(server(serverId, ownerId)));
+        when(serverInviteRepository.findByServerId(serverId)).thenReturn(Optional.of(existingInvite));
+        when(serverInviteRepository.save(any(ServerInvite.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        serverService.regenerateInvite(serverId, ownerId);
+
+        ArgumentCaptor<ServerInvite> inviteCaptor = ArgumentCaptor.forClass(ServerInvite.class);
+        verify(serverInviteRepository).save(inviteCaptor.capture());
+        // D10: regeneration is an UPDATE (server_invites has UNIQUE(server_id)) — same row, new code.
+        assertThat(inviteCaptor.getValue().getId()).isEqualTo(existingInviteId);
+        assertThat(inviteCaptor.getValue().getCode()).isNotEqualTo("oldcode1");
+    }
+
     // --- leaveServer ---
 
     @Test

@@ -154,6 +154,12 @@ public class ServerService {
         realtimeEventPublisher.broadcast(recipients,
                 new WsEvent(WsEventType.SERVER_DELETE, new ServerDeletedPayload(serverId)));
 
+        // WARNING: SERVER_DELETE is broadcast above BEFORE the transaction commits. If
+        // channel/message deletion added below ever fails, the transaction rolls back but
+        // clients already believe the server is gone. Keep this in mind when extending this
+        // method — a proper fix (e.g. deferring the broadcast to
+        // @TransactionalEventListener(phase = AFTER_COMMIT)) is a deliberate decision for
+        // whoever implements this, not something to sneak in incidentally.
         // TODO(Task 5): delete this server's channels here, before deleting members/invite/server.
         // TODO(Task 6): delete those channels' messages here too, before deleting the channels.
 
