@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main, master]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   frontend:
     runs-on: ubuntu-latest
@@ -47,4 +51,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - run: docker compose -f infrastructure/docker-compose.yml config
+      - run: docker compose --env-file infrastructure/.env.example -f infrastructure/docker-compose.yml config
