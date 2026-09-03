@@ -105,21 +105,30 @@ class VoiceClient {
   // A subscribed remote audio track is not audible until it is attached to a media element —
   // LiveKit does not do this automatically. Attached to a hidden element in the document body
   // since this feature is audio-only (no video/screen tracks exist yet — later phases).
+  //
+  // Also re-syncs participants here (found via manual two-browser testing, not a mock): a
+  // remote participant's ParticipantConnected can fire before their mic track is actually
+  // published, so the isMicrophoneEnabled snapshot taken at that moment reads false. Without a
+  // resync on subscribe, the UI would show them as muted indefinitely — until they happened to
+  // explicitly toggle mute once and trigger TrackMuted/TrackUnmuted.
   private handleTrackSubscribed = (track: RemoteTrack): void => {
     if (track.kind !== Track.Kind.Audio || !track.sid) return;
     const element = track.attach();
     element.dataset.trackSid = track.sid;
     document.body.appendChild(element);
     this.audioElements.set(track.sid, element);
+    this.syncParticipants();
   };
 
   private handleTrackUnsubscribed = (track: RemoteTrack): void => {
     if (!track.sid) return;
     const element = this.audioElements.get(track.sid);
-    if (!element) return;
-    track.detach(element);
-    element.remove();
-    this.audioElements.delete(track.sid);
+    if (element) {
+      track.detach(element);
+      element.remove();
+      this.audioElements.delete(track.sid);
+    }
+    this.syncParticipants();
   };
 
   private syncParticipants = (): void => {

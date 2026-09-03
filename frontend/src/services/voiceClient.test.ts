@@ -148,6 +148,26 @@ describe('voiceClient', () => {
     expect(document.body.contains(mockElement)).toBe(true);
   });
 
+  it('refreshes participant mic state when a remote track is subscribed, not just on explicit mute/unmute events', async () => {
+    // Reproduces a real bug found in manual two-browser testing: a remote participant's
+    // ParticipantConnected can fire before their microphone track is actually published, so the
+    // snapshot taken at that moment reads micEnabled: false. If nothing re-syncs once the track
+    // is subscribed, the UI shows them as muted forever, even though they're not — until they
+    // happen to explicitly toggle mute once.
+    await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+    const room = roomInstances[0];
+
+    const bob = { identity: 'bob', name: 'Bob', isMicrophoneEnabled: true };
+    room.remoteParticipants.set('bob', bob);
+
+    const onTrackSubscribed = handlerFor(room, 'trackSubscribed');
+    const track = { kind: 'audio', sid: 'track-bob', attach: vi.fn().mockReturnValue(document.createElement('audio')) };
+    onTrackSubscribed(track, {}, bob);
+
+    const bobEntry = useVoiceStore.getState().participants.find((p) => p.identity === 'bob');
+    expect(bobEntry?.micEnabled).toBe(true);
+  });
+
   it('removes attached remote audio elements immediately on disconnect, without depending on TrackUnsubscribed firing', async () => {
     await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
     const room = roomInstances[0];
