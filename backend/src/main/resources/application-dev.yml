@@ -6,3 +6,8 @@ spring:
 
 jwt:
   secret: ${JWT_SECRET:dev-only-secret-do-not-use-in-production-change-me}
+
+livekit:
+  api-key: ${LIVEKIT_API_KEY:devkey}
+  api-secret: ${LIVEKIT_API_SECRET:dev-only-livekit-secret-do-not-use-in-production}
+  public-url: ${LIVEKIT_PUBLIC_URL:ws://localhost:7880}

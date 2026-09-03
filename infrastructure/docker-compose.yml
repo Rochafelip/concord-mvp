@@ -26,6 +26,9 @@ services:
       DATABASE_USERNAME: ${POSTGRES_USER}
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+      LIVEKIT_PUBLIC_URL: ${LIVEKIT_PUBLIC_URL}
     depends_on:
       postgres:
         condition: service_healthy
@@ -42,18 +45,46 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
 
+  # Self-hosted LiveKit SFU (docs/ARCHITECTURE.md §19, §23; docs/DECISIONS.md D16). Signaling
+  # (port 7880) is reached by nginx over the internal network only, same as backend:8080 — not
+  # published on the host. Media (RTC UDP range, ICE/TCP fallback, embedded TURN) bypasses nginx
+  # entirely and is published directly, since nginx can't proxy that traffic and WebRTC media is
+  # independently encrypted (DTLS-SRTP) regardless of the signaling channel's TLS.
+  livekit:
+    image: livekit/livekit-server:v1.13.6
+    restart: unless-stopped
+    command: --config /etc/livekit.yaml
+    environment:
+      # "key: secret" — see infrastructure/livekit/livekit.yaml's comment on why keys are
+      # injected here rather than committed in that file. The TURN/TLS cert (also needed to
+      # start with turn.enabled: true) is a file path, not a secret, so it's set directly in
+      # livekit.yaml's turn.cert_file/key_file instead of another env var here.
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
+    volumes:
+      - ./livekit/livekit.yaml:/etc/livekit.yaml:ro
+      - ./nginx/certs:/etc/livekit-certs:ro
+    ports:
+      - "7881:7881/tcp"
+      - "3478:3478/udp"
+      - "5349:5349/tcp"
+      - "50000-60000:50000-60000/udp"
+
   nginx:
     image: nginx:alpine
     restart: unless-stopped
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
     depends_on:
       backend:
         condition: service_healthy
       frontend:
         condition: service_started
+      livekit:
+        condition: service_started
     ports:
       - "80:80"
+      - "443:443"
 
 volumes:
   postgres_data:

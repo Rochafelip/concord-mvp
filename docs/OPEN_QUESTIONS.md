@@ -49,7 +49,8 @@ Are we intentionally accepting the security trade-off of a long-lived JWT for th
 
 **Status:** ✅ Resolved — see `DECISIONS.md` D9, `ARCHITECTURE.md` §31, `TECH_STACK.md` §29.
 
-The proposed initial deployment is:
+The proposed initial deployment was (Coturn later dropped per `DECISIONS.md`
+D16 — LiveKit's embedded TURN server is used instead):
 
 ```text
 Single Linux VM
@@ -59,7 +60,6 @@ Single Linux VM
         +-- Spring Boot
         +-- PostgreSQL
         +-- LiveKit
-        +-- Coturn
 ```
 
 ### Question

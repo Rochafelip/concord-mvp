@@ -26,11 +26,7 @@ export function useCreateChannel(serverId: string) {
     mutationFn: (data: api.CreateChannelPayload) => api.createChannel(serverId, data),
     onSuccess: (channel) => {
       queryClient.invalidateQueries({ queryKey: ['servers', serverId, 'channels'] });
-      // Voice channels have no UI to navigate to yet (LiveKit/voice is a later phase) —
-      // only text channels get taken to their (still-placeholder) chat route.
-      if (channel.type === 'TEXT') {
-        navigate(`/app/servers/${serverId}/channels/${channel.id}`);
-      }
+      navigate(`/app/servers/${serverId}/channels/${channel.id}`);
     },
   });
 }

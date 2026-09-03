@@ -1,0 +1,203 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { useVoiceStore } from '../stores/voiceStore';
+
+const { roomInstances, MockRoom, micState, connectResolvers } = vi.hoisted(() => {
+  const micState = { shouldFail: false };
+  const connectResolvers: Array<() => void> = [];
+
+  class MockRoom {
+    connect = vi.fn(() => new Promise<void>((resolve) => connectResolvers.push(resolve)));
+    disconnect = vi.fn().mockResolvedValue(undefined);
+    on = vi.fn().mockReturnThis();
+    remoteParticipants = new Map();
+    localParticipant = {
+      identity: 'local-user',
+      name: 'Local User',
+      isMicrophoneEnabled: false,
+      setMicrophoneEnabled: vi.fn((enabled: boolean) => {
+        if (micState.shouldFail) {
+          return Promise.reject(new Error('Permission denied'));
+        }
+        this.localParticipant.isMicrophoneEnabled = enabled;
+        return Promise.resolve(undefined);
+      }),
+    };
+
+    constructor() {
+      roomInstances.push(this);
+    }
+  }
+  const roomInstances: MockRoom[] = [];
+  return { roomInstances, MockRoom, micState, connectResolvers };
+});
+
+vi.mock('livekit-client', () => ({
+  Room: MockRoom,
+  RoomEvent: {
+    ParticipantConnected: 'participantConnected',
+    ParticipantDisconnected: 'participantDisconnected',
+    TrackMuted: 'trackMuted',
+    TrackUnmuted: 'trackUnmuted',
+    TrackSubscribed: 'trackSubscribed',
+    TrackUnsubscribed: 'trackUnsubscribed',
+    Disconnected: 'disconnected',
+  },
+  Track: { Kind: { Audio: 'audio', Video: 'video' } },
+}));
+
+// Imported after the mock so voiceClient's module-level `new Room()` calls use MockRoom.
+const { voiceClient } = await import('./voiceClient');
+
+function handlerFor(room: InstanceType<typeof MockRoom>, event: string): (...args: unknown[]) => void {
+  const call = room.on.mock.calls.find(([registeredEvent]) => registeredEvent === event);
+  if (!call) throw new Error(`No handler registered for ${event}`);
+  return call[1] as (...args: unknown[]) => void;
+}
+
+/** Calls voiceClient.connect() and immediately resolves that call's underlying room.connect(). */
+async function connectVoice(channelId: string, token: string, url: string): Promise<void> {
+  const promise = voiceClient.connect(channelId, token, url);
+  connectResolvers[connectResolvers.length - 1]();
+  await promise;
+}
+
+describe('voiceClient', () => {
+  beforeEach(() => {
+    roomInstances.length = 0;
+    connectResolvers.length = 0;
+    micState.shouldFail = false;
+    useVoiceStore.setState({ status: 'disconnected', channelId: null, participants: [], error: null });
+  });
+
+  it('connects to the room, publishes the microphone by default, and marks the store connected', async () => {
+    await connectVoice('channel-1', 'token-abc', 'wss://example.test/livekit');
+
+    expect(roomInstances).toHaveLength(1);
+    const room = roomInstances[0];
+    expect(room.connect).toHaveBeenCalledWith('wss://example.test/livekit', 'token-abc');
+    expect(room.localParticipant.setMicrophoneEnabled).toHaveBeenCalledWith(true);
+
+    const state = useVoiceStore.getState();
+    expect(state.status).toBe('connected');
+    expect(state.channelId).toBe('channel-1');
+    expect(state.error).toBeNull();
+  });
+
+  it('disconnects the previous room before connecting to a different voice channel', async () => {
+    await connectVoice('channel-1', 'token-a', 'wss://example.test/livekit');
+    const firstRoom = roomInstances[0];
+
+    await connectVoice('channel-2', 'token-b', 'wss://example.test/livekit');
+
+    expect(firstRoom.disconnect).toHaveBeenCalledTimes(1);
+    expect(roomInstances).toHaveLength(2);
+    expect(useVoiceStore.getState().channelId).toBe('channel-2');
+  });
+
+  it('records an error but keeps the room connected when the microphone permission is denied', async () => {
+    micState.shouldFail = true;
+
+    await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+
+    const state = useVoiceStore.getState();
+    expect(state.status).toBe('connected');
+    expect(state.error).toBe('Microphone permission denied');
+    expect(roomInstances[0].disconnect).not.toHaveBeenCalled();
+  });
+
+  it('toggles the local microphone off then on', async () => {
+    await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+    const room = roomInstances[0];
+    expect(room.localParticipant.isMicrophoneEnabled).toBe(true);
+
+    voiceClient.toggleMute();
+    expect(room.localParticipant.setMicrophoneEnabled).toHaveBeenLastCalledWith(false);
+
+    voiceClient.toggleMute();
+    expect(room.localParticipant.setMicrophoneEnabled).toHaveBeenLastCalledWith(true);
+  });
+
+  it('disconnects and resets the store', async () => {
+    await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+    const room = roomInstances[0];
+
+    voiceClient.disconnect();
+
+    expect(room.disconnect).toHaveBeenCalledTimes(1);
+    expect(useVoiceStore.getState()).toMatchObject({
+      status: 'disconnected',
+      channelId: null,
+      participants: [],
+      error: null,
+    });
+  });
+
+  it('attaches a subscribed remote audio track to the DOM so it is actually audible', async () => {
+    await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+    const room = roomInstances[0];
+    const onTrackSubscribed = handlerFor(room, 'trackSubscribed');
+
+    const mockElement = document.createElement('audio');
+    const attach = vi.fn().mockReturnValue(mockElement);
+    const track = { kind: 'audio', sid: 'track-1', attach };
+    const participant = { identity: 'remote-user', name: 'Remote User' };
+
+    onTrackSubscribed(track, {}, participant);
+
+    expect(attach).toHaveBeenCalledTimes(1);
+    expect(document.body.contains(mockElement)).toBe(true);
+  });
+
+  it('removes attached remote audio elements immediately on disconnect, without depending on TrackUnsubscribed firing', async () => {
+    await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+    const room = roomInstances[0];
+    const onTrackSubscribed = handlerFor(room, 'trackSubscribed');
+
+    const mockElement = document.createElement('audio');
+    const track = { kind: 'audio', sid: 'track-1', attach: vi.fn().mockReturnValue(mockElement) };
+    onTrackSubscribed(track, {}, { identity: 'remote-user', name: 'Remote User' });
+    expect(document.body.contains(mockElement)).toBe(true);
+
+    // MockRoom.disconnect is a plain vi.fn() — it never itself emits TrackUnsubscribed, unlike
+    // the real livekit-client Room. If cleanup depended on that event, this element would be
+    // left behind forever; disconnect() must remove it proactively instead.
+    voiceClient.disconnect();
+
+    expect(document.body.contains(mockElement)).toBe(false);
+  });
+
+  it('attaches error handling to room.disconnect() so a rejection cannot escape as an unhandled promise rejection', async () => {
+    await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+    const room = roomInstances[0];
+    // A real Promise (not vi.fn()'s own rejection helpers, which turned out to add their own
+    // internal handling that masked this exact bug when first written) with a spy on its own
+    // `.catch`, so we can directly assert production code attached a handler to THIS promise —
+    // rather than relying on timing-sensitive process-level unhandledRejection detection.
+    const rejected = Promise.reject(new Error('signaling socket already closed'));
+    const catchSpy = vi.spyOn(rejected, 'catch');
+    room.disconnect.mockReturnValueOnce(rejected);
+
+    voiceClient.disconnect();
+
+    expect(catchSpy).toHaveBeenCalled();
+    await rejected.catch(() => {}); // avoid this test's own promise being reported as unhandled
+  });
+
+  it('ignores a connect() call that resolves after being superseded by a newer channel switch', async () => {
+    const first = voiceClient.connect('channel-1', 'token-a', 'wss://example.test/livekit');
+    const second = voiceClient.connect('channel-2', 'token-b', 'wss://example.test/livekit');
+
+    // Resolve channel-2's room.connect() first, then channel-1's — simulating channel-1's
+    // network response arriving late, after the user already switched to channel-2.
+    connectResolvers[1]();
+    await second;
+    connectResolvers[0]();
+    await first;
+
+    const [room1, room2] = roomInstances;
+
+    expect(useVoiceStore.getState().channelId).toBe('channel-2');
+    expect(room2.disconnect).not.toHaveBeenCalled();
+    expect(room1.disconnect).toHaveBeenCalledTimes(1);
+  });
+});

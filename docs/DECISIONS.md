@@ -174,6 +174,10 @@ ARCHITECTURE.md and TECH_STACK.md.
 decision exists to record that managed alternatives were considered and
 declined, in case it comes up again later.
 
+(Coturn specifically was later dropped in favor of LiveKit's embedded TURN
+server — see D16. The rest of this decision, self-hosting on a single VM,
+stands.)
+
 ---
 
 ## D10 — Invite code regeneration invalidates the previous code
@@ -269,3 +273,47 @@ broadcast these to affected members via `RealtimeEventPublisher`.
 vocabulary (`ARCHITECTURE.md` §16, `TECH_STACK.md` §10). The frontend (a
 later task) subscribes to them to update its UI live instead of relying on
 a refetch.
+
+---
+
+## D16 — Phase 2 (voice): no domain yet, self-signed TLS, LiveKit's embedded TURN instead of Coturn
+
+Date: 2026-09-02
+
+**Context**: Phase 2 adds LiveKit voice channels. Two infrastructure gaps
+came up during planning that `ARCHITECTURE.md`/`TECH_STACK.md` had
+deliberately left open ("defined in infrastructure documentation"):
+
+1. Browsers only allow microphone access (`getUserMedia`) in a secure
+   context (HTTPS), but the project has no domain name yet, and Phase 1's
+   nginx serves plain HTTP only.
+2. `TECH_STACK.md`/`ARCHITECTURE.md` listed Coturn as its own deployed
+   service for TURN connectivity, alongside LiveKit.
+
+**Decision**:
+
+1. Terminate TLS at nginx with a **self-signed certificate** rather than
+   waiting for a domain/Let's Encrypt. The browser security warning is a
+   one-time manual accept, acceptable for a friends-only deployment (D1).
+   LiveKit's own signaling WebSocket is proxied through this same
+   nginx origin/certificate (path `/livekit/`) rather than given a separate
+   host/port, so joining a voice channel never triggers a second
+   certificate-trust prompt.
+2. Do **not** deploy a standalone Coturn service. LiveKit's self-hosted
+   server ships its own embedded TURN relay (`turn:` in
+   `infrastructure/livekit/livekit.yaml`), reusing the same self-signed
+   certificate as nginx for its TURN/TLS listener. LiveKit issues
+   short-lived TURN credentials per session automatically — no static
+   shared secret to provision or rotate.
+
+**Consequences**: One fewer service in `docker-compose.yml` and one fewer
+credential set to manage, at the cost of a browser TLS-trust warning users
+must accept once. `README.md`, `ARCHITECTURE.md` §23 and `TECH_STACK.md`
+§22/§24/§29 are updated to drop Coturn from the deployed-services list.
+Revisit the self-signed certificate once a real domain exists (Phase 5,
+production configuration) — Let's Encrypt removes the manual accept step
+entirely. If the embedded TURN relay proves insufficient in practice (e.g.
+very restrictive client networks), a standalone Coturn service can still be
+added later without touching the application layer — LiveKit's SFU only
+needs its `turn:` config disabled and `rtc.turn_servers` pointed at an
+external server.

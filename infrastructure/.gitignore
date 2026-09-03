@@ -1,1 +1,5 @@
 .env
+
+# Self-signed TLS cert + private key (docs/DECISIONS.md D16) — generated locally per
+# deployment, never committed. See infrastructure/nginx/nginx.conf for the generation command.
+nginx/certs/

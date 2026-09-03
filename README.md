@@ -113,8 +113,8 @@ High-level architecture:
 
 * WebSocket for application events
 * WebRTC for media
-* LiveKit as the SFU
-* Coturn for TURN connectivity
+* LiveKit as the SFU, including its embedded TURN server (see docs/DECISIONS.md D16 — no
+  standalone Coturn service)
 
 ### Infrastructure
 

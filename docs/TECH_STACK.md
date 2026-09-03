@@ -43,7 +43,7 @@ Technologies must not be replaced or added without a clear technical reason.
 | Temporary State       | Redis                            |
 | Media                 | WebRTC                           |
 | Media Server / SFU    | LiveKit                          |
-| TURN                  | Coturn                           |
+| TURN                  | LiveKit embedded TURN server     |
 | Reverse Proxy         | Nginx                            |
 | Containers            | Docker                           |
 | Local Orchestration   | Docker Compose                   |
@@ -581,13 +581,12 @@ The user does not create separate communication sessions for:
 
 ---
 
-# 22. Coturn
-
-Coturn provides TURN functionality.
+# 22. TURN
 
 TURN is required when direct network connectivity cannot be established.
 
-Coturn is infrastructure rather than application business logic.
+TURN functionality is provided by LiveKit's own embedded TURN server rather than a standalone
+Coturn deployment (`docs/DECISIONS.md` D16) — infrastructure, not application business logic.
 
 The backend should not implement TURN functionality.
 
@@ -636,7 +635,6 @@ backend
 postgres
 redis
 livekit
-coturn
 nginx
 ```
 
@@ -677,14 +675,14 @@ JWT_SECRET
 
 REDIS_URL
 
-LIVEKIT_URL
+LIVEKIT_PUBLIC_URL
 LIVEKIT_API_KEY
 LIVEKIT_API_SECRET
-
-TURN_SERVER
-TURN_USERNAME
-TURN_PASSWORD
 ```
+
+No separate `TURN_*` credentials — LiveKit's embedded TURN server issues short-lived
+credentials per session automatically (`docs/DECISIONS.md` D16), so there's no static TURN
+secret to configure.
 
 Actual production values must never be committed.
 
@@ -801,7 +799,6 @@ Nginx
 PostgreSQL
 Redis
 LiveKit
-Coturn
 Spring Boot
 Frontend
 ```
@@ -900,11 +897,7 @@ Media Transport
 
 LiveKit
     ↓
-Media Infrastructure
-
-Coturn
-    ↓
-TURN Connectivity
+Media Infrastructure (including its embedded TURN server, docs/DECISIONS.md D16)
 
 Nginx
     ↓

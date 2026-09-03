@@ -1,0 +1,39 @@
+# Self-hosted LiveKit SFU config for the single-VM MVP deployment (docs/ARCHITECTURE.md §19,
+# docs/DECISIONS.md D16). API keys are injected via the LIVEKIT_KEYS env var (docker-compose.yml)
+# rather than a `keys:` block here, so this file can be committed without secrets — same split
+# as nginx.conf (structure here, secrets in .env).
+
+# Signaling port. Proxied by nginx at /livekit/ (infrastructure/nginx/nginx.conf) — not published
+# directly on the host.
+port: 7880
+
+rtc:
+  # UDP range for WebRTC media. Must be published on the host (docker-compose.yml) and open on
+  # the VM's firewall — this is the primary path clients use to reach the SFU.
+  port_range_start: 50000
+  port_range_end: 60000
+  # ICE-over-TCP fallback for clients that can't do UDP at all. Also published directly (not
+  # behind nginx/TLS — WebRTC traffic is independently encrypted via DTLS-SRTP).
+  tcp_port: 7881
+  # Discovers the VM's public IP via STUN so it's correctly advertised to clients as an ICE
+  # candidate, instead of the container's internal Docker network IP.
+  use_external_ip: true
+
+# Embedded TURN relay — the fallback for clients whose network blocks the direct UDP path above.
+# No standalone coturn service (docs/DECISIONS.md D16): one fewer container, and LiveKit issues
+# short-lived TURN credentials per session automatically, so there's no static shared secret to
+# manage.
+turn:
+  enabled: true
+  udp_port: 3478
+  tls_port: 5349
+  # Reuses the same self-signed cert nginx uses (mounted into the container at this path — see
+  # the livekit service's volumes in docker-compose.yml) rather than provisioning a separate one
+  # just for TURN/TLS. These are file paths, not secrets, so they're safe to commit here.
+  cert_file: /etc/livekit-certs/selfsigned.crt
+  key_file: /etc/livekit-certs/selfsigned.key
+  #
+  # CHANGE THIS to the VM's actual public IP/hostname before deploying — must match the cert's
+  # CN (same value passed to `openssl req -subj "/CN=..."` when generating
+  # infrastructure/nginx/certs/selfsigned.crt).
+  domain: CHANGE-ME-vm-public-ip

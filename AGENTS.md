@@ -168,8 +168,7 @@ WebSocket is used for application-level real-time events such as chat.
 ## Voice, Video and Screen Sharing
 
 * WebRTC
-* LiveKit
-* Coturn
+* LiveKit (including its embedded TURN server — no standalone Coturn, see docs/DECISIONS.md D16)
 
 LiveKit is responsible for media routing/SFU functionality.
 

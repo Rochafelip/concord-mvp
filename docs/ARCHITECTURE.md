@@ -130,8 +130,7 @@ Expected responsibilities:
 * Docker
 * Docker Compose
 * Nginx
-* LiveKit
-* Coturn
+* LiveKit (including its embedded TURN server — no standalone Coturn, `docs/DECISIONS.md` D16)
 * Environment configuration templates
 
 Infrastructure configuration must not contain application business logic.
@@ -170,7 +169,6 @@ PostgreSQL
 Redis
 WebSocket
 LiveKit
-Coturn
 Nginx
 ```
 
@@ -672,11 +670,9 @@ Video and screen sharing are additional media tracks within the communication se
 
 ---
 
-# 23. Coturn
+# 23. TURN
 
-Coturn provides TURN functionality for WebRTC.
-
-It is used when direct peer connectivity is not possible.
+TURN functionality for WebRTC is used when direct peer connectivity is not possible.
 
 Conceptually:
 
@@ -689,6 +685,9 @@ Client A
    v
 Client / LiveKit infrastructure
 ```
+
+TURN is provided by LiveKit's own embedded TURN server rather than a standalone Coturn
+deployment — see `docs/DECISIONS.md` D16.
 
 The exact networking configuration is defined in infrastructure documentation.
 
@@ -941,7 +940,7 @@ Initial production architecture:
                                                             |
                                                           WebRTC
                                                             |
-                                                          Coturn
+                                                    Embedded TURN
 ```
 
 All initial services may run on a single VM using Docker Compose.
@@ -1012,7 +1011,7 @@ LiveKit provides SFU functionality.
 
 ### TURN
 
-Coturn provides TURN infrastructure.
+LiveKit's embedded TURN server provides TURN infrastructure (`docs/DECISIONS.md` D16).
 
 ### Deployment
 
@@ -1126,7 +1125,7 @@ LiveKit
 WebRTC
     = media transport
 
-Coturn
+LiveKit's embedded TURN server
     = TURN connectivity
 
 React

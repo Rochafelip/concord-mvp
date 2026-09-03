@@ -16,3 +16,8 @@ spring:
 jwt:
   secret: ${JWT_SECRET}
   expiration-days: 30
+
+livekit:
+  api-key: ${LIVEKIT_API_KEY}
+  api-secret: ${LIVEKIT_API_SECRET}
+  public-url: ${LIVEKIT_PUBLIC_URL}
