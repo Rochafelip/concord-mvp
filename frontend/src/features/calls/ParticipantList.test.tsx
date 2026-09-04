@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useVoiceStore } from '../../stores/voiceStore';
 import type { VoiceParticipant } from '../../types/voice';
 import { ParticipantList } from './ParticipantList';
@@ -12,6 +12,8 @@ function participant(overrides: Partial<VoiceParticipant> = {}): VoiceParticipan
     micEnabled: true,
     cameraEnabled: false,
     videoTrack: null,
+    screenShareEnabled: false,
+    screenShareTrack: null,
     ...overrides,
   };
 }
@@ -48,5 +50,33 @@ describe('ParticipantList', () => {
     const joaoTile = screen.getByText(/João/).closest('div');
     expect(felipeTile).toHaveTextContent('🎤');
     expect(joaoTile).toHaveTextContent('🔇');
+  });
+
+  it('renders a ScreenShareTile for a participant actively sharing their screen', () => {
+    const track = { attach: vi.fn(), detach: vi.fn() } as never;
+    useVoiceStore.setState({
+      participants: [
+        participant({ identity: 'u1', name: 'Felipe', isLocal: true }),
+        participant({
+          identity: 'u2',
+          name: 'João',
+          isLocal: false,
+          screenShareEnabled: true,
+          screenShareTrack: track,
+        }),
+      ],
+    });
+    render(<ParticipantList />);
+
+    expect(screen.getByText(/João's screen/)).toBeInTheDocument();
+  });
+
+  it('does not render a screen share tile for anyone when no one is sharing', () => {
+    useVoiceStore.setState({
+      participants: [participant({ identity: 'u1', name: 'Felipe', isLocal: true })],
+    });
+    render(<ParticipantList />);
+
+    expect(screen.queryByText(/'s screen/)).not.toBeInTheDocument();
   });
 });

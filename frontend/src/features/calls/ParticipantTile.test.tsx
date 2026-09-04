@@ -11,6 +11,8 @@ function participant(overrides: Partial<VoiceParticipant> = {}): VoiceParticipan
     micEnabled: true,
     cameraEnabled: false,
     videoTrack: null,
+    screenShareEnabled: false,
+    screenShareTrack: null,
     ...overrides,
   };
 }
