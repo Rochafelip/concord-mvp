@@ -1,0 +1,62 @@
+# Production-only additions, layered on top of docker-compose.yml:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml <command>
+# The base file (used unmodified by infrastructure/VM_REVIEW.md's local-review workflow and any
+# local dev) is never edited for this — see docs/superpowers/specs/
+# 2026-09-04-phase5-production-deploy-design.md §3.1 for why an override file was chosen over
+# duplicating or conditionally branching the whole stack.
+#
+# See infrastructure/DEPLOY.md for the full manual deployment sequence these services fit into.
+
+services:
+  # One-off: generates a placeholder cert so nginx can start before a real one exists yet.
+  # Never part of `up` — only ever invoked directly: `docker compose ... run --rm bootstrap-cert`.
+  bootstrap-cert:
+    image: alpine:3.20
+    profiles: ["cli"]
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - certbot_certs:/etc/letsencrypt
+      - ./certbot/bootstrap-placeholder-cert.sh:/bootstrap.sh:ro
+    entrypoint: ["sh", "/bootstrap.sh"]
+
+  # Issues and renews the real Let's Encrypt certificate. Also never part of `up` — invoked
+  # directly for both the one-time initial issuance and every renewal (infrastructure/DEPLOY.md).
+  # The published port 80 is only actually bound when a `run` invocation explicitly requests it
+  # with --service-ports (needed for nothing here, since both issuance and renewal use the
+  # webroot method — nginx, already running and already publishing 80 itself, answers the ACME
+  # challenge; certbot never needs to bind the port itself). Declared anyway for completeness/
+  # documentation and in case a future operator needs standalone mode for troubleshooting.
+  certbot:
+    image: certbot/certbot:v2.11.0
+    profiles: ["cli"]
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - certbot_certs:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+      - livekit_certs:/livekit-certs
+      - ./certbot/deploy-hook.sh:/deploy-hook.sh:ro
+    ports:
+      - "80:80"
+
+  nginx:
+    volumes:
+      - ./nginx/nginx.prod.conf.template:/etc/nginx/templates/prod.conf.template:ro
+      - certbot_certs:/etc/letsencrypt:ro
+      - certbot_www:/var/www/certbot:ro
+    environment:
+      DOMAIN: ${DOMAIN}
+
+  livekit:
+    # Overrides the base service's ./nginx/certs:/etc/livekit-certs:ro mount (same destination
+    # path — Compose lets the override win for a duplicate target) with the volume deploy-hook.sh
+    # keeps populated with the real Let's Encrypt cert, under the filenames livekit.yaml already
+    # expects.
+    volumes:
+      - livekit_certs:/etc/livekit-certs:ro
+
+volumes:
+  certbot_certs:
+  certbot_www:
+  livekit_certs:
