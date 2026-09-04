@@ -49,10 +49,6 @@ services:
       DOMAIN: ${DOMAIN}
 
   livekit:
-    # Overrides the base service's ./nginx/certs:/etc/livekit-certs:ro mount (same destination
-    # path — Compose lets the override win for a duplicate target) with the volume deploy-hook.sh
-    # keeps populated with the real Let's Encrypt cert, under the filenames livekit.yaml already
-    # expects.
     volumes:
       - livekit_certs:/etc/livekit-certs:ro
 
