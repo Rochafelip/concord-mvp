@@ -13,4 +13,6 @@ export interface VoiceParticipant {
   micEnabled: boolean;
   cameraEnabled: boolean;
   videoTrack: LocalVideoTrack | RemoteVideoTrack | null;
+  screenShareEnabled: boolean;
+  screenShareTrack: LocalVideoTrack | RemoteVideoTrack | null;
 }

@@ -105,6 +105,19 @@ class VoiceClient {
       .catch(() => useVoiceStore.getState().setError('Failed to change camera state'));
   }
 
+  // Off by default, same reasoning as the camera — starting a share is always an explicit user
+  // action (PRODUCT.md §12.1). A rejection here covers both an OS/browser permission denial and
+  // the user dismissing the screen/window picker without selecting anything — both surface as a
+  // rejected promise from setScreenShareEnabled, so there's no need to tell them apart.
+  toggleScreenShare(): void {
+    const localParticipant = this.room?.localParticipant;
+    if (!localParticipant) return;
+    localParticipant
+      .setScreenShareEnabled(!localParticipant.isScreenShareEnabled)
+      .then(() => this.syncParticipants())
+      .catch(() => useVoiceStore.getState().setError('Failed to change screen sharing state'));
+  }
+
   private registerListeners(room: Room): void {
     room.on(RoomEvent.ParticipantConnected, this.syncParticipants);
     room.on(RoomEvent.ParticipantDisconnected, this.syncParticipants);
@@ -112,15 +125,23 @@ class VoiceClient {
     room.on(RoomEvent.TrackUnmuted, this.syncParticipants);
     room.on(RoomEvent.TrackSubscribed, this.handleTrackSubscribed);
     room.on(RoomEvent.TrackUnsubscribed, this.handleTrackUnsubscribed);
+    // livekit-client detects a local track ending outside our own toggle*() calls (e.g. the
+    // browser's native "Stop sharing" control for a screen share, or a camera/mic device being
+    // unplugged) and unpublishes it itself, firing this event. Without listening for it, the
+    // store would keep showing the local participant as still sharing/on-camera after it has
+    // already stopped, until some unrelated event happened to trigger a resync — the same class
+    // of staleness bug already fixed once for remote mic state (see the "fix: resync participant
+    // mic state on track subscribe" commit), now closed for the local-unpublish case too.
+    room.on(RoomEvent.LocalTrackUnpublished, this.syncParticipants);
   }
 
   // A subscribed remote audio track is not audible until it is attached to a media element —
   // LiveKit does not do this automatically. Attached to a hidden element in the document body,
-  // since audio has no on-screen representation. Video tracks are handled differently: they're
-  // attached directly by ParticipantTile to a visible <video> element it owns (see
-  // features/calls/ParticipantTile.tsx, built in a later task), so no DOM element is created for
-  // them here — this handler only needs to make sure a resync happens so tiles pick up the new
-  // videoTrack reference (via toVoiceParticipant below).
+  // since audio has no on-screen representation. Video tracks (camera or screen share) are
+  // handled differently: they're attached directly by ParticipantTile/ScreenShareTile to a
+  // visible <video> element they own, so no DOM element is created for them here — this handler
+  // only needs to make sure a resync happens so tiles pick up the new videoTrack/screenShareTrack
+  // reference (via toVoiceParticipant below).
   //
   // The resync also matters for audio: a remote participant's ParticipantConnected can fire
   // before their mic track is actually published (found via manual two-browser testing, not a
@@ -177,6 +198,8 @@ function toVoiceParticipant(participant: Participant | LocalParticipant, isLocal
     micEnabled: participant.isMicrophoneEnabled,
     cameraEnabled: participant.isCameraEnabled,
     videoTrack: participant.getTrackPublication(Track.Source.Camera)?.videoTrack ?? null,
+    screenShareEnabled: participant.isScreenShareEnabled,
+    screenShareTrack: participant.getTrackPublication(Track.Source.ScreenShare)?.videoTrack ?? null,
   };
 }
 

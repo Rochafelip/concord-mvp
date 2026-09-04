@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useVoiceStore } from '../stores/voiceStore';
 
-const { roomInstances, MockRoom, micState, cameraState, connectResolvers } = vi.hoisted(() => {
+const { roomInstances, MockRoom, micState, cameraState, screenShareState, connectResolvers } = vi.hoisted(() => {
   const micState = { shouldFail: false };
   const cameraState = { shouldFail: false };
+  const screenShareState = { shouldFail: false };
   const connectResolvers: Array<() => void> = [];
 
   class MockRoom {
@@ -16,6 +17,7 @@ const { roomInstances, MockRoom, micState, cameraState, connectResolvers } = vi.
       name: 'Local User',
       isMicrophoneEnabled: false,
       isCameraEnabled: false,
+      isScreenShareEnabled: false,
       setMicrophoneEnabled: vi.fn((enabled: boolean) => {
         if (micState.shouldFail) {
           return Promise.reject(new Error('Permission denied'));
@@ -30,6 +32,13 @@ const { roomInstances, MockRoom, micState, cameraState, connectResolvers } = vi.
         this.localParticipant.isCameraEnabled = enabled;
         return Promise.resolve(undefined);
       }),
+      setScreenShareEnabled: vi.fn((enabled: boolean) => {
+        if (screenShareState.shouldFail) {
+          return Promise.reject(new Error('Permission denied'));
+        }
+        this.localParticipant.isScreenShareEnabled = enabled;
+        return Promise.resolve(undefined);
+      }),
       getTrackPublication: vi.fn(() => undefined),
     };
 
@@ -38,7 +47,7 @@ const { roomInstances, MockRoom, micState, cameraState, connectResolvers } = vi.
     }
   }
   const roomInstances: MockRoom[] = [];
-  return { roomInstances, MockRoom, micState, cameraState, connectResolvers };
+  return { roomInstances, MockRoom, micState, cameraState, screenShareState, connectResolvers };
 });
 
 vi.mock('livekit-client', () => ({
@@ -50,9 +59,10 @@ vi.mock('livekit-client', () => ({
     TrackUnmuted: 'trackUnmuted',
     TrackSubscribed: 'trackSubscribed',
     TrackUnsubscribed: 'trackUnsubscribed',
+    LocalTrackUnpublished: 'localTrackUnpublished',
     Disconnected: 'disconnected',
   },
-  Track: { Kind: { Audio: 'audio', Video: 'video' }, Source: { Camera: 'camera' } },
+  Track: { Kind: { Audio: 'audio', Video: 'video' }, Source: { Camera: 'camera', ScreenShare: 'screen_share' } },
 }));
 
 // Imported after the mock so voiceClient's module-level `new Room()` calls use MockRoom.
@@ -77,6 +87,7 @@ describe('voiceClient', () => {
     connectResolvers.length = 0;
     micState.shouldFail = false;
     cameraState.shouldFail = false;
+    screenShareState.shouldFail = false;
     useVoiceStore.setState({ status: 'disconnected', channelId: null, participants: [], error: null });
   });
 
@@ -102,6 +113,16 @@ describe('voiceClient', () => {
     const local = useVoiceStore.getState().participants.find((p) => p.isLocal);
     expect(local?.cameraEnabled).toBe(false);
     expect(local?.videoTrack).toBeNull();
+  });
+
+  it('does not enable screen sharing by default when connecting', async () => {
+    await connectVoice('channel-1', 'token-abc', 'wss://example.test/livekit');
+    const room = roomInstances[0];
+
+    expect(room.localParticipant.setScreenShareEnabled).not.toHaveBeenCalled();
+    const local = useVoiceStore.getState().participants.find((p) => p.isLocal);
+    expect(local?.screenShareEnabled).toBe(false);
+    expect(local?.screenShareTrack).toBeNull();
   });
 
   it('disconnects the previous room before connecting to a different voice channel', async () => {
@@ -166,6 +187,50 @@ describe('voiceClient', () => {
     expect(room.disconnect).not.toHaveBeenCalled();
   });
 
+  it('toggles the local screen share on then off', async () => {
+    await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+    const room = roomInstances[0];
+    expect(room.localParticipant.isScreenShareEnabled).toBe(false);
+
+    voiceClient.toggleScreenShare();
+    expect(room.localParticipant.setScreenShareEnabled).toHaveBeenLastCalledWith(true);
+
+    voiceClient.toggleScreenShare();
+    expect(room.localParticipant.setScreenShareEnabled).toHaveBeenLastCalledWith(false);
+  });
+
+  it('records an error but keeps the room connected when screen sharing fails to start (permission denied or picker dismissed)', async () => {
+    await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+    const room = roomInstances[0];
+    screenShareState.shouldFail = true;
+
+    voiceClient.toggleScreenShare();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(useVoiceStore.getState().error).toBe('Failed to change screen sharing state');
+    expect(room.localParticipant.isScreenShareEnabled).toBe(false);
+    expect(room.disconnect).not.toHaveBeenCalled();
+  });
+
+  it('resyncs participants when a local track is unpublished outside an explicit toggle call', async () => {
+    // Covers the browser's native "Stop sharing" control (or a camera/mic device disconnecting):
+    // livekit-client detects the underlying MediaStreamTrack ending and unpublishes it itself,
+    // firing LocalTrackUnpublished — not one of our own toggle*() calls. Without a listener for
+    // it, the store would keep showing stale enabled state until some unrelated event resynced.
+    await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+    const room = roomInstances[0];
+    room.localParticipant.isScreenShareEnabled = true;
+
+    const onLocalTrackUnpublished = handlerFor(room, 'localTrackUnpublished');
+    // Simulate the browser having already stopped the capture out-of-band before we resync.
+    room.localParticipant.isScreenShareEnabled = false;
+    onLocalTrackUnpublished();
+
+    const local = useVoiceStore.getState().participants.find((p) => p.isLocal);
+    expect(local?.screenShareEnabled).toBe(false);
+  });
+
   it('disconnects and resets the store', async () => {
     await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
     const room = roomInstances[0];
@@ -207,6 +272,7 @@ describe('voiceClient', () => {
       name: 'Bob',
       isMicrophoneEnabled: true,
       isCameraEnabled: true,
+      isScreenShareEnabled: false,
       getTrackPublication: vi.fn(() => ({ videoTrack: videoTrackStub })),
     };
     room.remoteParticipants.set('bob', bob);
@@ -220,6 +286,31 @@ describe('voiceClient', () => {
     const bobEntry = useVoiceStore.getState().participants.find((p) => p.identity === 'bob');
     expect(bobEntry?.cameraEnabled).toBe(true);
     expect(bobEntry?.videoTrack).toBe(videoTrackStub);
+  });
+
+  it('resyncs a remote participant\'s screenShareTrack when their screen-share track is subscribed', async () => {
+    await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+    const room = roomInstances[0];
+
+    const screenTrackStub = { kind: 'video', sid: 'track-screen-1', attach: vi.fn() };
+    const bob = {
+      identity: 'bob',
+      name: 'Bob',
+      isMicrophoneEnabled: true,
+      isCameraEnabled: false,
+      isScreenShareEnabled: true,
+      getTrackPublication: vi.fn((source: string) =>
+        source === 'screen_share' ? { videoTrack: screenTrackStub } : undefined,
+      ),
+    };
+    room.remoteParticipants.set('bob', bob);
+
+    const onTrackSubscribed = handlerFor(room, 'trackSubscribed');
+    onTrackSubscribed(screenTrackStub, {}, bob);
+
+    const bobEntry = useVoiceStore.getState().participants.find((p) => p.identity === 'bob');
+    expect(bobEntry?.screenShareEnabled).toBe(true);
+    expect(bobEntry?.screenShareTrack).toBe(screenTrackStub);
   });
 
   it('refreshes participant mic state when a remote track is subscribed, not just on explicit mute/unmute events', async () => {
@@ -236,6 +327,7 @@ describe('voiceClient', () => {
       name: 'Bob',
       isMicrophoneEnabled: true,
       isCameraEnabled: false,
+      isScreenShareEnabled: false,
       getTrackPublication: vi.fn(() => undefined),
     };
     room.remoteParticipants.set('bob', bob);
