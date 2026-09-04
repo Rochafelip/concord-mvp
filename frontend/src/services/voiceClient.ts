@@ -125,13 +125,15 @@ class VoiceClient {
     room.on(RoomEvent.TrackUnmuted, this.syncParticipants);
     room.on(RoomEvent.TrackSubscribed, this.handleTrackSubscribed);
     room.on(RoomEvent.TrackUnsubscribed, this.handleTrackUnsubscribed);
-    // livekit-client detects a local track ending outside our own toggle*() calls (e.g. the
-    // browser's native "Stop sharing" control for a screen share, or a camera/mic device being
-    // unplugged) and unpublishes it itself, firing this event. Without listening for it, the
-    // store would keep showing the local participant as still sharing/on-camera after it has
-    // already stopped, until some unrelated event happened to trigger a resync — the same class
-    // of staleness bug already fixed once for remote mic state (see the "fix: resync participant
-    // mic state on track subscribe" commit), now closed for the local-unpublish case too.
+    // livekit-client detects a screen-share track ending outside our own toggle*() call (e.g.
+    // the browser's native "Stop sharing" control) and unpublishes it itself, firing this event.
+    // Without listening for it, the store would keep showing the local participant as still
+    // sharing after the browser already stopped it, until some unrelated event happened to
+    // trigger a resync — the same class of staleness bug already fixed once for remote mic state
+    // (see the "fix: resync participant mic state on track subscribe" commit), now closed for
+    // this local-unpublish case too. (Camera/mic device loss is a separate path — livekit-client
+    // tries restartTrack() first and falls back to muting rather than unpublishing, so that case
+    // is already covered by the existing TrackMuted listener above, not this one.)
     room.on(RoomEvent.LocalTrackUnpublished, this.syncParticipants);
   }
 
