@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useVoiceStore } from '../stores/voiceStore';
 
-const { roomInstances, MockRoom, micState, connectResolvers } = vi.hoisted(() => {
+const { roomInstances, MockRoom, micState, cameraState, connectResolvers } = vi.hoisted(() => {
   const micState = { shouldFail: false };
+  const cameraState = { shouldFail: false };
   const connectResolvers: Array<() => void> = [];
 
   class MockRoom {
@@ -14,6 +15,7 @@ const { roomInstances, MockRoom, micState, connectResolvers } = vi.hoisted(() =>
       identity: 'local-user',
       name: 'Local User',
       isMicrophoneEnabled: false,
+      isCameraEnabled: false,
       setMicrophoneEnabled: vi.fn((enabled: boolean) => {
         if (micState.shouldFail) {
           return Promise.reject(new Error('Permission denied'));
@@ -21,6 +23,14 @@ const { roomInstances, MockRoom, micState, connectResolvers } = vi.hoisted(() =>
         this.localParticipant.isMicrophoneEnabled = enabled;
         return Promise.resolve(undefined);
       }),
+      setCameraEnabled: vi.fn((enabled: boolean) => {
+        if (cameraState.shouldFail) {
+          return Promise.reject(new Error('Permission denied'));
+        }
+        this.localParticipant.isCameraEnabled = enabled;
+        return Promise.resolve(undefined);
+      }),
+      getTrackPublication: vi.fn(() => undefined),
     };
 
     constructor() {
@@ -28,7 +38,7 @@ const { roomInstances, MockRoom, micState, connectResolvers } = vi.hoisted(() =>
     }
   }
   const roomInstances: MockRoom[] = [];
-  return { roomInstances, MockRoom, micState, connectResolvers };
+  return { roomInstances, MockRoom, micState, cameraState, connectResolvers };
 });
 
 vi.mock('livekit-client', () => ({
@@ -42,7 +52,7 @@ vi.mock('livekit-client', () => ({
     TrackUnsubscribed: 'trackUnsubscribed',
     Disconnected: 'disconnected',
   },
-  Track: { Kind: { Audio: 'audio', Video: 'video' } },
+  Track: { Kind: { Audio: 'audio', Video: 'video' }, Source: { Camera: 'camera' } },
 }));
 
 // Imported after the mock so voiceClient's module-level `new Room()` calls use MockRoom.
@@ -66,6 +76,7 @@ describe('voiceClient', () => {
     roomInstances.length = 0;
     connectResolvers.length = 0;
     micState.shouldFail = false;
+    cameraState.shouldFail = false;
     useVoiceStore.setState({ status: 'disconnected', channelId: null, participants: [], error: null });
   });
 
@@ -81,6 +92,16 @@ describe('voiceClient', () => {
     expect(state.status).toBe('connected');
     expect(state.channelId).toBe('channel-1');
     expect(state.error).toBeNull();
+  });
+
+  it('does not enable the camera by default when connecting', async () => {
+    await connectVoice('channel-1', 'token-abc', 'wss://example.test/livekit');
+    const room = roomInstances[0];
+
+    expect(room.localParticipant.setCameraEnabled).not.toHaveBeenCalled();
+    const local = useVoiceStore.getState().participants.find((p) => p.isLocal);
+    expect(local?.cameraEnabled).toBe(false);
+    expect(local?.videoTrack).toBeNull();
   });
 
   it('disconnects the previous room before connecting to a different voice channel', async () => {
@@ -117,6 +138,34 @@ describe('voiceClient', () => {
     expect(room.localParticipant.setMicrophoneEnabled).toHaveBeenLastCalledWith(true);
   });
 
+  it('toggles the local camera on then off', async () => {
+    await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+    const room = roomInstances[0];
+    expect(room.localParticipant.isCameraEnabled).toBe(false);
+
+    voiceClient.toggleCamera();
+    expect(room.localParticipant.setCameraEnabled).toHaveBeenLastCalledWith(true);
+
+    voiceClient.toggleCamera();
+    expect(room.localParticipant.setCameraEnabled).toHaveBeenLastCalledWith(false);
+  });
+
+  it('records an error but keeps the room connected when the camera permission is denied while toggling', async () => {
+    await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+    const room = roomInstances[0];
+    cameraState.shouldFail = true;
+
+    voiceClient.toggleCamera();
+    // toggleCamera()'s internal promise chain (setCameraEnabled().then().catch()) needs a
+    // couple of microtask ticks to run its .catch handler before the store update is observable.
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(useVoiceStore.getState().error).toBe('Failed to change camera state');
+    expect(room.localParticipant.isCameraEnabled).toBe(false);
+    expect(room.disconnect).not.toHaveBeenCalled();
+  });
+
   it('disconnects and resets the store', async () => {
     await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
     const room = roomInstances[0];
@@ -148,16 +197,47 @@ describe('voiceClient', () => {
     expect(document.body.contains(mockElement)).toBe(true);
   });
 
-  it('refreshes participant mic state when a remote track is subscribed, not just on explicit mute/unmute events', async () => {
-    // Reproduces a real bug found in manual two-browser testing: a remote participant's
-    // ParticipantConnected can fire before their microphone track is actually published, so the
-    // snapshot taken at that moment reads micEnabled: false. If nothing re-syncs once the track
-    // is subscribed, the UI shows them as muted forever, even though they're not — until they
-    // happen to explicitly toggle mute once.
+  it('does not create a hidden DOM element for a subscribed video track, but still resyncs participants', async () => {
     await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
     const room = roomInstances[0];
 
-    const bob = { identity: 'bob', name: 'Bob', isMicrophoneEnabled: true };
+    const videoTrackStub = { kind: 'video', sid: 'track-video-1', attach: vi.fn() };
+    const bob = {
+      identity: 'bob',
+      name: 'Bob',
+      isMicrophoneEnabled: true,
+      isCameraEnabled: true,
+      getTrackPublication: vi.fn(() => ({ videoTrack: videoTrackStub })),
+    };
+    room.remoteParticipants.set('bob', bob);
+
+    const onTrackSubscribed = handlerFor(room, 'trackSubscribed');
+    onTrackSubscribed(videoTrackStub, {}, bob);
+
+    expect(videoTrackStub.attach).not.toHaveBeenCalled();
+    expect(document.querySelectorAll('video')).toHaveLength(0);
+
+    const bobEntry = useVoiceStore.getState().participants.find((p) => p.identity === 'bob');
+    expect(bobEntry?.cameraEnabled).toBe(true);
+    expect(bobEntry?.videoTrack).toBe(videoTrackStub);
+  });
+
+  it('refreshes participant mic state when a remote track is subscribed, not just on explicit mute/unmute events', async () => {
+    // Reproduces a real bug found in manual two-browser testing: a remote participant's
+    // ParticipantConnected can fire before their microphone track is actually published, so the
+    // snapshot taken at that moment reads micEnabled: false. Without a resync on subscribe, the
+    // UI would show them as muted forever, even though they're not — until they happen to
+    // explicitly toggle mute once.
+    await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+    const room = roomInstances[0];
+
+    const bob = {
+      identity: 'bob',
+      name: 'Bob',
+      isMicrophoneEnabled: true,
+      isCameraEnabled: false,
+      getTrackPublication: vi.fn(() => undefined),
+    };
     room.remoteParticipants.set('bob', bob);
 
     const onTrackSubscribed = handlerFor(room, 'trackSubscribed');
@@ -207,8 +287,6 @@ describe('voiceClient', () => {
     const first = voiceClient.connect('channel-1', 'token-a', 'wss://example.test/livekit');
     const second = voiceClient.connect('channel-2', 'token-b', 'wss://example.test/livekit');
 
-    // Resolve channel-2's room.connect() first, then channel-1's — simulating channel-1's
-    // network response arriving late, after the user already switched to channel-2.
     connectResolvers[1]();
     await second;
     connectResolvers[0]();

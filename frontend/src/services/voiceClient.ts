@@ -93,6 +93,18 @@ class VoiceClient {
       .catch(() => useVoiceStore.getState().setError('Failed to change microphone state'));
   }
 
+  // Unlike the microphone (enabled automatically on connect, see connect() above), the camera is
+  // never enabled by default — PRODUCT.md §11.1 frames it as an explicit user action, and there's
+  // no reason to prompt for camera permission before the user has asked for video.
+  toggleCamera(): void {
+    const localParticipant = this.room?.localParticipant;
+    if (!localParticipant) return;
+    localParticipant
+      .setCameraEnabled(!localParticipant.isCameraEnabled)
+      .then(() => this.syncParticipants())
+      .catch(() => useVoiceStore.getState().setError('Failed to change camera state'));
+  }
+
   private registerListeners(room: Room): void {
     room.on(RoomEvent.ParticipantConnected, this.syncParticipants);
     room.on(RoomEvent.ParticipantDisconnected, this.syncParticipants);
@@ -103,20 +115,25 @@ class VoiceClient {
   }
 
   // A subscribed remote audio track is not audible until it is attached to a media element —
-  // LiveKit does not do this automatically. Attached to a hidden element in the document body
-  // since this feature is audio-only (no video/screen tracks exist yet — later phases).
+  // LiveKit does not do this automatically. Attached to a hidden element in the document body,
+  // since audio has no on-screen representation. Video tracks are handled differently: they're
+  // attached directly by ParticipantTile to a visible <video> element it owns (see
+  // features/calls/ParticipantTile.tsx, built in a later task), so no DOM element is created for
+  // them here — this handler only needs to make sure a resync happens so tiles pick up the new
+  // videoTrack reference (via toVoiceParticipant below).
   //
-  // Also re-syncs participants here (found via manual two-browser testing, not a mock): a
-  // remote participant's ParticipantConnected can fire before their mic track is actually
-  // published, so the isMicrophoneEnabled snapshot taken at that moment reads false. Without a
-  // resync on subscribe, the UI would show them as muted indefinitely — until they happened to
+  // The resync also matters for audio: a remote participant's ParticipantConnected can fire
+  // before their mic track is actually published (found via manual two-browser testing, not a
+  // mock), so the isMicrophoneEnabled snapshot taken at that moment reads false. Without a resync
+  // on subscribe, the UI would show them as muted indefinitely — until they happened to
   // explicitly toggle mute once and trigger TrackMuted/TrackUnmuted.
   private handleTrackSubscribed = (track: RemoteTrack): void => {
-    if (track.kind !== Track.Kind.Audio || !track.sid) return;
-    const element = track.attach();
-    element.dataset.trackSid = track.sid;
-    document.body.appendChild(element);
-    this.audioElements.set(track.sid, element);
+    if (track.kind === Track.Kind.Audio && track.sid) {
+      const element = track.attach();
+      element.dataset.trackSid = track.sid;
+      document.body.appendChild(element);
+      this.audioElements.set(track.sid, element);
+    }
     this.syncParticipants();
   };
 
@@ -158,6 +175,8 @@ function toVoiceParticipant(participant: Participant | LocalParticipant, isLocal
     name: participant.name ?? participant.identity,
     isLocal,
     micEnabled: participant.isMicrophoneEnabled,
+    cameraEnabled: participant.isCameraEnabled,
+    videoTrack: participant.getTrackPublication(Track.Source.Camera)?.videoTrack ?? null,
   };
 }
 
