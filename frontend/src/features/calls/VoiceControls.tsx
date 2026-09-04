@@ -9,6 +9,7 @@ export function VoiceControls() {
   const local = participants.find((participant) => participant.isLocal);
   const muted = local ? !local.micEnabled : false;
   const cameraOn = local ? local.cameraEnabled : false;
+  const sharingScreen = local ? local.screenShareEnabled : false;
 
   function handleLeave() {
     voiceClient.disconnect();
@@ -32,6 +33,14 @@ export function VoiceControls() {
         className="rounded bg-gray-200 px-3 py-1.5 text-sm text-gray-800 hover:bg-gray-300"
       >
         {cameraOn ? '📹 Camera off' : '📷 Camera on'}
+      </button>
+      <button
+        type="button"
+        aria-pressed={sharingScreen}
+        onClick={() => voiceClient.toggleScreenShare()}
+        className="rounded bg-gray-200 px-3 py-1.5 text-sm text-gray-800 hover:bg-gray-300"
+      >
+        {sharingScreen ? '🛑 Stop sharing' : '🖥️ Share screen'}
       </button>
       <button
         type="button"

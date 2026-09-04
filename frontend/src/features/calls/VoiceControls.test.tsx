@@ -10,6 +10,7 @@ vi.mock('../../services/voiceClient', () => ({
   voiceClient: {
     toggleMute: vi.fn(),
     toggleCamera: vi.fn(),
+    toggleScreenShare: vi.fn(),
     disconnect: vi.fn(),
   },
 }));
@@ -29,12 +30,22 @@ describe('VoiceControls', () => {
   beforeEach(() => {
     vi.mocked(voiceClient.toggleMute).mockClear();
     vi.mocked(voiceClient.toggleCamera).mockClear();
+    vi.mocked(voiceClient.toggleScreenShare).mockClear();
     vi.mocked(voiceClient.disconnect).mockClear();
     useVoiceStore.setState({
       status: 'connected',
       channelId: 'c1',
       participants: [
-        { identity: 'me', name: 'Me', isLocal: true, micEnabled: true, cameraEnabled: false, videoTrack: null },
+        {
+          identity: 'me',
+          name: 'Me',
+          isLocal: true,
+          micEnabled: true,
+          cameraEnabled: false,
+          videoTrack: null,
+          screenShareEnabled: false,
+          screenShareTrack: null,
+        },
       ],
       error: null,
     });
@@ -53,7 +64,16 @@ describe('VoiceControls', () => {
   it('shows an unmute affordance when the local mic is off', () => {
     useVoiceStore.setState({
       participants: [
-        { identity: 'me', name: 'Me', isLocal: true, micEnabled: false, cameraEnabled: false, videoTrack: null },
+        {
+          identity: 'me',
+          name: 'Me',
+          isLocal: true,
+          micEnabled: false,
+          cameraEnabled: false,
+          videoTrack: null,
+          screenShareEnabled: false,
+          screenShareTrack: null,
+        },
       ],
     });
     renderControls();
@@ -74,12 +94,51 @@ describe('VoiceControls', () => {
   it('shows a "camera off" affordance when the local camera is on', () => {
     useVoiceStore.setState({
       participants: [
-        { identity: 'me', name: 'Me', isLocal: true, micEnabled: true, cameraEnabled: true, videoTrack: null },
+        {
+          identity: 'me',
+          name: 'Me',
+          isLocal: true,
+          micEnabled: true,
+          cameraEnabled: true,
+          videoTrack: null,
+          screenShareEnabled: false,
+          screenShareTrack: null,
+        },
       ],
     });
     renderControls();
 
     expect(screen.getByRole('button', { name: /camera off/i })).toBeInTheDocument();
+  });
+
+  it('shows a "share screen" affordance when not sharing and calls toggleScreenShare on click', async () => {
+    const user = userEvent.setup();
+    renderControls();
+
+    const button = screen.getByRole('button', { name: /share screen/i });
+    await user.click(button);
+
+    expect(voiceClient.toggleScreenShare).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a "stop sharing" affordance when the local participant is sharing their screen', () => {
+    useVoiceStore.setState({
+      participants: [
+        {
+          identity: 'me',
+          name: 'Me',
+          isLocal: true,
+          micEnabled: true,
+          cameraEnabled: false,
+          videoTrack: null,
+          screenShareEnabled: true,
+          screenShareTrack: null,
+        },
+      ],
+    });
+    renderControls();
+
+    expect(screen.getByRole('button', { name: /stop sharing/i })).toBeInTheDocument();
   });
 
   it('leaves the call and navigates back to the server on click', async () => {
