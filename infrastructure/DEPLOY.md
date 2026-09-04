@@ -44,7 +44,7 @@ placeholders for anything reachable from the internet:
 
 * `POSTGRES_PASSWORD`, `JWT_SECRET`, `LIVEKIT_API_SECRET` — generate with
   `openssl rand -base64 32` (or `-base64 24` for `POSTGRES_PASSWORD`,
-  matching `.env.example`'s existing guidance).
+  matching the convention `VM_REVIEW.md`'s setup already uses).
 * `LIVEKIT_API_KEY` — any identifier string; doesn't need to be secret,
   just needs to match between the backend and the livekit service (both
   read it from this same `.env`).
@@ -68,26 +68,37 @@ comment for why the filenames stayed the same).
 ## 4. Certificate bootstrap and initial issuance
 
 ```bash
-# 1. Placeholder cert, so nginx can start at all (see bootstrap-placeholder-cert.sh's comment
-#    for why this step exists).
+# 1. Placeholder certs (nginx + livekit), so both can start before a real cert exists yet (see
+#    bootstrap-placeholder-cert.sh's comment for why this step exists).
 docker compose --env-file .env -f docker-compose.yml -f docker-compose.prod.yml \
   run --rm bootstrap-cert
 
-# 2. Bring up the full stack — nginx now starts successfully against the placeholder.
+# 2. Bring up the full stack — nginx and livekit now start successfully against the placeholders.
 docker compose --env-file .env -f docker-compose.yml -f docker-compose.prod.yml \
   up -d --build
 
-# 3. Issue the real certificate via the webroot method (nginx, already running, answers the
-#    challenge). Replace the two $-prefixed values below with the same DOMAIN/ACME_EMAIL you set
-#    in .env, or export them first (`export $(grep -E '^(DOMAIN|ACME_EMAIL)=' .env)`).
+# 3. Load DOMAIN/ACME_EMAIL into this shell — the certbot command below needs them on the HOST
+#    side, before docker compose is even invoked. --env-file only sets variables inside the
+#    container, not in the shell running this command.
+set -a
+. ./.env
+set +a
+
+# 4. Issue the real certificate via the webroot method (nginx, already running, answers the
+#    challenge). The certbot service's --deploy-hook also copies the fresh cert into livekit's
+#    volume at this point — livekit just doesn't know to reload it yet (next step).
 docker compose --env-file .env -f docker-compose.yml -f docker-compose.prod.yml \
   run --rm certbot certonly --webroot -w /var/www/certbot \
   -d "$DOMAIN" --deploy-hook /deploy-hook.sh \
   -m "$ACME_EMAIL" --agree-tos --non-interactive
 
-# 4. Reload nginx to pick up the real cert (no restart, no downtime beyond the reload itself).
+# 5. Reload nginx (no restart, no downtime beyond the reload itself) and restart livekit (it has
+#    no live-reload mechanism for its TLS listener, so a full restart is needed) so both pick up
+#    the real cert from step 4.
 docker compose --env-file .env -f docker-compose.yml -f docker-compose.prod.yml \
   exec nginx nginx -s reload
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.prod.yml \
+  restart livekit
 ```
 
 ## 5. Verify
@@ -107,13 +118,26 @@ no-op unless the cert is within 30 days of expiry, so running it daily is
 safe:
 
 ```cron
-0 3 * * * cd /path/to/concord-mvp/infrastructure && docker compose --env-file .env -f docker-compose.yml -f docker-compose.prod.yml run --rm certbot renew --deploy-hook /deploy-hook.sh --quiet && docker compose --env-file .env -f docker-compose.yml -f docker-compose.prod.yml exec nginx nginx -s reload
+0 3 * * * cd /path/to/concord-mvp/infrastructure && docker compose --env-file .env -f docker-compose.yml -f docker-compose.prod.yml run --rm certbot renew --deploy-hook /deploy-hook.sh --quiet && docker compose --env-file .env -f docker-compose.yml -f docker-compose.prod.yml exec nginx nginx -s reload && docker compose --env-file .env -f docker-compose.yml -f docker-compose.prod.yml restart livekit
 ```
+
+This restarts `livekit` once a day alongside the (harmless, connectionless)
+nginx reload, even on days `certbot renew` decides nothing needs to happen
+— briefly dropping any active voice/video call on that container. A more
+surgical fix (only restart on an actual renewal) would need extra
+machinery to detect that from the host side; for a small friends-group
+deployment (`docs/DECISIONS.md` D1) this is an accepted tradeoff rather
+than added complexity.
 
 Replace `/path/to/concord-mvp` with the actual clone path on the VM. The
 `--deploy-hook` re-runs `deploy-hook.sh` (keeping LiveKit's cert copy in
 sync) on any renewal that actually replaces the certificate; it's a no-op
 on days `renew` decides nothing needs to happen yet.
+
+Cron jobs often run with a minimal `PATH` that doesn't include Docker's
+location — if this entry silently doesn't run, check `which docker` and
+use the absolute path instead, and make sure the crontab belongs to a
+user with permission to run Docker.
 
 ## Day-to-day: deploying updates
 

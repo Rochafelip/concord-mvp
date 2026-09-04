@@ -17,6 +17,7 @@ services:
       DOMAIN: ${DOMAIN}
     volumes:
       - certbot_certs:/etc/letsencrypt
+      - livekit_certs:/livekit-certs
       - ./certbot/bootstrap-placeholder-cert.sh:/bootstrap.sh:ro
     entrypoint: ["sh", "/bootstrap.sh"]
 
