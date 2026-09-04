@@ -39,6 +39,48 @@ Authentication and server/channel management are also included.
 
 ---
 
+## Screenshots
+
+Mockups of every screen in the app, drafted with Claude Design to match the app's current UI.
+
+### Log in
+
+![Log in screenshot](docs/screenshots/login.png)
+
+### Register
+
+![Register screenshot](docs/screenshots/register.png)
+
+### Text channel
+
+![Text channel screenshot](docs/screenshots/text-channel.png)
+
+### No channel selected
+
+![No channel selected screenshot](docs/screenshots/empty-state.png)
+
+### Voice channel — camera grid and screen sharing
+
+![Voice channel screenshot](docs/screenshots/voice-channel.png)
+
+### Create a server
+
+![Create server modal screenshot](docs/screenshots/create-server-modal.png)
+
+### Join a server
+
+![Join server modal screenshot](docs/screenshots/join-server-modal.png)
+
+### Create a channel
+
+![Create channel modal screenshot](docs/screenshots/create-channel-modal.png)
+
+### Server settings — invite code and members
+
+![Server settings modal screenshot](docs/screenshots/server-settings-modal.png)
+
+---
+
 ## Architecture
 
 The project is organized as a monorepo.
@@ -272,7 +314,7 @@ Some documents may be created progressively as the corresponding parts of the sy
 
 ## Development Roadmap
 
-### Phase 1 — Foundation
+### Phase 1 — Foundation ✅
 
 * Authentication
 * Users
@@ -281,13 +323,13 @@ Some documents may be created progressively as the corresponding parts of the sy
 * Text chat
 * WebSocket communication
 
-### Phase 2 — Voice
+### Phase 2 — Voice ✅
 
 * LiveKit integration
 * Voice channels
 * Microphone controls
 
-### Phase 3 — Video
+### Phase 3 — Video ✅
 
 * Camera
 * Video participants
@@ -311,7 +353,7 @@ Some documents may be created progressively as the corresponding parts of the sy
 
 ## Current Status
 
-🚧 Early development
+🚧 Early development — Phases 1–3 complete (text chat, voice, video). Screen sharing (Phase 4) and MVP release hardening (Phase 5) remain.
 
 The project is currently being established and the architecture is intentionally being built incrementally.
 
