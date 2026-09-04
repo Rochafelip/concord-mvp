@@ -9,6 +9,7 @@ import { VoiceControls } from './VoiceControls';
 vi.mock('../../services/voiceClient', () => ({
   voiceClient: {
     toggleMute: vi.fn(),
+    toggleCamera: vi.fn(),
     disconnect: vi.fn(),
   },
 }));
@@ -27,11 +28,14 @@ function renderControls() {
 describe('VoiceControls', () => {
   beforeEach(() => {
     vi.mocked(voiceClient.toggleMute).mockClear();
+    vi.mocked(voiceClient.toggleCamera).mockClear();
     vi.mocked(voiceClient.disconnect).mockClear();
     useVoiceStore.setState({
       status: 'connected',
       channelId: 'c1',
-      participants: [{ identity: 'me', name: 'Me', isLocal: true, micEnabled: true }],
+      participants: [
+        { identity: 'me', name: 'Me', isLocal: true, micEnabled: true, cameraEnabled: false, videoTrack: null },
+      ],
       error: null,
     });
   });
@@ -48,11 +52,34 @@ describe('VoiceControls', () => {
 
   it('shows an unmute affordance when the local mic is off', () => {
     useVoiceStore.setState({
-      participants: [{ identity: 'me', name: 'Me', isLocal: true, micEnabled: false }],
+      participants: [
+        { identity: 'me', name: 'Me', isLocal: true, micEnabled: false, cameraEnabled: false, videoTrack: null },
+      ],
     });
     renderControls();
 
     expect(screen.getByRole('button', { name: /unmute/i })).toBeInTheDocument();
+  });
+
+  it('shows a "camera on" affordance when the local camera is off and calls toggleCamera on click', async () => {
+    const user = userEvent.setup();
+    renderControls();
+
+    const button = screen.getByRole('button', { name: /camera on/i });
+    await user.click(button);
+
+    expect(voiceClient.toggleCamera).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a "camera off" affordance when the local camera is on', () => {
+    useVoiceStore.setState({
+      participants: [
+        { identity: 'me', name: 'Me', isLocal: true, micEnabled: true, cameraEnabled: true, videoTrack: null },
+      ],
+    });
+    renderControls();
+
+    expect(screen.getByRole('button', { name: /camera off/i })).toBeInTheDocument();
   });
 
   it('leaves the call and navigates back to the server on click', async () => {
