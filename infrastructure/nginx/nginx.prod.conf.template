@@ -1,0 +1,100 @@
+# Production HTTPS via Let's Encrypt (docs/DECISIONS.md D16's deferred "revisit once a real
+# domain exists"). Only loaded when running with docker-compose.prod.yml — the base
+# docker-compose.yml still separately mounts the self-signed nginx.conf too (catch-all
+# server_name _), which stays active as a harmless fallback for direct-IP requests: nginx always
+# prefers the more specific server_name match, so any request for ${DOMAIN} is served by this
+# config, never the self-signed one. See infrastructure/DEPLOY.md for the full deployment
+# sequence, including why a placeholder cert has to exist before this config's 443 block can
+# even start.
+#
+# ${DOMAIN} is substituted at container start by the official nginx:alpine image's built-in
+# envsubst-on-templates entrypoint step (this file lives under /etc/nginx/templates/ inside the
+# container, not /etc/nginx/conf.d/ directly) — see docker-compose.prod.yml's nginx service for
+# where the DOMAIN environment variable comes from. Only variables actually set in the
+# container's environment get substituted, so nginx's own runtime variables below ($host,
+# $remote_addr, $scheme, $http_upgrade, $request_uri) are left untouched.
+server {
+    listen 80;
+    server_name ${DOMAIN};
+
+    # Must be served directly, never redirected — both certbot's initial HTTP-01 challenge and
+    # every renewal depend on this exact path being reachable over plain HTTP.
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    server_name ${DOMAIN};
+
+    ssl_certificate     /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+
+    # REST API -> backend, preserving the path.
+    location /api/ {
+        proxy_pass http://backend:8080/api/;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # WebSocket -> backend.
+    location /ws {
+        proxy_pass http://backend:8080/ws;
+
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # LiveKit signaling (WebSocket) -> the livekit service, same origin/certificate as
+    # everything else (docs/DECISIONS.md D16).
+    location /livekit/ {
+        proxy_pass http://livekit:7880/;
+
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Actuator (health, etc.) -> backend.
+    location /actuator/ {
+        proxy_pass http://backend:8080/actuator/;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Everything else -> frontend (the built static SPA).
+    location / {
+        proxy_pass http://frontend:80;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
