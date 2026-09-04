@@ -1,7 +1,20 @@
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useVoiceStore } from '../../stores/voiceStore';
+import type { VoiceParticipant } from '../../types/voice';
 import { ParticipantList } from './ParticipantList';
+
+function participant(overrides: Partial<VoiceParticipant> = {}): VoiceParticipant {
+  return {
+    identity: 'u1',
+    name: 'Felipe',
+    isLocal: false,
+    micEnabled: true,
+    cameraEnabled: false,
+    videoTrack: null,
+    ...overrides,
+  };
+}
 
 describe('ParticipantList', () => {
   beforeEach(() => {
@@ -13,26 +26,27 @@ describe('ParticipantList', () => {
     expect(screen.getByText(/connecting/i)).toBeInTheDocument();
   });
 
-  it('shows a placeholder when no one else has joined yet', () => {
+  it('renders a tile for the local participant alone when no one else has joined yet (self-view)', () => {
     useVoiceStore.setState({
-      participants: [{ identity: 'me', name: 'Me', isLocal: true, micEnabled: true }],
+      participants: [participant({ identity: 'me', name: 'Felipe', isLocal: true })],
     });
     render(<ParticipantList />);
-    expect(screen.getByText(/no one else/i)).toBeInTheDocument();
+
+    expect(screen.getByText(/Felipe/)).toBeInTheDocument();
   });
 
-  it('lists each participant with a mic icon reflecting their mute state', () => {
+  it('renders one tile per participant, including the local participant', () => {
     useVoiceStore.setState({
       participants: [
-        { identity: 'u1', name: 'Felipe', isLocal: true, micEnabled: true },
-        { identity: 'u2', name: 'João', isLocal: false, micEnabled: false },
+        participant({ identity: 'u1', name: 'Felipe', isLocal: true, micEnabled: true }),
+        participant({ identity: 'u2', name: 'João', isLocal: false, micEnabled: false }),
       ],
     });
     render(<ParticipantList />);
 
-    const felipeRow = screen.getByText(/Felipe/).closest('li');
-    const joaoRow = screen.getByText(/João/).closest('li');
-    expect(felipeRow).toHaveTextContent('🎤');
-    expect(joaoRow).toHaveTextContent('🔇');
+    const felipeTile = screen.getByText(/Felipe/).closest('div');
+    const joaoTile = screen.getByText(/João/).closest('div');
+    expect(felipeTile).toHaveTextContent('🎤');
+    expect(joaoTile).toHaveTextContent('🔇');
   });
 });
