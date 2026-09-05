@@ -124,6 +124,18 @@ async function connectVoice(channelId: string, token: string, url: string): Prom
   await promise;
 }
 
+function remoteParticipant(identity: string) {
+  return {
+    identity,
+    name: identity,
+    isMicrophoneEnabled: true,
+    isCameraEnabled: false,
+    isScreenShareEnabled: false,
+    connectionQuality: 'unknown',
+    getTrackPublication: () => undefined,
+  };
+}
+
 describe('voiceClient', () => {
   beforeEach(() => {
     roomInstances.length = 0;
@@ -688,6 +700,69 @@ describe('voiceClient', () => {
 
       expect(mockPlaySelfLeave).not.toHaveBeenCalled();
       expect(mockPlaySelfJoin).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not play a join sound for a participant already in the room at connect time', async () => {
+      const promise = voiceClient.connect('channel-1', 'token', 'wss://example.test/livekit');
+      const room = roomInstances[roomInstances.length - 1];
+      room.remoteParticipants.set('bob', remoteParticipant('bob'));
+      connectResolvers[connectResolvers.length - 1]();
+      await promise;
+
+      expect(mockPlayParticipantJoined).not.toHaveBeenCalled();
+    });
+
+    it('plays a join sound when a participant connects after the initial sync', async () => {
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+      const room = roomInstances[0];
+      room.remoteParticipants.set('bob', remoteParticipant('bob'));
+
+      const onParticipantConnected = handlerFor(room, 'participantConnected');
+      onParticipantConnected();
+
+      expect(mockPlayParticipantJoined).toHaveBeenCalledTimes(1);
+    });
+
+    it('plays a leave sound when a participant disconnects', async () => {
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+      const room = roomInstances[0];
+      room.remoteParticipants.set('bob', remoteParticipant('bob'));
+      handlerFor(room, 'participantConnected')();
+      mockPlayParticipantJoined.mockClear();
+
+      room.remoteParticipants.delete('bob');
+      const onParticipantDisconnected = handlerFor(room, 'participantDisconnected');
+      onParticipantDisconnected();
+
+      expect(mockPlayParticipantLeft).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not play a join or leave sound for an event that does not change who is in the room', async () => {
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+      const room = roomInstances[0];
+      room.remoteParticipants.set('bob', remoteParticipant('bob'));
+      handlerFor(room, 'participantConnected')();
+      mockPlayParticipantJoined.mockClear();
+
+      const onTrackMuted = handlerFor(room, 'trackMuted');
+      onTrackMuted();
+
+      expect(mockPlayParticipantJoined).not.toHaveBeenCalled();
+      expect(mockPlayParticipantLeft).not.toHaveBeenCalled();
+    });
+
+    it('treats participants in a freshly connected channel as already present, not as new joins, after a previous disconnect', async () => {
+      await connectVoice('channel-1', 'token-a', 'wss://example.test/livekit');
+      voiceClient.disconnect();
+      mockPlayParticipantJoined.mockClear();
+
+      const promise = voiceClient.connect('channel-2', 'token-b', 'wss://example.test/livekit');
+      const room = roomInstances[roomInstances.length - 1];
+      room.remoteParticipants.set('carol', remoteParticipant('carol'));
+      connectResolvers[connectResolvers.length - 1]();
+      await promise;
+
+      expect(mockPlayParticipantJoined).not.toHaveBeenCalled();
     });
   });
 });

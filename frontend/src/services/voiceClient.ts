@@ -29,6 +29,13 @@ class VoiceClient {
   private currentChannelId: string | null = null;
   private lastReportedPresence: ReportedPresence | null = null;
   private localSpeaking = false;
+  // Tracks remote participant identities across syncParticipants() calls so join/leave sounds can
+  // be diffed against the previous sync rather than played for everyone already in the room.
+  private knownRemoteIds = new Set<string>();
+  // False until the first syncParticipants() after a connect has run once — that first call only
+  // seeds knownRemoteIds from whoever's already in the room, without playing any join sounds,
+  // since they didn't just join, they were already there when we connected.
+  private hasSeededRemoteIds = false;
 
   async connect(channelId: string, token: string, url: string): Promise<void> {
     if (this.room) {
@@ -102,6 +109,8 @@ class VoiceClient {
     this.currentChannelId = null;
     this.lastReportedPresence = null;
     this.localSpeaking = false;
+    this.knownRemoteIds = new Set();
+    this.hasSeededRemoteIds = false;
     // Removed proactively rather than left for the room's own TrackUnsubscribed events to clean
     // up: livekit-client's real Room.disconnect() awaits a server round-trip before emitting
     // those, so relying on them here would leak these elements for the entire duration of that
@@ -243,6 +252,18 @@ class VoiceClient {
   private syncParticipants = (): void => {
     const room = this.room;
     if (!room) return;
+
+    const currentRemoteIds = new Set(room.remoteParticipants.keys());
+    if (this.hasSeededRemoteIds) {
+      for (const id of currentRemoteIds) {
+        if (!this.knownRemoteIds.has(id)) soundEffects.playParticipantJoined();
+      }
+      for (const id of this.knownRemoteIds) {
+        if (!currentRemoteIds.has(id)) soundEffects.playParticipantLeft();
+      }
+    }
+    this.knownRemoteIds = currentRemoteIds;
+    this.hasSeededRemoteIds = true;
 
     const participants: VoiceParticipant[] = [
       toVoiceParticipant(room.localParticipant, true),
