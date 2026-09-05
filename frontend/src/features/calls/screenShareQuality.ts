@@ -28,3 +28,24 @@ export function setLastScreenShareQuality(quality: ScreenShareQuality): void {
     // won't remember the choice for next time.
   }
 }
+
+const AUDIO_STORAGE_KEY = 'concord:screenShareAudio';
+
+// Unchecked by default (see the quality feature's design doc for the parallel reasoning) — any
+// stored value other than the literal string 'true' (nothing stored, a corrupted value, or a
+// thrown read) is treated as false, so there's no separate "unset" state to handle.
+export function getLastScreenShareAudioPreference(): boolean {
+  try {
+    return localStorage.getItem(AUDIO_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function setLastScreenShareAudioPreference(withAudio: boolean): void {
+  try {
+    localStorage.setItem(AUDIO_STORAGE_KEY, String(withAudio));
+  } catch {
+    // Best-effort only, same reasoning as setLastScreenShareQuality.
+  }
+}
