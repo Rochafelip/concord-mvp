@@ -147,10 +147,10 @@ describe('ParticipantTile', () => {
       await user.click(screen.getByRole('button', { name: 'Share screen' }));
 
       expect(voiceClient.toggleScreenShare).not.toHaveBeenCalled();
-      expect(screen.getByText('Choose share quality')).toBeInTheDocument();
+      expect(screen.getByText('Share your screen')).toBeInTheDocument();
     });
 
-    it('starts sharing with the chosen quality after confirming the modal', async () => {
+    it('starts sharing with the chosen quality and audio preference after confirming the modal', async () => {
       const user = userEvent.setup();
       render(
         <ParticipantTile participant={participant({ isLocal: true, screenShareEnabled: false })} onLeave={vi.fn()} />,
@@ -158,10 +158,11 @@ describe('ParticipantTile', () => {
 
       await user.click(screen.getByRole('button', { name: 'Share screen' }));
       await user.click(screen.getByLabelText('HD (720p)'));
+      await user.click(screen.getByLabelText('Share system/tab audio'));
       await user.click(screen.getByRole('button', { name: 'Share' }));
 
-      expect(voiceClient.toggleScreenShare).toHaveBeenCalledWith('hd');
-      expect(screen.queryByText('Choose share quality')).not.toBeInTheDocument();
+      expect(voiceClient.toggleScreenShare).toHaveBeenCalledWith({ quality: 'hd', withAudio: true });
+      expect(screen.queryByText('Share your screen')).not.toBeInTheDocument();
     });
 
     it('closes the quality modal without toggling when canceled', async () => {
@@ -174,7 +175,7 @@ describe('ParticipantTile', () => {
       await user.click(screen.getByRole('button', { name: 'Cancel' }));
 
       expect(voiceClient.toggleScreenShare).not.toHaveBeenCalled();
-      expect(screen.queryByText('Choose share quality')).not.toBeInTheDocument();
+      expect(screen.queryByText('Share your screen')).not.toBeInTheDocument();
     });
   });
 });

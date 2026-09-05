@@ -93,9 +93,9 @@ export function ParticipantTile({ participant, onLeave }: ParticipantTileProps) 
           <ScreenShareQualityModal
             open={isQualityModalOpen}
             onClose={() => setQualityModalOpen(false)}
-            onConfirm={(quality) => {
+            onConfirm={(options) => {
               setQualityModalOpen(false);
-              voiceClient.toggleScreenShare(quality);
+              voiceClient.toggleScreenShare(options);
             }}
           />
         </>
