@@ -17,3 +17,7 @@ export function createChannel(serverId: string, data: CreateChannelPayload): Pro
 export function getChannel(channelId: string): Promise<Channel> {
   return apiClient.get<Channel>(`channels/${channelId}`);
 }
+
+export function deleteChannel(channelId: string): Promise<void> {
+  return apiClient.delete<void>(`channels/${channelId}`);
+}

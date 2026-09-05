@@ -1,9 +1,9 @@
 /**
  * The application-level real-time event vocabulary sent over the WebSocket connection
  * (docs/ARCHITECTURE.md §16-17, backend com.concordmvp.realtime.WsEventType). MESSAGE_UPDATE,
- * MESSAGE_DELETE, CHANNEL_UPDATE, and CHANNEL_DELETE are part of the wire vocabulary but nothing
- * in the backend sends them yet (Phase 1 doesn't support editing/deleting) — they're kept here
- * for completeness/forward-compat, not because anything currently handles them.
+ * MESSAGE_DELETE, and CHANNEL_UPDATE are part of the wire vocabulary but nothing in the backend
+ * sends them yet (Phase 1 doesn't support editing, and channels can't be renamed) — they're kept
+ * here for completeness/forward-compat, not because anything currently handles them.
  */
 export type WsEventType =
   | 'MESSAGE_CREATE'
@@ -37,6 +37,11 @@ export interface ServerOwnerChangePayload {
 }
 
 export interface ServerDeletedPayload {
+  serverId: string;
+}
+
+export interface ChannelDeletedPayload {
+  channelId: string;
   serverId: string;
 }
 
