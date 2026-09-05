@@ -2,16 +2,20 @@ import type { InfiniteData } from '@tanstack/react-query';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { toVoicePresenceEntry } from '../features/calls/api';
 import { useAuthStore } from '../features/auth/authStore';
 import { websocketClient } from '../services/websocketClient';
 import { useNotificationStore } from '../stores/notificationStore';
 import type { Channel } from '../types/channel';
 import type { Message } from '../types/message';
 import type { Server } from '../types/server';
+import type { VoicePresenceEntry } from '../types/voice';
 import type {
   ErrorPayload,
   ServerDeletedPayload,
   ServerMemberEventPayload,
+  VoicePresenceLeavePayload,
+  VoicePresencePayload,
 } from '../types/websocket';
 
 /**
@@ -98,6 +102,24 @@ export function useRealtimeSync(): void {
       websocketClient.subscribe('ERROR', (payload) => {
         const { message } = payload as ErrorPayload;
         setNotification(message);
+      }),
+
+      websocketClient.subscribe('VOICE_PRESENCE_UPDATE', (payload) => {
+        const raw = payload as VoicePresencePayload;
+        const entry = toVoicePresenceEntry(raw);
+        queryClient.setQueryData<VoicePresenceEntry[]>(['servers', raw.serverId, 'voice-presence'], (old) => {
+          // Same guard as MESSAGE_CREATE above: don't force-create a cache entry for a server's
+          // sidebar nobody has opened yet.
+          if (!old) return old;
+          return [...old.filter((existing) => existing.userId !== entry.userId), entry];
+        });
+      }),
+
+      websocketClient.subscribe('VOICE_PRESENCE_LEAVE', (payload) => {
+        const { serverId, userId } = payload as VoicePresenceLeavePayload;
+        queryClient.setQueryData<VoicePresenceEntry[]>(['servers', serverId, 'voice-presence'], (old) =>
+          old?.filter((entry) => entry.userId !== userId),
+        );
       }),
     ];
 

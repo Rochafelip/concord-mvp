@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAuthStore } from '../features/auth/authStore';
 import { useNotificationStore } from '../stores/notificationStore';
 import type { Server } from '../types/server';
+import type { VoicePresenceEntry } from '../types/voice';
 import { useRealtimeSync } from './useRealtimeSync';
 
 const { handlers, mockConnect, mockDisconnect } = vi.hoisted(() => ({
@@ -209,5 +210,80 @@ describe('useRealtimeSync', () => {
     emit('ERROR', { message: 'Something went wrong' });
 
     expect(useNotificationStore.getState().message).toBe('Something went wrong');
+  });
+
+  it('VOICE_PRESENCE_UPDATE upserts into an already-cached voice presence list', () => {
+    const queryClient = newQueryClient();
+    const existing: VoicePresenceEntry[] = [
+      { channelId: 'c1', userId: 'u1', displayName: 'Ana', avatarUrl: null,
+        muted: false, cameraOn: false, screenSharing: false, speaking: false },
+    ];
+    queryClient.setQueryData(['servers', 's1', 'voice-presence'], existing);
+    renderHarness(queryClient, '/app');
+
+    emit('VOICE_PRESENCE_UPDATE', {
+      serverId: 's1', channelId: 'c1',
+      user: { id: 'u2', username: 'b', displayName: 'Bob', avatarUrl: null },
+      muted: true, cameraOn: false, screenSharing: false, speaking: false,
+    });
+
+    const cached = queryClient.getQueryData<VoicePresenceEntry[]>(['servers', 's1', 'voice-presence']);
+    expect(cached).toEqual([
+      existing[0],
+      { channelId: 'c1', userId: 'u2', displayName: 'Bob', avatarUrl: null,
+        muted: true, cameraOn: false, screenSharing: false, speaking: false },
+    ]);
+  });
+
+  it('VOICE_PRESENCE_UPDATE replaces an existing entry for the same user rather than duplicating it', () => {
+    const queryClient = newQueryClient();
+    const existing: VoicePresenceEntry[] = [
+      { channelId: 'c1', userId: 'u1', displayName: 'Ana', avatarUrl: null,
+        muted: false, cameraOn: false, screenSharing: false, speaking: false },
+    ];
+    queryClient.setQueryData(['servers', 's1', 'voice-presence'], existing);
+    renderHarness(queryClient, '/app');
+
+    emit('VOICE_PRESENCE_UPDATE', {
+      serverId: 's1', channelId: 'c1',
+      user: { id: 'u1', username: 'a', displayName: 'Ana', avatarUrl: null },
+      muted: true, cameraOn: false, screenSharing: false, speaking: false,
+    });
+
+    const cached = queryClient.getQueryData<VoicePresenceEntry[]>(['servers', 's1', 'voice-presence']);
+    expect(cached).toEqual([
+      { channelId: 'c1', userId: 'u1', displayName: 'Ana', avatarUrl: null,
+        muted: true, cameraOn: false, screenSharing: false, speaking: false },
+    ]);
+  });
+
+  it('VOICE_PRESENCE_UPDATE does nothing when there is no cached voice presence for that server', () => {
+    const queryClient = newQueryClient();
+    renderHarness(queryClient, '/app');
+
+    emit('VOICE_PRESENCE_UPDATE', {
+      serverId: 'never-opened', channelId: 'c1',
+      user: { id: 'u1', username: 'a', displayName: 'Ana', avatarUrl: null },
+      muted: false, cameraOn: false, screenSharing: false, speaking: false,
+    });
+
+    expect(queryClient.getQueryData(['servers', 'never-opened', 'voice-presence'])).toBeUndefined();
+  });
+
+  it('VOICE_PRESENCE_LEAVE removes the matching entry from the cached voice presence list', () => {
+    const queryClient = newQueryClient();
+    const existing: VoicePresenceEntry[] = [
+      { channelId: 'c1', userId: 'u1', displayName: 'Ana', avatarUrl: null,
+        muted: false, cameraOn: false, screenSharing: false, speaking: false },
+      { channelId: 'c1', userId: 'u2', displayName: 'Bob', avatarUrl: null,
+        muted: false, cameraOn: false, screenSharing: false, speaking: false },
+    ];
+    queryClient.setQueryData(['servers', 's1', 'voice-presence'], existing);
+    renderHarness(queryClient, '/app');
+
+    emit('VOICE_PRESENCE_LEAVE', { serverId: 's1', channelId: 'c1', userId: 'u1' });
+
+    const cached = queryClient.getQueryData<VoicePresenceEntry[]>(['servers', 's1', 'voice-presence']);
+    expect(cached).toEqual([existing[1]]);
   });
 });
