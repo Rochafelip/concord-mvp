@@ -8,6 +8,7 @@ const {
   cameraState,
   screenShareState,
   connectResolvers,
+  connectRejecters,
   mockSend,
   mockPlaySelfJoin,
   mockPlaySelfLeave,
@@ -18,6 +19,10 @@ const {
   const cameraState = { shouldFail: false };
   const screenShareState = { shouldFail: false };
   const connectResolvers: Array<() => void> = [];
+  // Parallel to connectResolvers (one entry pushed per room.connect() call, same index) so a test
+  // can simulate room.connect() rejecting — e.g. the LiveKit server being unreachable — instead of
+  // resolving, without disturbing every existing test that only ever resolves via connectResolvers.
+  const connectRejecters: Array<(reason?: unknown) => void> = [];
   const mockSend = vi.fn();
   const mockPlaySelfJoin = vi.fn();
   const mockPlaySelfLeave = vi.fn();
@@ -25,7 +30,13 @@ const {
   const mockPlayParticipantLeft = vi.fn();
 
   class MockRoom {
-    connect = vi.fn(() => new Promise<void>((resolve) => connectResolvers.push(resolve)));
+    connect = vi.fn(
+      () =>
+        new Promise<void>((resolve, reject) => {
+          connectResolvers.push(resolve);
+          connectRejecters.push(reject);
+        }),
+    );
     disconnect = vi.fn().mockResolvedValue(undefined);
     on = vi.fn().mockReturnThis();
     remoteParticipants = new Map();
@@ -72,6 +83,7 @@ const {
     cameraState,
     screenShareState,
     connectResolvers,
+    connectRejecters,
     mockSend,
     mockPlaySelfJoin,
     mockPlaySelfLeave,
@@ -140,6 +152,7 @@ describe('voiceClient', () => {
   beforeEach(() => {
     roomInstances.length = 0;
     connectResolvers.length = 0;
+    connectRejecters.length = 0;
     micState.shouldFail = false;
     cameraState.shouldFail = false;
     screenShareState.shouldFail = false;
@@ -205,6 +218,23 @@ describe('voiceClient', () => {
     expect(state.status).toBe('connected');
     expect(state.error).toBe('Microphone permission denied');
     expect(roomInstances[0].disconnect).not.toHaveBeenCalled();
+  });
+
+  it('does not send VOICE_PRESENCE_LEAVE or play a self-leave sound when disconnect() is called after a failed connection attempt', async () => {
+    const promise = voiceClient.connect('channel-1', 'token', 'wss://example.test/livekit');
+    connectRejecters[connectRejecters.length - 1](new Error('connection failed'));
+    await promise;
+
+    expect(useVoiceStore.getState().status).toBe('disconnected');
+    expect(useVoiceStore.getState().error).toBe('Failed to connect to voice channel');
+
+    mockSend.mockClear();
+    mockPlaySelfLeave.mockClear();
+
+    voiceClient.disconnect();
+
+    expect(mockSend).not.toHaveBeenCalledWith({ type: 'VOICE_PRESENCE_LEAVE', payload: {} });
+    expect(mockPlaySelfLeave).not.toHaveBeenCalled();
   });
 
   it('toggles the local microphone off then on', async () => {

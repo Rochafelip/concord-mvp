@@ -60,6 +60,7 @@ class VoiceClient {
       if (generation === this.connectGeneration) {
         useVoiceStore.getState().setError('Failed to connect to voice channel');
         useVoiceStore.getState().setStatus('disconnected', null);
+        this.currentChannelId = null;
       } else {
         abandonRoom(room);
       }
