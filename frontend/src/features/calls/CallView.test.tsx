@@ -60,7 +60,7 @@ describe('CallView', () => {
     expect(voiceClient.disconnect).not.toHaveBeenCalled();
   });
 
-  it('disconnects only on unmount, not on every render', () => {
+  it('does not disconnect when unmounted — the call continues in the background', () => {
     const { unmount, rerender } = renderCallView(channel('c1'));
     rerender(
       <MemoryRouter initialEntries={['/app/servers/s1/channels/c1']}>
@@ -72,6 +72,6 @@ describe('CallView', () => {
     expect(voiceClient.disconnect).not.toHaveBeenCalled();
 
     unmount();
-    expect(voiceClient.disconnect).toHaveBeenCalledTimes(1);
+    expect(voiceClient.disconnect).not.toHaveBeenCalled();
   });
 });

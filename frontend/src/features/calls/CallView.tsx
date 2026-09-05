@@ -14,8 +14,11 @@ interface CallViewProps {
  * `channel.id` changes — React Router does not remount this component on a param-only
  * navigation, so switching between two voice channels re-fires the join effect below rather
  * than a fresh mount. voiceClient.connect() itself disconnects any previously connected room
- * before connecting the new one, so no explicit disconnect is needed here between channels —
- * only on a true unmount (leaving the voice UI entirely), handled by the second effect.
+ * before connecting the new one, so no explicit disconnect is needed here between channels.
+ *
+ * Deliberately does NOT disconnect on unmount: navigating away from this screen (to a text
+ * channel, another server, etc.) must not end the call — it keeps running in the background
+ * until the user explicitly leaves, via handleLeave below or VoiceConnectionBar's Leave button.
  */
 export function CallView({ channel }: CallViewProps) {
   const { mutate: joinVoiceChannel } = useJoinVoiceChannel();
@@ -24,10 +27,6 @@ export function CallView({ channel }: CallViewProps) {
   useEffect(() => {
     joinVoiceChannel(channel.id);
   }, [channel.id, joinVoiceChannel]);
-
-  useEffect(() => {
-    return () => voiceClient.disconnect();
-  }, []);
 
   function handleLeave() {
     voiceClient.disconnect();
