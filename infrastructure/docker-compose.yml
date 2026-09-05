@@ -61,13 +61,14 @@ services:
       # livekit.yaml's turn.cert_file/key_file instead of another env var here.
       LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
     volumes:
-      - ./livekit/livekit.yaml:/etc/livekit.yaml:ro
+      - ./livekit/livekit.local.yaml:/etc/livekit.yaml:ro
       - ./nginx/certs:/etc/livekit-certs:ro
     ports:
       - "7881:7881/tcp"
       - "3478:3478/udp"
       - "5349:5349/tcp"
-      - "50000-60000:50000-60000/udp"
+      - "20000-20099:20000-20099/udp"
+      - "22000-22099:22000-22099/udp"
 
   nginx:
     image: nginx:alpine
@@ -85,6 +86,24 @@ services:
     ports:
       - "80:80"
       - "443:443"
+      # ISPs on some residential connections block inbound 80/443 even when other Port Mapping
+      # rules work fine (confirmed here: infrastructure/HOME_DEPLOY.md's port table). 45678 is
+      # the connectivity-test port validated to actually reach this PC from outside, so it's
+      # reused as the real public HTTPS entry point — 443 stays published too, for LAN-only
+      # access at the standard port.
+      - "45678:443"
+
+  # Keeps DUCKDNS_SUBDOMAIN.duckdns.org pointed at this PC's current public IP — checks and
+  # updates every 5 minutes (the image's default), so a PPPoE reconnect that changes the IP
+  # self-heals within minutes instead of needing a manual .env/cert update (see
+  # infrastructure/DUCKDNS.md).
+  duckdns:
+    image: linuxserver/duckdns:latest
+    restart: unless-stopped
+    environment:
+      SUBDOMAINS: ${DUCKDNS_SUBDOMAIN}
+      TOKEN: ${DUCKDNS_TOKEN}
+      LOG_FILE: "false"
 
 volumes:
   postgres_data:

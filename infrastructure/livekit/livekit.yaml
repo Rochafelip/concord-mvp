@@ -2,6 +2,13 @@
 # docs/DECISIONS.md D16). API keys are injected via the LIVEKIT_KEYS env var (docker-compose.yml)
 # rather than a `keys:` block here, so this file can be committed without secrets — same split
 # as nginx.conf (structure here, secrets in .env).
+#
+# This file is a TEMPLATE — docker-compose.yml actually mounts livekit.local.yaml, a gitignored
+# copy of this file with the two CHANGE-ME values below filled in for this specific deployment
+# (real public IP, real DuckDNS domain). LiveKit's own config format doesn't support environment
+# variable substitution for these two fields (unlike LIVEKIT_KEYS above), so this file-copy
+# approach mirrors the project's existing .env.example -> .env pattern instead. See
+# infrastructure/HOME_DEPLOY.md.
 
 # Signaling port. Proxied by nginx at /livekit/ (infrastructure/nginx/nginx.conf) — not published
 # directly on the host.
@@ -9,15 +16,33 @@ port: 7880
 
 rtc:
   # UDP range for WebRTC media. Must be published on the host (docker-compose.yml) and open on
-  # the VM's firewall — this is the primary path clients use to reach the SFU.
-  port_range_start: 50000
-  port_range_end: 60000
+  # the VM's firewall — this is the primary path clients use to reach the SFU. Deliberately
+  # below 49152 (Windows' default dynamic/ephemeral port range) — the original 50000-51000
+  # choice sat inside that range and inside a Hyper-V "administered" exclusion
+  # (`netsh interface ipv4 show excludedportrange protocol=udp`), causing random bind failures
+  # on the Windows host running Docker Desktop/WSL2.
+  #
+  # Kept to 100 ports (not 1,000+): each published port becomes its own firewall rule at
+  # container start, and a range in the thousands took several minutes (sometimes hanging
+  # outright) to bind on this Docker/WSL2 host. 100 ports is roughly 100 simultaneous direct
+  # WebRTC connections (one port per participant, not per track) — comfortably more than a
+  # friends-group deployment (docs/DECISIONS.md D1) needs. Widen later if this turns out to be
+  # too small, and expect the bind time to grow with it.
+  port_range_start: 20000
+  port_range_end: 20099
   # ICE-over-TCP fallback for clients that can't do UDP at all. Also published directly (not
   # behind nginx/TLS — WebRTC traffic is independently encrypted via DTLS-SRTP).
   tcp_port: 7881
-  # Discovers the VM's public IP via STUN so it's correctly advertised to clients as an ICE
-  # candidate, instead of the container's internal Docker network IP.
-  use_external_ip: true
+  # The public IP is already known (home-PC deployment behind a router with fixed Port
+  # Mapping, infrastructure/HOME_DEPLOY.md) and advertised to clients as-is, instead of
+  # discovering it via STUN (use_external_ip) — this also sidesteps environments where the
+  # container can't reach an external STUN server (e.g. outbound UDP DNS blocked), which
+  # otherwise crash-loops the server. Update this alongside HOME_DEPLOY.md's "if your public
+  # IP changes" steps (turn.domain below, .env's LIVEKIT_PUBLIC_URL, the TLS cert's CN).
+  #
+  # CHANGE THIS to your actual public IP before deploying — never commit the real value here.
+  use_external_ip: false
+  node_ip: CHANGE-ME-public-ip
 
 # Embedded TURN relay — the fallback for clients whose network blocks the direct UDP path above.
 # No standalone coturn service (docs/DECISIONS.md D16): one fewer container, and LiveKit issues
@@ -27,13 +52,21 @@ turn:
   enabled: true
   udp_port: 3478
   tls_port: 5349
+  # Port range for actual relayed media once a client is using TURN (separate from the ICE
+  # range above, which is only for direct/non-relayed candidates). Defaults to 30000-40000
+  # (10,001 ports) if unset — narrowed to 100 ports for the same reasons as rtc.port_range
+  # above, and must be published on the host (docker-compose.yml) and forwarded by the router
+  # just like it.
+  relay_range_start: 22000
+  relay_range_end: 22099
   # Reuses the same self-signed cert nginx uses (mounted into the container at this path — see
   # the livekit service's volumes in docker-compose.yml) rather than provisioning a separate one
   # just for TURN/TLS. These are file paths, not secrets, so they're safe to commit here.
   cert_file: /etc/livekit-certs/selfsigned.crt
   key_file: /etc/livekit-certs/selfsigned.key
   #
-  # CHANGE THIS to the VM's actual public IP/hostname before deploying — must match the cert's
-  # CN (same value passed to `openssl req -subj "/CN=..."` when generating
-  # infrastructure/nginx/certs/selfsigned.crt).
-  domain: CHANGE-ME-vm-public-ip
+  # Must match the cert's CN — a DuckDNS hostname now (infrastructure/DUCKDNS.md), stable across
+  # public IP changes, unlike the raw IP this used to hold.
+  #
+  # CHANGE THIS to your actual DuckDNS domain before deploying — never commit the real value here.
+  domain: CHANGE-ME-duckdns-domain

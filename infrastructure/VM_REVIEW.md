@@ -4,7 +4,9 @@ This is an optional, solo-developer workflow for running the Phase 1 stack
 in an isolated VM on your own machine and exposing it publicly for a
 quick review — no cloud VM, no domain, no account required. It's meant
 for demoing/reviewing the app with friends before a real deployment, not
-as a long-term production setup.
+as a long-term production setup. For a more permanent setup running
+directly on your PC (not an isolated VM) via router port-forwarding, see
+[`HOME_DEPLOY.md`](./HOME_DEPLOY.md).
 
 Requires QEMU/KVM (Linux host, or WSL2 with `/dev/kvm` available) and
 [`cloudflared`](https://github.com/cloudflare/cloudflared) installed on

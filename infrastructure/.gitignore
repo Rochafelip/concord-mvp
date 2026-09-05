@@ -3,3 +3,11 @@
 # Self-signed TLS cert + private key (docs/DECISIONS.md D16) — generated locally per
 # deployment, never committed. See infrastructure/nginx/nginx.conf for the generation command.
 nginx/certs/
+
+# acme.sh state for the DuckDNS-issued cert (infrastructure/DUCKDNS.md) — holds real private
+# keys and Let's Encrypt/ZeroSSL account keys, generated locally per deployment, never committed.
+duckdns/
+
+# Real deployment values (public IP, DuckDNS domain) filled in from the livekit.yaml template —
+# see that file's header comment and infrastructure/HOME_DEPLOY.md.
+livekit/livekit.local.yaml

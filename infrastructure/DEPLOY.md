@@ -3,7 +3,9 @@
 This is the manual runbook for deploying concord-mvp to a real production
 VM with a real domain and trusted HTTPS (Let's Encrypt). For a quick,
 no-domain-required local review deployment instead, see
-[`VM_REVIEW.md`](./VM_REVIEW.md).
+[`VM_REVIEW.md`](./VM_REVIEW.md). For running directly on your own PC via
+router port-forwarding instead of a VM, see
+[`HOME_DEPLOY.md`](./HOME_DEPLOY.md).
 
 No automated deployment pipeline exists yet (docs/DECISIONS.md D5) — this
 is a manual, step-by-step process, same spirit as `VM_REVIEW.md`.
