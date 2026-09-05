@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useVoiceStore } from '../stores/voiceStore';
 
-const { roomInstances, MockRoom, micState, cameraState, screenShareState, connectResolvers } = vi.hoisted(() => {
+const { roomInstances, MockRoom, micState, cameraState, screenShareState, connectResolvers, mockSend } = vi.hoisted(() => {
   const micState = { shouldFail: false };
   const cameraState = { shouldFail: false };
   const screenShareState = { shouldFail: false };
   const connectResolvers: Array<() => void> = [];
+  const mockSend = vi.fn();
 
   class MockRoom {
     connect = vi.fn(() => new Promise<void>((resolve) => connectResolvers.push(resolve)));
@@ -47,7 +48,7 @@ const { roomInstances, MockRoom, micState, cameraState, screenShareState, connec
     }
   }
   const roomInstances: MockRoom[] = [];
-  return { roomInstances, MockRoom, micState, cameraState, screenShareState, connectResolvers };
+  return { roomInstances, MockRoom, micState, cameraState, screenShareState, connectResolvers, mockSend };
 });
 
 vi.mock('livekit-client', () => ({
@@ -60,9 +61,14 @@ vi.mock('livekit-client', () => ({
     TrackSubscribed: 'trackSubscribed',
     TrackUnsubscribed: 'trackUnsubscribed',
     LocalTrackUnpublished: 'localTrackUnpublished',
+    ActiveSpeakersChanged: 'activeSpeakersChanged',
     Disconnected: 'disconnected',
   },
   Track: { Kind: { Audio: 'audio', Video: 'video' }, Source: { Camera: 'camera', ScreenShare: 'screen_share' } },
+}));
+
+vi.mock('./websocketClient', () => ({
+  websocketClient: { send: mockSend },
 }));
 
 // Imported after the mock so voiceClient's module-level `new Room()` calls use MockRoom.
@@ -88,6 +94,7 @@ describe('voiceClient', () => {
     micState.shouldFail = false;
     cameraState.shouldFail = false;
     screenShareState.shouldFail = false;
+    mockSend.mockClear();
     useVoiceStore.setState({ status: 'disconnected', channelId: null, participants: [], error: null });
   });
 
@@ -389,5 +396,128 @@ describe('voiceClient', () => {
     expect(useVoiceStore.getState().channelId).toBe('channel-2');
     expect(room2.disconnect).not.toHaveBeenCalled();
     expect(room1.disconnect).toHaveBeenCalledTimes(1);
+  });
+
+  describe('voice presence reporting', () => {
+    it('reports its own presence over the app WebSocket after connecting', async () => {
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+
+      expect(mockSend).toHaveBeenCalledWith({
+        type: 'VOICE_PRESENCE_UPDATE',
+        payload: { channelId: 'channel-1', muted: false, cameraOn: false, screenSharing: false, speaking: false },
+      });
+    });
+
+    it('does not send a duplicate report when a resync leaves the local state unchanged', async () => {
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+      mockSend.mockClear();
+      const room = roomInstances[0];
+
+      // A remote-only event still triggers syncParticipants(), but the local participant's own
+      // state hasn't changed, so no new report should be sent.
+      const onParticipantConnected = handlerFor(room, 'participantConnected');
+      onParticipantConnected();
+
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it('reports an updated payload when the microphone is muted', async () => {
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+      mockSend.mockClear();
+
+      voiceClient.toggleMute();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(mockSend).toHaveBeenCalledWith({
+        type: 'VOICE_PRESENCE_UPDATE',
+        payload: { channelId: 'channel-1', muted: true, cameraOn: false, screenSharing: false, speaking: false },
+      });
+    });
+
+    it('reports an updated payload when the camera is turned on', async () => {
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+      mockSend.mockClear();
+
+      voiceClient.toggleCamera();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(mockSend).toHaveBeenCalledWith({
+        type: 'VOICE_PRESENCE_UPDATE',
+        payload: { channelId: 'channel-1', muted: false, cameraOn: true, screenSharing: false, speaking: false },
+      });
+    });
+
+    it('reports an updated payload when screen sharing starts', async () => {
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+      mockSend.mockClear();
+
+      voiceClient.toggleScreenShare();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(mockSend).toHaveBeenCalledWith({
+        type: 'VOICE_PRESENCE_UPDATE',
+        payload: { channelId: 'channel-1', muted: false, cameraOn: false, screenSharing: true, speaking: false },
+      });
+    });
+
+    it('reports speaking: true when the local participant becomes an active speaker', async () => {
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+      mockSend.mockClear();
+      const room = roomInstances[0];
+
+      const onActiveSpeakersChanged = handlerFor(room, 'activeSpeakersChanged');
+      onActiveSpeakersChanged([room.localParticipant]);
+
+      expect(mockSend).toHaveBeenCalledWith({
+        type: 'VOICE_PRESENCE_UPDATE',
+        payload: { channelId: 'channel-1', muted: false, cameraOn: false, screenSharing: false, speaking: true },
+      });
+    });
+
+    it('reports speaking: false once the local participant stops being an active speaker', async () => {
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+      const room = roomInstances[0];
+      const onActiveSpeakersChanged = handlerFor(room, 'activeSpeakersChanged');
+      onActiveSpeakersChanged([room.localParticipant]);
+      mockSend.mockClear();
+
+      onActiveSpeakersChanged([]);
+
+      expect(mockSend).toHaveBeenCalledWith({
+        type: 'VOICE_PRESENCE_UPDATE',
+        payload: { channelId: 'channel-1', muted: false, cameraOn: false, screenSharing: false, speaking: false },
+      });
+    });
+
+    it('sends VOICE_PRESENCE_LEAVE for the connected channel on disconnect', async () => {
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+      mockSend.mockClear();
+
+      voiceClient.disconnect();
+
+      expect(mockSend).toHaveBeenCalledWith({ type: 'VOICE_PRESENCE_LEAVE', payload: {} });
+    });
+
+    it('does not send VOICE_PRESENCE_LEAVE when disconnect() is called without an active connection', () => {
+      voiceClient.disconnect();
+
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it('sends VOICE_PRESENCE_LEAVE for the old channel before reporting presence on the new one when switching channels', async () => {
+      await connectVoice('channel-1', 'token-a', 'wss://example.test/livekit');
+      mockSend.mockClear();
+
+      await connectVoice('channel-2', 'token-b', 'wss://example.test/livekit');
+
+      expect(mockSend.mock.calls[0]).toEqual([{ type: 'VOICE_PRESENCE_LEAVE', payload: {} }]);
+      expect(mockSend.mock.calls.at(-1)).toEqual([{
+        type: 'VOICE_PRESENCE_UPDATE',
+        payload: { channelId: 'channel-2', muted: false, cameraOn: false, screenSharing: false, speaking: false },
+      }]);
+    });
   });
 });

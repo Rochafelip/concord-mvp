@@ -1,6 +1,14 @@
 import { Room, RoomEvent, Track, type LocalParticipant, type Participant, type RemoteTrack } from 'livekit-client';
+import { websocketClient } from './websocketClient';
 import { useVoiceStore } from '../stores/voiceStore';
 import type { VoiceParticipant } from '../types/voice';
+
+interface ReportedPresence {
+  muted: boolean;
+  cameraOn: boolean;
+  screenSharing: boolean;
+  speaking: boolean;
+}
 
 /**
  * Thin wrapper around livekit-client's `Room`. A single instance (the singleton exported below)
@@ -15,6 +23,11 @@ class VoiceClient {
   // superseded by a newer one (e.g. rapid channel switching) can recognize it's stale and back
   // off instead of clobbering the newer connection — last-clicked wins, not last-resolved.
   private connectGeneration = 0;
+  // The channel a VOICE_PRESENCE_LEAVE should be reported for on disconnect — tracked separately
+  // from voiceStore so it survives up to the point disconnect() calls reset().
+  private currentChannelId: string | null = null;
+  private lastReportedPresence: ReportedPresence | null = null;
+  private localSpeaking = false;
 
   async connect(channelId: string, token: string, url: string): Promise<void> {
     if (this.room) {
@@ -23,6 +36,7 @@ class VoiceClient {
       this.disconnect();
     }
     const generation = ++this.connectGeneration;
+    this.currentChannelId = channelId;
 
     useVoiceStore.getState().setError(null);
     useVoiceStore.getState().setStatus('connecting', channelId);
@@ -75,6 +89,12 @@ class VoiceClient {
       abandonRoom(this.room);
     }
     this.room = null;
+    if (this.currentChannelId) {
+      websocketClient.send({ type: 'VOICE_PRESENCE_LEAVE', payload: {} });
+    }
+    this.currentChannelId = null;
+    this.lastReportedPresence = null;
+    this.localSpeaking = false;
     // Removed proactively rather than left for the room's own TrackUnsubscribed events to clean
     // up: livekit-client's real Room.disconnect() awaits a server round-trip before emitting
     // those, so relying on them here would leak these elements for the entire duration of that
@@ -135,7 +155,15 @@ class VoiceClient {
     // tries restartTrack() first and falls back to muting rather than unpublishing, so that case
     // is already covered by the existing TrackMuted listener above, not this one.)
     room.on(RoomEvent.LocalTrackUnpublished, this.syncParticipants);
+    room.on(RoomEvent.ActiveSpeakersChanged, this.handleActiveSpeakersChanged);
   }
+
+  private handleActiveSpeakersChanged = (speakers: Participant[]): void => {
+    const room = this.room;
+    if (!room) return;
+    this.localSpeaking = speakers.includes(room.localParticipant);
+    this.reportPresenceIfChanged();
+  };
 
   // A subscribed remote audio track is not audible until it is attached to a media element —
   // LiveKit does not do this automatically. Attached to a hidden element in the document body,
@@ -181,7 +209,40 @@ class VoiceClient {
     ];
 
     useVoiceStore.getState().setParticipants(participants);
+    this.reportPresenceIfChanged();
   };
+
+  // Reports the local participant's own state to the rest of the server over the app WebSocket
+  // (docs/superpowers/specs/2026-09-04-voice-channel-participant-preview-design.md §3.1/§4.4) —
+  // only when it actually changed, since this runs on every resync, including ones triggered by
+  // a remote participant's activity that leaves the local participant's own state untouched.
+  private reportPresenceIfChanged(): void {
+    const room = this.room;
+    if (!room || !this.currentChannelId) return;
+
+    const current: ReportedPresence = {
+      muted: !room.localParticipant.isMicrophoneEnabled,
+      cameraOn: room.localParticipant.isCameraEnabled,
+      screenSharing: room.localParticipant.isScreenShareEnabled,
+      speaking: this.localSpeaking,
+    };
+
+    if (
+      this.lastReportedPresence != null &&
+      this.lastReportedPresence.muted === current.muted &&
+      this.lastReportedPresence.cameraOn === current.cameraOn &&
+      this.lastReportedPresence.screenSharing === current.screenSharing &&
+      this.lastReportedPresence.speaking === current.speaking
+    ) {
+      return;
+    }
+
+    this.lastReportedPresence = current;
+    websocketClient.send({
+      type: 'VOICE_PRESENCE_UPDATE',
+      payload: { channelId: this.currentChannelId, ...current },
+    });
+  }
 }
 
 // room.disconnect() is async (it awaits a server round-trip) and can reject — e.g. if the
