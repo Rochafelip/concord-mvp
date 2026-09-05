@@ -81,7 +81,7 @@ describe('AppShell', () => {
     useVoiceStore.setState({ status: 'connected', channelId: 'c1' });
     renderShell('/app');
 
-    await screen.findByText('lobby');
+    await screen.findByRole('link', { name: /lobby/ });
     expect(screen.getByText('no server selected')).toBeInTheDocument();
   });
 

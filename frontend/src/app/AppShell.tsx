@@ -3,6 +3,7 @@ import { Avatar } from '../components/Avatar';
 import { Button } from '../components/Button';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { useAuthStore } from '../features/auth/authStore';
+import { VoiceConnectionBar } from '../features/calls/VoiceConnectionBar';
 import { useDisconnectVoiceOnLogout } from '../features/calls/hooks';
 import { ServerSidebar } from '../features/servers/ServerSidebar';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
@@ -73,6 +74,8 @@ export function AppShell() {
           <Outlet />
         </main>
       </div>
+
+      <VoiceConnectionBar />
     </div>
   );
 }
