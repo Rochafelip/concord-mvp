@@ -1,6 +1,7 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { voiceClient } from '../../services/voiceClient';
 import type { VoiceParticipant } from '../../types/voice';
+import { ScreenShareQualityModal } from './ScreenShareQualityModal';
 
 interface ParticipantTileProps {
   participant: VoiceParticipant;
@@ -20,6 +21,7 @@ export function ParticipantTile({ participant, onLeave }: ParticipantTileProps) 
   const videoRef = useRef<HTMLVideoElement>(null);
   const { videoTrack } = participant;
   const isLocal = participant.isLocal && onLeave;
+  const [isQualityModalOpen, setQualityModalOpen] = useState(false);
 
   useEffect(() => {
     const element = videoRef.current;
@@ -51,40 +53,52 @@ export function ParticipantTile({ participant, onLeave }: ParticipantTileProps) 
       </span>
 
       {isLocal && (
-        <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1.5 bg-black/60 px-2 py-1.5">
-          <button
-            type="button"
-            aria-label={participant.micEnabled ? 'Mute' : 'Unmute'}
-            onClick={() => voiceClient.toggleMute()}
-            className="rounded-full bg-white/10 p-1.5 text-sm leading-none text-white hover:bg-white/20"
-          >
-            {participant.micEnabled ? '🎤' : '🔇'}
-          </button>
-          <button
-            type="button"
-            aria-label={participant.cameraEnabled ? 'Camera off' : 'Camera on'}
-            onClick={() => voiceClient.toggleCamera()}
-            className="rounded-full bg-white/10 p-1.5 text-sm leading-none text-white hover:bg-white/20"
-          >
-            {participant.cameraEnabled ? '📹' : '📷'}
-          </button>
-          <button
-            type="button"
-            aria-label={participant.screenShareEnabled ? 'Stop sharing' : 'Share screen'}
-            onClick={() => voiceClient.toggleScreenShare()}
-            className="rounded-full bg-white/10 p-1.5 text-sm leading-none text-white hover:bg-white/20"
-          >
-            {participant.screenShareEnabled ? '🛑' : '🖥️'}
-          </button>
-          <button
-            type="button"
-            aria-label="Leave call"
-            onClick={onLeave}
-            className="rounded-full bg-red-500/80 p-1.5 text-sm leading-none text-white hover:bg-red-500"
-          >
-            📵
-          </button>
-        </div>
+        <>
+          <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1.5 bg-black/60 px-2 py-1.5">
+            <button
+              type="button"
+              aria-label={participant.micEnabled ? 'Mute' : 'Unmute'}
+              onClick={() => voiceClient.toggleMute()}
+              className="rounded-full bg-white/10 p-1.5 text-sm leading-none text-white hover:bg-white/20"
+            >
+              {participant.micEnabled ? '🎤' : '🔇'}
+            </button>
+            <button
+              type="button"
+              aria-label={participant.cameraEnabled ? 'Camera off' : 'Camera on'}
+              onClick={() => voiceClient.toggleCamera()}
+              className="rounded-full bg-white/10 p-1.5 text-sm leading-none text-white hover:bg-white/20"
+            >
+              {participant.cameraEnabled ? '📹' : '📷'}
+            </button>
+            <button
+              type="button"
+              aria-label={participant.screenShareEnabled ? 'Stop sharing' : 'Share screen'}
+              onClick={() =>
+                participant.screenShareEnabled ? voiceClient.toggleScreenShare() : setQualityModalOpen(true)
+              }
+              className="rounded-full bg-white/10 p-1.5 text-sm leading-none text-white hover:bg-white/20"
+            >
+              {participant.screenShareEnabled ? '🛑' : '🖥️'}
+            </button>
+            <button
+              type="button"
+              aria-label="Leave call"
+              onClick={onLeave}
+              className="rounded-full bg-red-500/80 p-1.5 text-sm leading-none text-white hover:bg-red-500"
+            >
+              📵
+            </button>
+          </div>
+          <ScreenShareQualityModal
+            open={isQualityModalOpen}
+            onClose={() => setQualityModalOpen(false)}
+            onConfirm={(quality) => {
+              setQualityModalOpen(false);
+              voiceClient.toggleScreenShare(quality);
+            }}
+          />
+        </>
       )}
     </div>
   );

@@ -74,6 +74,7 @@ describe('ParticipantTile', () => {
 
   describe('local control bar', () => {
     beforeEach(() => {
+      localStorage.clear();
       vi.mocked(voiceClient.toggleMute).mockClear();
       vi.mocked(voiceClient.toggleCamera).mockClear();
       vi.mocked(voiceClient.toggleScreenShare).mockClear();
@@ -135,6 +136,45 @@ describe('ParticipantTile', () => {
       await user.click(screen.getByRole('button', { name: 'Leave call' }));
 
       expect(onLeave).toHaveBeenCalledTimes(1);
+    });
+
+    it('opens the quality modal instead of toggling immediately when starting to share', async () => {
+      const user = userEvent.setup();
+      render(
+        <ParticipantTile participant={participant({ isLocal: true, screenShareEnabled: false })} onLeave={vi.fn()} />,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Share screen' }));
+
+      expect(voiceClient.toggleScreenShare).not.toHaveBeenCalled();
+      expect(screen.getByText('Choose share quality')).toBeInTheDocument();
+    });
+
+    it('starts sharing with the chosen quality after confirming the modal', async () => {
+      const user = userEvent.setup();
+      render(
+        <ParticipantTile participant={participant({ isLocal: true, screenShareEnabled: false })} onLeave={vi.fn()} />,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Share screen' }));
+      await user.click(screen.getByLabelText('HD (720p)'));
+      await user.click(screen.getByRole('button', { name: 'Share' }));
+
+      expect(voiceClient.toggleScreenShare).toHaveBeenCalledWith('hd');
+      expect(screen.queryByText('Choose share quality')).not.toBeInTheDocument();
+    });
+
+    it('closes the quality modal without toggling when canceled', async () => {
+      const user = userEvent.setup();
+      render(
+        <ParticipantTile participant={participant({ isLocal: true, screenShareEnabled: false })} onLeave={vi.fn()} />,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Share screen' }));
+      await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+      expect(voiceClient.toggleScreenShare).not.toHaveBeenCalled();
+      expect(screen.queryByText('Choose share quality')).not.toBeInTheDocument();
     });
   });
 });
