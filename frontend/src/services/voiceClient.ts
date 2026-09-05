@@ -3,7 +3,7 @@ import { websocketClient } from './websocketClient';
 import * as soundEffects from './soundEffects';
 import { SCREEN_SHARE_QUALITY_PRESETS } from '../features/calls/screenShareQuality';
 import { useVoiceStore } from '../stores/voiceStore';
-import type { ScreenShareQuality, VoiceParticipant } from '../types/voice';
+import type { ScreenShareOptions, VoiceParticipant } from '../types/voice';
 
 interface ReportedPresence {
   muted: boolean;
@@ -171,16 +171,23 @@ class VoiceClient {
   // the user dismissing the screen/window picker without selecting anything — both surface as a
   // rejected promise from setScreenShareEnabled, so there's no need to tell them apart.
   //
-  // `quality` is only meaningful when starting a share; it's ignored when stopping one. The
-  // single-argument call shape is preserved whenever there's no quality to apply (stopping, or a
-  // caller that doesn't pass one) so existing behavior for those cases is unchanged.
-  toggleScreenShare(quality?: ScreenShareQuality): void {
+  // `options` is only meaningful when starting a share; it's ignored when stopping one. The
+  // single-argument call shape is preserved whenever there's nothing to apply (stopping, or a
+  // caller that doesn't pass options) so existing behavior for those cases is unchanged. `audio`
+  // is included in the capture options only when explicitly requested — Chrome's native
+  // screen/window picker only shows its own "Share audio" checkbox when an audio capture option
+  // is present at all, so passing `audio: false` would show browser UI that doesn't match what
+  // was chosen in our modal.
+  toggleScreenShare(options?: ScreenShareOptions): void {
     const localParticipant = this.room?.localParticipant;
     if (!localParticipant) return;
     const enabling = !localParticipant.isScreenShareEnabled;
     const promise =
-      enabling && quality
-        ? localParticipant.setScreenShareEnabled(true, { resolution: SCREEN_SHARE_QUALITY_PRESETS[quality] })
+      enabling && options
+        ? localParticipant.setScreenShareEnabled(true, {
+            resolution: SCREEN_SHARE_QUALITY_PRESETS[options.quality],
+            ...(options.withAudio ? { audio: true } : {}),
+          })
         : localParticipant.setScreenShareEnabled(enabling);
     promise
       .then(() => this.syncParticipants())

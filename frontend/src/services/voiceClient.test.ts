@@ -61,7 +61,7 @@ const {
         this.localParticipant.isCameraEnabled = enabled;
         return Promise.resolve(undefined);
       }),
-      setScreenShareEnabled: vi.fn((enabled: boolean) => {
+      setScreenShareEnabled: vi.fn((enabled: boolean, _captureOptions?: Record<string, unknown>) => {
         if (screenShareState.shouldFail) {
           return Promise.reject(new Error('Permission denied'));
         }
@@ -289,34 +289,48 @@ describe('voiceClient', () => {
     expect(room.localParticipant.setScreenShareEnabled).toHaveBeenLastCalledWith(false);
   });
 
-  it('starts screen sharing with an HD resolution constraint when a quality is given', async () => {
+  it('starts screen sharing with an HD resolution constraint and no audio key when audio is not requested', async () => {
     await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
     const room = roomInstances[0];
 
-    voiceClient.toggleScreenShare('hd');
+    voiceClient.toggleScreenShare({ quality: 'hd', withAudio: false });
 
     expect(room.localParticipant.setScreenShareEnabled).toHaveBeenLastCalledWith(true, {
       resolution: { width: 1280, height: 720 },
     });
+    const [, captureOptions] = vi.mocked(room.localParticipant.setScreenShareEnabled).mock.calls.at(-1)!;
+    expect(captureOptions).not.toHaveProperty('audio');
   });
 
   it('starts screen sharing with an FHD resolution constraint when a quality is given', async () => {
     await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
     const room = roomInstances[0];
 
-    voiceClient.toggleScreenShare('fhd');
+    voiceClient.toggleScreenShare({ quality: 'fhd', withAudio: false });
 
     expect(room.localParticipant.setScreenShareEnabled).toHaveBeenLastCalledWith(true, {
       resolution: { width: 1920, height: 1080 },
     });
   });
 
-  it('stops screen sharing with a single boolean argument even when a quality is passed', async () => {
+  it('includes audio: true in the capture options when audio is requested', async () => {
     await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
     const room = roomInstances[0];
 
-    voiceClient.toggleScreenShare('hd');
-    voiceClient.toggleScreenShare('fhd');
+    voiceClient.toggleScreenShare({ quality: 'hd', withAudio: true });
+
+    expect(room.localParticipant.setScreenShareEnabled).toHaveBeenLastCalledWith(true, {
+      resolution: { width: 1280, height: 720 },
+      audio: true,
+    });
+  });
+
+  it('stops screen sharing with a single boolean argument even when options are passed', async () => {
+    await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+    const room = roomInstances[0];
+
+    voiceClient.toggleScreenShare({ quality: 'hd', withAudio: true });
+    voiceClient.toggleScreenShare({ quality: 'fhd', withAudio: true });
 
     expect(room.localParticipant.setScreenShareEnabled).toHaveBeenLastCalledWith(false);
   });
