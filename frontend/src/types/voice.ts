@@ -8,6 +8,11 @@ export interface VoiceTokenResponse {
 
 export type ScreenShareQuality = 'hd' | 'fhd';
 
+export interface ScreenShareOptions {
+  quality: ScreenShareQuality;
+  withAudio: boolean;
+}
+
 export interface VoiceParticipant {
   identity: string;
   name: string;
