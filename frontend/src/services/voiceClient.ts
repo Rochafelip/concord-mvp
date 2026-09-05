@@ -107,10 +107,33 @@ class VoiceClient {
   toggleMute(): void {
     const localParticipant = this.room?.localParticipant;
     if (!localParticipant) return;
+    const enabling = !localParticipant.isMicrophoneEnabled;
     localParticipant
-      .setMicrophoneEnabled(!localParticipant.isMicrophoneEnabled)
-      .then(() => this.syncParticipants())
+      .setMicrophoneEnabled(enabling)
+      .then(() => {
+        this.syncParticipants();
+        if (enabling) this.setDeafened(false);
+      })
       .catch(() => useVoiceStore.getState().setError('Failed to change microphone state'));
+  }
+
+  /**
+   * Deafen is a purely local concept — LiveKit has no server-side notion of it. Deafening mutes
+   * every remote participant's <audio> element in this browser only (nobody else is affected)
+   * and, like Discord, also mutes the local mic if it's on — there's no reason to keep
+   * broadcasting audio you can't hear a response to. Un-deafening restores remote audio but
+   * deliberately does NOT re-enable the mic; toggleMute() above clears isDeafened instead when
+   * the user explicitly unmutes, so audio is never silently turned back on by itself.
+   */
+  toggleDeafen(): void {
+    const deafening = !useVoiceStore.getState().isDeafened;
+    this.setDeafened(deafening);
+    if (deafening && this.room?.localParticipant.isMicrophoneEnabled) {
+      this.room.localParticipant
+        .setMicrophoneEnabled(false)
+        .then(() => this.syncParticipants())
+        .catch(() => useVoiceStore.getState().setError('Failed to change microphone state'));
+    }
   }
 
   // Unlike the microphone (enabled automatically on connect, see connect() above), the camera is
@@ -138,6 +161,13 @@ class VoiceClient {
       .catch(() => useVoiceStore.getState().setError('Failed to change screen sharing state'));
   }
 
+  private setDeafened(value: boolean): void {
+    useVoiceStore.getState().setDeafened(value);
+    this.audioElements.forEach((element) => {
+      element.muted = value;
+    });
+  }
+
   private registerListeners(room: Room): void {
     room.on(RoomEvent.ParticipantConnected, this.syncParticipants);
     room.on(RoomEvent.ParticipantDisconnected, this.syncParticipants);
@@ -155,6 +185,9 @@ class VoiceClient {
     // tries restartTrack() first and falls back to muting rather than unpublishing, so that case
     // is already covered by the existing TrackMuted listener above, not this one.)
     room.on(RoomEvent.LocalTrackUnpublished, this.syncParticipants);
+    // Feeds VoiceParticipant.connectionQuality (surfaced by VoiceConnectionBar's quality icon) —
+    // same "resync on change" pattern as every other listener in this method.
+    room.on(RoomEvent.ConnectionQualityChanged, this.syncParticipants);
     room.on(RoomEvent.ActiveSpeakersChanged, this.handleActiveSpeakersChanged);
   }
 
@@ -181,6 +214,7 @@ class VoiceClient {
   private handleTrackSubscribed = (track: RemoteTrack): void => {
     if (track.kind === Track.Kind.Audio && track.sid) {
       const element = track.attach();
+      element.muted = useVoiceStore.getState().isDeafened;
       element.dataset.trackSid = track.sid;
       document.body.appendChild(element);
       this.audioElements.set(track.sid, element);
@@ -263,6 +297,7 @@ function toVoiceParticipant(participant: Participant | LocalParticipant, isLocal
     videoTrack: participant.getTrackPublication(Track.Source.Camera)?.videoTrack ?? null,
     screenShareEnabled: participant.isScreenShareEnabled,
     screenShareTrack: participant.getTrackPublication(Track.Source.ScreenShare)?.videoTrack ?? null,
+    connectionQuality: participant.connectionQuality,
   };
 }
 

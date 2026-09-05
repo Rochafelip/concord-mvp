@@ -19,6 +19,7 @@ const { roomInstances, MockRoom, micState, cameraState, screenShareState, connec
       isMicrophoneEnabled: false,
       isCameraEnabled: false,
       isScreenShareEnabled: false,
+      connectionQuality: 'unknown',
       setMicrophoneEnabled: vi.fn((enabled: boolean) => {
         if (micState.shouldFail) {
           return Promise.reject(new Error('Permission denied'));
@@ -62,6 +63,7 @@ vi.mock('livekit-client', () => ({
     TrackUnsubscribed: 'trackUnsubscribed',
     LocalTrackUnpublished: 'localTrackUnpublished',
     ActiveSpeakersChanged: 'activeSpeakersChanged',
+    ConnectionQualityChanged: 'connectionQualityChanged',
     Disconnected: 'disconnected',
   },
   Track: { Kind: { Audio: 'audio', Video: 'video' }, Source: { Camera: 'camera', ScreenShare: 'screen_share' } },
@@ -95,7 +97,7 @@ describe('voiceClient', () => {
     cameraState.shouldFail = false;
     screenShareState.shouldFail = false;
     mockSend.mockClear();
-    useVoiceStore.setState({ status: 'disconnected', channelId: null, participants: [], error: null });
+    useVoiceStore.setState({ status: 'disconnected', channelId: null, participants: [], error: null, isDeafened: false });
   });
 
   it('connects to the room, publishes the microphone by default, and marks the store connected', async () => {
@@ -396,6 +398,102 @@ describe('voiceClient', () => {
     expect(useVoiceStore.getState().channelId).toBe('channel-2');
     expect(room2.disconnect).not.toHaveBeenCalled();
     expect(room1.disconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it('updates a participant\'s connectionQuality when ConnectionQualityChanged fires', async () => {
+    await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+    const room = roomInstances[0];
+    room.localParticipant.connectionQuality = 'poor';
+
+    const onConnectionQualityChanged = handlerFor(room, 'connectionQualityChanged');
+    onConnectionQualityChanged();
+
+    const local = useVoiceStore.getState().participants.find((p) => p.isLocal);
+    expect(local?.connectionQuality).toBe('poor');
+  });
+
+  it('deafening mutes remote audio elements and the local mic', async () => {
+    await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+    const room = roomInstances[0];
+    const onTrackSubscribed = handlerFor(room, 'trackSubscribed');
+    const mockElement = document.createElement('audio');
+    onTrackSubscribed(
+      { kind: 'audio', sid: 'track-1', attach: vi.fn().mockReturnValue(mockElement) },
+      {},
+      { identity: 'remote-user', name: 'Remote User' },
+    );
+
+    voiceClient.toggleDeafen();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(mockElement.muted).toBe(true);
+    expect(room.localParticipant.setMicrophoneEnabled).toHaveBeenLastCalledWith(false);
+    expect(useVoiceStore.getState().isDeafened).toBe(true);
+  });
+
+  it('un-deafening unmutes remote audio but leaves the mic muted', async () => {
+    await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+    const room = roomInstances[0];
+    const onTrackSubscribed = handlerFor(room, 'trackSubscribed');
+    const mockElement = document.createElement('audio');
+    onTrackSubscribed(
+      { kind: 'audio', sid: 'track-1', attach: vi.fn().mockReturnValue(mockElement) },
+      {},
+      { identity: 'remote-user', name: 'Remote User' },
+    );
+
+    voiceClient.toggleDeafen();
+    await Promise.resolve();
+    await Promise.resolve();
+    voiceClient.toggleDeafen();
+
+    expect(mockElement.muted).toBe(false);
+    expect(useVoiceStore.getState().isDeafened).toBe(false);
+    expect(room.localParticipant.isMicrophoneEnabled).toBe(false);
+  });
+
+  it('turning the mic on while deafened clears deafened state and unmutes remote audio', async () => {
+    await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+    const room = roomInstances[0];
+    const onTrackSubscribed = handlerFor(room, 'trackSubscribed');
+    const mockElement = document.createElement('audio');
+    onTrackSubscribed(
+      { kind: 'audio', sid: 'track-1', attach: vi.fn().mockReturnValue(mockElement) },
+      {},
+      { identity: 'remote-user', name: 'Remote User' },
+    );
+
+    voiceClient.toggleDeafen();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(room.localParticipant.isMicrophoneEnabled).toBe(false);
+
+    voiceClient.toggleMute();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(room.localParticipant.isMicrophoneEnabled).toBe(true);
+    expect(useVoiceStore.getState().isDeafened).toBe(false);
+    expect(mockElement.muted).toBe(false);
+  });
+
+  it('a remote audio track subscribed while deafened starts muted', async () => {
+    await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+    voiceClient.toggleDeafen();
+    await Promise.resolve();
+    await Promise.resolve();
+    const room = roomInstances[0];
+    const onTrackSubscribed = handlerFor(room, 'trackSubscribed');
+    const mockElement = document.createElement('audio');
+
+    onTrackSubscribed(
+      { kind: 'audio', sid: 'track-2', attach: vi.fn().mockReturnValue(mockElement) },
+      {},
+      { identity: 'remote-user-2', name: 'Remote User 2' },
+    );
+
+    expect(mockElement.muted).toBe(true);
   });
 
   describe('voice presence reporting', () => {
