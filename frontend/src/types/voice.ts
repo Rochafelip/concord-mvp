@@ -6,6 +6,8 @@ export interface VoiceTokenResponse {
   roomName: string;
 }
 
+export type ScreenShareQuality = 'hd' | 'fhd';
+
 export interface VoiceParticipant {
   identity: string;
   name: string;
