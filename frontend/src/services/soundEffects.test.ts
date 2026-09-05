@@ -78,6 +78,18 @@ describe('soundEffects', () => {
     expect(created?.createOscillator).toHaveBeenCalledTimes(1);
   });
 
+  it('never throws and never leaves an unhandled rejection when resume() rejects', async () => {
+    class RejectingResumeAudioContext extends WorkingMockAudioContext {
+      resume = vi.fn().mockRejectedValue(new Error('resume failed'));
+    }
+    vi.stubGlobal('AudioContext', RejectingResumeAudioContext);
+    const { playSelfJoin } = await import('./soundEffects');
+
+    expect(() => playSelfJoin()).not.toThrow();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
   it('never throws when the browser has no usable AudioContext (autoplay block / unsupported)', async () => {
     vi.stubGlobal('AudioContext', ThrowingMockAudioContext);
     const { playSelfJoin, playSelfLeave, playParticipantJoined, playParticipantLeft } = await import('./soundEffects');

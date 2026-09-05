@@ -15,7 +15,7 @@ function getAudioContext(): AudioContext {
 function playTone(startFreq: number, endFreq: number, durationMs: number, startAt = 0): void {
   try {
     const ctx = getAudioContext();
-    void ctx.resume();
+    ctx.resume().catch(() => {});
 
     const oscillator = ctx.createOscillator();
     const gain = ctx.createGain();
