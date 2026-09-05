@@ -1,6 +1,7 @@
 package com.concordmvp.channels;
 
 import com.concordmvp.channels.dto.ChannelResponse;
+import com.concordmvp.common.exception.BadRequestException;
 import com.concordmvp.common.exception.ForbiddenException;
 import com.concordmvp.common.exception.ResourceNotFoundException;
 import com.concordmvp.realtime.RealtimeEventPublisher;
@@ -112,6 +113,18 @@ class ChannelServiceTest {
 
         assertThatThrownBy(() -> channelService.createChannel(serverId, "general", ChannelType.TEXT, requesterId))
                 .isInstanceOf(ForbiddenException.class);
+
+        verifyNoInteractions(realtimeEventPublisher);
+        verify(channelRepository, never()).save(any());
+    }
+
+    @Test
+    void createChannel_onboardingType_throwsBadRequest_evenForOwner() {
+        UUID serverId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+
+        assertThatThrownBy(() -> channelService.createChannel(serverId, "onboarding", ChannelType.ONBOARDING, ownerId))
+                .isInstanceOf(BadRequestException.class);
 
         verifyNoInteractions(realtimeEventPublisher);
         verify(channelRepository, never()).save(any());

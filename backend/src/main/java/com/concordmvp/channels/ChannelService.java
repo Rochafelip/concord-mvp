@@ -1,6 +1,7 @@
 package com.concordmvp.channels;
 
 import com.concordmvp.channels.dto.ChannelResponse;
+import com.concordmvp.common.exception.BadRequestException;
 import com.concordmvp.common.exception.ForbiddenException;
 import com.concordmvp.common.exception.ResourceNotFoundException;
 import com.concordmvp.realtime.RealtimeEventPublisher;
@@ -44,6 +45,10 @@ public class ChannelService {
 
     @Transactional
     public Channel createChannel(UUID serverId, String name, ChannelType type, UUID requesterId) {
+        if (type == ChannelType.ONBOARDING) {
+            throw new BadRequestException("The onboarding channel is managed by the system and cannot be created manually");
+        }
+
         Server server = requireServer(serverId);
 
         if (!server.getOwnerId().equals(requesterId)) {
