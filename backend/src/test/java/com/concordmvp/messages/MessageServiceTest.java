@@ -147,6 +147,22 @@ class MessageServiceTest {
     }
 
     @Test
+    void sendMessage_onboardingChannel_throwsForbidden_evenForServerOwner() {
+        UUID channelId = UUID.randomUUID();
+        UUID serverId = UUID.randomUUID();
+        UUID authorId = UUID.randomUUID();
+        Channel onboardingChannel = channel(channelId, serverId);
+        onboardingChannel.setType(ChannelType.ONBOARDING);
+        when(channelService.getChannel(channelId, authorId)).thenReturn(onboardingChannel);
+
+        assertThatThrownBy(() -> messageService.sendMessage(channelId, "hello", authorId))
+                .isInstanceOf(ForbiddenException.class);
+
+        verify(messageRepository, never()).save(any());
+        verifyNoInteractions(realtimeEventPublisher);
+    }
+
+    @Test
     void sendMessage_valid_persistsAndBroadcastsToFullServerMembership_includingSender() {
         UUID channelId = UUID.randomUUID();
         UUID serverId = UUID.randomUUID();
@@ -332,6 +348,35 @@ class MessageServiceTest {
                 ArgumentCaptor.forClass(org.springframework.data.domain.Pageable.class);
         verify(messageRepository).findByChannelIdOrderByCreatedAtDescIdDesc(eq(channelId), pageableCaptor.capture());
         assertThat(pageableCaptor.getValue().getPageSize()).isEqualTo(50);
+    }
+
+    // --- postSystemMessage ---
+
+    @Test
+    void postSystemMessage_persistsAndBroadcasts_authoredBySystem() {
+        UUID channelId = UUID.randomUUID();
+        UUID serverId = UUID.randomUUID();
+        UUID otherMemberId = UUID.randomUUID();
+        User systemUser = user(MessageService.SYSTEM_USER_ID, "System", "System");
+
+        when(serverMemberRepository.findByServerId(serverId))
+                .thenReturn(List.of(member(serverId, otherMemberId)));
+        when(userRepository.findById(MessageService.SYSTEM_USER_ID)).thenReturn(Optional.of(systemUser));
+        stubMessageSaveAssignsId();
+
+        Message result = messageService.postSystemMessage(channelId, serverId, "Alice entrou no servidor");
+
+        assertThat(result.getAuthorId()).isEqualTo(MessageService.SYSTEM_USER_ID);
+        assertThat(result.getChannelId()).isEqualTo(channelId);
+        assertThat(result.getContent()).isEqualTo("Alice entrou no servidor");
+
+        ArgumentCaptor<WsEvent> eventCaptor = ArgumentCaptor.forClass(WsEvent.class);
+        verify(realtimeEventPublisher).broadcast(eq(Set.of(otherMemberId)), eventCaptor.capture());
+        assertThat(eventCaptor.getValue().type()).isEqualTo(WsEventType.MESSAGE_CREATE);
+        MessageResponse payload = (MessageResponse) eventCaptor.getValue().payload();
+        assertThat(payload.author().id()).isEqualTo(MessageService.SYSTEM_USER_ID);
+        assertThat(payload.author().displayName()).isEqualTo("System");
+        assertThat(payload.content()).isEqualTo("Alice entrou no servidor");
     }
 
     private Message newMessage(UUID channelId, UUID authorId, String content, Instant createdAt) {

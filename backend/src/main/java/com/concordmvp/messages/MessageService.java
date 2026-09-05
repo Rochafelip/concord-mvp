@@ -2,7 +2,9 @@ package com.concordmvp.messages;
 
 import com.concordmvp.channels.Channel;
 import com.concordmvp.channels.ChannelService;
+import com.concordmvp.channels.ChannelType;
 import com.concordmvp.common.exception.BadRequestException;
+import com.concordmvp.common.exception.ForbiddenException;
 import com.concordmvp.common.exception.ResourceNotFoundException;
 import com.concordmvp.messages.dto.MessageResponse;
 import com.concordmvp.realtime.RealtimeEventPublisher;
@@ -61,9 +63,15 @@ public class MessageService {
         this.realtimeEventPublisher = realtimeEventPublisher;
     }
 
+    public static final UUID SYSTEM_USER_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
+
     @Transactional
     public Message sendMessage(UUID channelId, String content, UUID authorId) {
         Channel channel = channelService.getChannel(channelId, authorId);
+
+        if (channel.getType() == ChannelType.ONBOARDING) {
+            throw new ForbiddenException("This channel is read-only");
+        }
 
         String trimmed = content == null ? "" : content.trim();
         if (trimmed.isEmpty()) {
@@ -73,16 +81,31 @@ public class MessageService {
             throw new BadRequestException("Message content is too long");
         }
 
+        return persistAndBroadcast(channelId, channel.getServerId(), authorId, trimmed);
+    }
+
+    /**
+     * Posts a message authored by the reserved {@link #SYSTEM_USER_ID} user, bypassing the
+     * membership/content checks {@link #sendMessage} enforces — this is only ever called from
+     * trusted internal code (server creation / join), never reachable from user input. Used for
+     * the onboarding channel's automatic join announcements.
+     */
+    @Transactional
+    public Message postSystemMessage(UUID channelId, UUID serverId, String content) {
+        return persistAndBroadcast(channelId, serverId, SYSTEM_USER_ID, content);
+    }
+
+    private Message persistAndBroadcast(UUID channelId, UUID serverId, UUID authorId, String content) {
         Message message = new Message();
         message.setChannelId(channelId);
         message.setAuthorId(authorId);
-        message.setContent(trimmed);
+        message.setContent(content);
         Message saved = messageRepository.save(message);
 
         User author = userRepository.findById(authorId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + authorId));
 
-        Set<UUID> recipients = currentMemberIds(channel.getServerId());
+        Set<UUID> recipients = currentMemberIds(serverId);
         MessageResponse payload = toResponse(saved, author);
         // WARNING: MESSAGE_CREATE is broadcast here, before this @Transactional method returns
         // and the transaction commits (docs/DATABASE.md §34 specifies persist -> commit ->
