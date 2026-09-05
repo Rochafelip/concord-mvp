@@ -1,4 +1,4 @@
-export type ChannelType = 'TEXT' | 'VOICE';
+export type ChannelType = 'TEXT' | 'VOICE' | 'ONBOARDING';
 
 export interface Channel {
   id: string;

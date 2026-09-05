@@ -30,6 +30,7 @@ export function ChannelSidebar() {
 
   if (!serverId) return null;
 
+  const onboardingChannels = (channels ?? []).filter((channel) => channel.type === 'ONBOARDING');
   const textChannels = (channels ?? []).filter((channel) => channel.type === 'TEXT');
   const voiceChannels = (channels ?? []).filter((channel) => channel.type === 'VOICE');
 
@@ -48,6 +49,24 @@ export function ChannelSidebar() {
       </div>
 
       <div className="flex-1 space-y-4 overflow-y-auto px-2 py-3">
+        <div>
+          <h3 className="px-1 text-xs font-semibold uppercase text-gray-500">Onboarding</h3>
+          <ul className="mt-1 space-y-0.5">
+            {onboardingChannels.map((channel) => (
+              <li key={channel.id}>
+                <Link
+                  to={`/app/servers/${serverId}/channels/${channel.id}`}
+                  aria-current={channel.id === channelId ? 'page' : undefined}
+                  className={channelLinkClassName(channel.id === channelId)}
+                >
+                  <span aria-hidden="true">👋</span>
+                  {channel.name}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+
         <div>
           <div className="flex items-center justify-between px-1">
             <h3 className="text-xs font-semibold uppercase text-gray-500">Text channels</h3>

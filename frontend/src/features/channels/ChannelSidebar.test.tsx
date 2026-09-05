@@ -26,6 +26,7 @@ const server: Server = {
 const channels: Channel[] = [
   { id: 'c1', serverId: 's1', name: 'general', type: 'TEXT', createdAt: '2026-01-01', updatedAt: '2026-01-01' },
   { id: 'c2', serverId: 's1', name: 'lobby', type: 'VOICE', createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'c3', serverId: 's1', name: 'onboarding', type: 'ONBOARDING', createdAt: '2026-01-01', updatedAt: '2026-01-01' },
 ];
 
 function renderSidebar(initialPath = '/app/servers/s1') {
@@ -74,6 +75,23 @@ describe('ChannelSidebar', () => {
 
     await screen.findByText('Alpha');
     expect(screen.getByRole('button', { name: 'Create channel' })).toBeInTheDocument();
+  });
+
+  it('renders an Onboarding section above Text channels, with no create-channel button of its own', async () => {
+    useAuthStore.setState({
+      token: 't',
+      user: { id: 'owner-1', username: 'o', displayName: 'O', email: 'o@x.com', avatarUrl: null },
+    });
+    renderSidebar();
+
+    await screen.findByText('Alpha');
+    expect(screen.getByRole('link', { name: /onboarding/i })).toBeInTheDocument();
+    // Only the Text channels section owns a create-channel button.
+    expect(screen.getAllByRole('button', { name: 'Create channel' })).toHaveLength(1);
+
+    const headings = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
+    expect(headings.indexOf('Onboarding')).toBeGreaterThanOrEqual(0);
+    expect(headings.indexOf('Onboarding')).toBeLessThan(headings.indexOf('Text channels'));
   });
 
   it('hides the Create Channel affordance for a non-owner member', async () => {
