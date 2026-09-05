@@ -1,4 +1,5 @@
 import { useMutation } from '@tanstack/react-query';
+import { useShallow } from 'zustand/react/shallow';
 import { voiceClient } from '../../services/voiceClient';
 import { useVoiceStore } from '../../stores/voiceStore';
 import * as api from './api';
@@ -18,7 +19,9 @@ export function useJoinVoiceChannel() {
 }
 
 export function useVoiceStatus() {
-  return useVoiceStore((state) => ({ status: state.status, channelId: state.channelId, error: state.error }));
+  return useVoiceStore(
+    useShallow((state) => ({ status: state.status, channelId: state.channelId, error: state.error })),
+  );
 }
 
 export function useVoiceParticipants() {
