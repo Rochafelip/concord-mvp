@@ -16,3 +16,19 @@ export interface VoiceParticipant {
   screenShareEnabled: boolean;
   screenShareTrack: LocalVideoTrack | RemoteVideoTrack | null;
 }
+
+/**
+ * A voice channel participant's presence as seen by someone who isn't necessarily connected to
+ * that call — flattened from the wire shape's nested `user` object (see
+ * features/calls/api.ts's toVoicePresenceEntry, the one place that mapping happens).
+ */
+export interface VoicePresenceEntry {
+  channelId: string;
+  userId: string;
+  displayName: string;
+  avatarUrl: string | null;
+  muted: boolean;
+  cameraOn: boolean;
+  screenSharing: boolean;
+  speaking: boolean;
+}

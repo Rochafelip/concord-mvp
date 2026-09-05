@@ -16,6 +16,8 @@ export type WsEventType =
   | 'SERVER_MEMBER_LEAVE'
   | 'SERVER_DELETE'
   | 'SERVER_OWNER_CHANGE'
+  | 'VOICE_PRESENCE_UPDATE'
+  | 'VOICE_PRESENCE_LEAVE'
   | 'ERROR';
 
 /** Generic envelope for a WebSocket frame in both directions: {"type": "...", "payload": {...}}. */
@@ -40,4 +42,21 @@ export interface ServerDeletedPayload {
 
 export interface ErrorPayload {
   message: string;
+}
+
+/** Wire shape of VOICE_PRESENCE_UPDATE — mirrors backend VoicePresenceResponse. */
+export interface VoicePresencePayload {
+  serverId: string;
+  channelId: string;
+  user: { id: string; username: string; displayName: string; avatarUrl: string | null };
+  muted: boolean;
+  cameraOn: boolean;
+  screenSharing: boolean;
+  speaking: boolean;
+}
+
+export interface VoicePresenceLeavePayload {
+  serverId: string;
+  channelId: string;
+  userId: string;
 }

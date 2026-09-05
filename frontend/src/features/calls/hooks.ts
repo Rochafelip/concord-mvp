@@ -1,4 +1,4 @@
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { voiceClient } from '../../services/voiceClient';
@@ -28,6 +28,14 @@ export function useVoiceStatus() {
 
 export function useVoiceParticipants() {
   return useVoiceStore((state) => state.participants);
+}
+
+export function useVoicePresence(serverId: string | undefined) {
+  return useQuery({
+    queryKey: ['servers', serverId, 'voice-presence'],
+    queryFn: () => api.getVoicePresence(serverId!),
+    enabled: serverId != null,
+  });
 }
 
 /**
