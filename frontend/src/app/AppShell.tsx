@@ -3,6 +3,7 @@ import { Avatar } from '../components/Avatar';
 import { Button } from '../components/Button';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { useAuthStore } from '../features/auth/authStore';
+import { useDisconnectVoiceOnLogout } from '../features/calls/hooks';
 import { ServerSidebar } from '../features/servers/ServerSidebar';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import { useNotificationStore } from '../stores/notificationStore';
@@ -23,6 +24,7 @@ export function AppShell() {
   const logout = useAuthStore((state) => state.logout);
 
   useRealtimeSync();
+  useDisconnectVoiceOnLogout();
   const notification = useNotificationStore((state) => state.message);
   const clearNotification = useNotificationStore((state) => state.clear);
 

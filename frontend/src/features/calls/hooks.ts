@@ -1,7 +1,9 @@
 import { useMutation } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { voiceClient } from '../../services/voiceClient';
 import { useVoiceStore } from '../../stores/voiceStore';
+import { useAuthStore } from '../auth/authStore';
 import * as api from './api';
 
 /**
@@ -26,4 +28,19 @@ export function useVoiceStatus() {
 
 export function useVoiceParticipants() {
   return useVoiceStore((state) => state.participants);
+}
+
+/**
+ * Ends any active call when the user's session ends — logout (token -> null) or the
+ * component unmounting entirely. Mounted once in AppShell, mirroring how useRealtimeSync
+ * owns the WebSocket connection's lifecycle there for the same "only while authenticated"
+ * reason.
+ */
+export function useDisconnectVoiceOnLogout(): void {
+  const token = useAuthStore((state) => state.token);
+
+  useEffect(() => {
+    if (!token) return;
+    return () => voiceClient.disconnect();
+  }, [token]);
 }
