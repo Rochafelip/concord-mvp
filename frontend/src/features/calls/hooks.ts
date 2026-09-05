@@ -22,7 +22,12 @@ export function useJoinVoiceChannel() {
 
 export function useVoiceStatus() {
   return useVoiceStore(
-    useShallow((state) => ({ status: state.status, channelId: state.channelId, error: state.error })),
+    useShallow((state) => ({
+      status: state.status,
+      channelId: state.channelId,
+      error: state.error,
+      isDeafened: state.isDeafened,
+    })),
   );
 }
 
