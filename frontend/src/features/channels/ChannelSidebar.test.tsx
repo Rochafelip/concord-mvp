@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Channel } from '../../types/channel';
@@ -103,6 +104,51 @@ describe('ChannelSidebar', () => {
 
     await screen.findByText('Alpha');
     expect(screen.queryByRole('button', { name: 'Create channel' })).not.toBeInTheDocument();
+  });
+
+  it('shows a delete icon for the owner on text and voice channels but not onboarding', async () => {
+    useAuthStore.setState({
+      token: 't',
+      user: { id: 'owner-1', username: 'o', displayName: 'O', email: 'o@x.com', avatarUrl: null },
+    });
+    renderSidebar();
+
+    await screen.findByText('Alpha');
+    expect(screen.getAllByRole('button', { name: 'Delete channel' })).toHaveLength(2);
+  });
+
+  it('hides the delete icon for a non-owner member', async () => {
+    useAuthStore.setState({
+      token: 't',
+      user: { id: 'member-1', username: 'm', displayName: 'M', email: 'm@x.com', avatarUrl: null },
+    });
+    renderSidebar();
+
+    await screen.findByText('Alpha');
+    expect(screen.queryByRole('button', { name: 'Delete channel' })).not.toBeInTheDocument();
+  });
+
+  it('deletes the channel only after the confirmation dialog is accepted', async () => {
+    vi.mocked(api.deleteChannel).mockResolvedValue(undefined);
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    useAuthStore.setState({
+      token: 't',
+      user: { id: 'owner-1', username: 'o', displayName: 'O', email: 'o@x.com', avatarUrl: null },
+    });
+    const user = userEvent.setup();
+    renderSidebar();
+
+    await screen.findByText('Alpha');
+    const [deleteButton] = screen.getAllByRole('button', { name: 'Delete channel' });
+    await user.click(deleteButton);
+
+    expect(confirmSpy).toHaveBeenCalledWith('Delete channel "general"? This cannot be undone.');
+    expect(api.deleteChannel).not.toHaveBeenCalled();
+
+    confirmSpy.mockReturnValue(true);
+    await user.click(deleteButton);
+
+    expect(api.deleteChannel).toHaveBeenCalledWith('c1');
   });
 
   describe('voice channel participant preview', () => {

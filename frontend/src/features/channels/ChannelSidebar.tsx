@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useState, type MouseEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Avatar } from '../../components/Avatar';
 import { useVoicePresence } from '../calls/hooks';
 import { useIsServerOwner, useServer } from '../servers/hooks';
 import { ServerSettingsPanel } from '../servers/ServerSettingsPanel';
+import type { Channel } from '../../types/channel';
 import { CreateChannelModal } from './CreateChannelModal';
-import { useChannels } from './hooks';
+import { useChannels, useDeleteChannel } from './hooks';
 
 function channelLinkClassName(isSelected: boolean) {
   return `flex items-center gap-1.5 rounded px-2 py-1 text-sm ${
@@ -26,6 +27,15 @@ export function ChannelSidebar() {
   const isOwner = useIsServerOwner(serverId);
   const [createOpen, setCreateOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const deleteChannelMutation = useDeleteChannel(serverId);
+
+  function handleDeleteChannel(event: MouseEvent<HTMLButtonElement>, channel: Channel) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (window.confirm(`Delete channel "${channel.name}"? This cannot be undone.`)) {
+      deleteChannelMutation.mutate(channel.id);
+    }
+  }
 
   if (!serverId) return null;
 
@@ -82,15 +92,25 @@ export function ChannelSidebar() {
           </div>
           <ul className="mt-1 space-y-0.5">
             {textChannels.map((channel) => (
-              <li key={channel.id}>
+              <li key={channel.id} className="group flex items-center">
                 <Link
                   to={`/app/servers/${serverId}/channels/${channel.id}`}
                   aria-current={channel.id === channelId ? 'page' : undefined}
-                  className={channelLinkClassName(channel.id === channelId)}
+                  className={`flex-1 ${channelLinkClassName(channel.id === channelId)}`}
                 >
                   <span aria-hidden="true">#</span>
                   {channel.name}
                 </Link>
+                {isOwner && (
+                  <button
+                    type="button"
+                    aria-label="Delete channel"
+                    onClick={(event) => handleDeleteChannel(event, channel)}
+                    className="flex-shrink-0 px-1 text-gray-400 opacity-0 hover:text-red-600 group-hover:opacity-100"
+                  >
+                    🗑
+                  </button>
+                )}
               </li>
             ))}
           </ul>
@@ -103,14 +123,26 @@ export function ChannelSidebar() {
               const participants = (voicePresence ?? []).filter((entry) => entry.channelId === channel.id);
               return (
                 <li key={channel.id}>
-                  <Link
-                    to={`/app/servers/${serverId}/channels/${channel.id}`}
-                    aria-current={channel.id === channelId ? 'page' : undefined}
-                    className={channelLinkClassName(channel.id === channelId)}
-                  >
-                    <span aria-hidden="true">🔊</span>
-                    {channel.name}
-                  </Link>
+                  <div className="group flex items-center">
+                    <Link
+                      to={`/app/servers/${serverId}/channels/${channel.id}`}
+                      aria-current={channel.id === channelId ? 'page' : undefined}
+                      className={`flex-1 ${channelLinkClassName(channel.id === channelId)}`}
+                    >
+                      <span aria-hidden="true">🔊</span>
+                      {channel.name}
+                    </Link>
+                    {isOwner && (
+                      <button
+                        type="button"
+                        aria-label="Delete channel"
+                        onClick={(event) => handleDeleteChannel(event, channel)}
+                        className="flex-shrink-0 px-1 text-gray-400 opacity-0 hover:text-red-600 group-hover:opacity-100"
+                      >
+                        🗑
+                      </button>
+                    )}
+                  </div>
                   {participants.length > 0 && (
                     <ul className="ml-5 mt-0.5 space-y-0.5">
                       {participants.map((participant) => (
