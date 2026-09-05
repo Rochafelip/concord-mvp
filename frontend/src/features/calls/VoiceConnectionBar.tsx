@@ -22,10 +22,10 @@ export function VoiceConnectionBar() {
   if (status === 'disconnected' || !channelId) return null;
 
   return (
-    <div className="flex flex-shrink-0 flex-col gap-1.5 border-t border-gray-200 px-3 py-2">
+    <div className="flex flex-shrink-0 items-center justify-between gap-3 border-t border-gray-200 bg-white px-4 py-2">
       <Link
         to={`/app/servers/${channel?.serverId}/channels/${channelId}`}
-        className="flex flex-col gap-0.5 hover:opacity-80"
+        className="flex min-w-0 flex-col gap-0.5 hover:opacity-80"
       >
         <span className="flex items-center gap-1 truncate text-sm font-medium text-gray-900">
           🔊 {status === 'connecting' ? 'Connecting…' : (channel?.name ?? '…')}
@@ -42,7 +42,7 @@ export function VoiceConnectionBar() {
       </Link>
 
       {localParticipant && (
-        <div className="flex items-center justify-center gap-1.5">
+        <div className="flex flex-shrink-0 items-center gap-1.5">
           <button
             type="button"
             aria-label={localParticipant.micEnabled ? 'Mute' : 'Unmute'}
