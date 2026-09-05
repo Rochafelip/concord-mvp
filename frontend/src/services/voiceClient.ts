@@ -1,8 +1,9 @@
 import { Room, RoomEvent, Track, type LocalParticipant, type Participant, type RemoteTrack } from 'livekit-client';
 import { websocketClient } from './websocketClient';
 import * as soundEffects from './soundEffects';
+import { SCREEN_SHARE_QUALITY_PRESETS } from '../features/calls/screenShareQuality';
 import { useVoiceStore } from '../stores/voiceStore';
-import type { VoiceParticipant } from '../types/voice';
+import type { ScreenShareQuality, VoiceParticipant } from '../types/voice';
 
 interface ReportedPresence {
   muted: boolean;
@@ -169,11 +170,19 @@ class VoiceClient {
   // action (PRODUCT.md §12.1). A rejection here covers both an OS/browser permission denial and
   // the user dismissing the screen/window picker without selecting anything — both surface as a
   // rejected promise from setScreenShareEnabled, so there's no need to tell them apart.
-  toggleScreenShare(): void {
+  //
+  // `quality` is only meaningful when starting a share; it's ignored when stopping one. The
+  // single-argument call shape is preserved whenever there's no quality to apply (stopping, or a
+  // caller that doesn't pass one) so existing behavior for those cases is unchanged.
+  toggleScreenShare(quality?: ScreenShareQuality): void {
     const localParticipant = this.room?.localParticipant;
     if (!localParticipant) return;
-    localParticipant
-      .setScreenShareEnabled(!localParticipant.isScreenShareEnabled)
+    const enabling = !localParticipant.isScreenShareEnabled;
+    const promise =
+      enabling && quality
+        ? localParticipant.setScreenShareEnabled(true, { resolution: SCREEN_SHARE_QUALITY_PRESETS[quality] })
+        : localParticipant.setScreenShareEnabled(enabling);
+    promise
       .then(() => this.syncParticipants())
       .catch(() => useVoiceStore.getState().setError('Failed to change screen sharing state'));
   }

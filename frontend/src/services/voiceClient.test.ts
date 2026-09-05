@@ -289,6 +289,38 @@ describe('voiceClient', () => {
     expect(room.localParticipant.setScreenShareEnabled).toHaveBeenLastCalledWith(false);
   });
 
+  it('starts screen sharing with an HD resolution constraint when a quality is given', async () => {
+    await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+    const room = roomInstances[0];
+
+    voiceClient.toggleScreenShare('hd');
+
+    expect(room.localParticipant.setScreenShareEnabled).toHaveBeenLastCalledWith(true, {
+      resolution: { width: 1280, height: 720 },
+    });
+  });
+
+  it('starts screen sharing with an FHD resolution constraint when a quality is given', async () => {
+    await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+    const room = roomInstances[0];
+
+    voiceClient.toggleScreenShare('fhd');
+
+    expect(room.localParticipant.setScreenShareEnabled).toHaveBeenLastCalledWith(true, {
+      resolution: { width: 1920, height: 1080 },
+    });
+  });
+
+  it('stops screen sharing with a single boolean argument even when a quality is passed', async () => {
+    await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+    const room = roomInstances[0];
+
+    voiceClient.toggleScreenShare('hd');
+    voiceClient.toggleScreenShare('fhd');
+
+    expect(room.localParticipant.setScreenShareEnabled).toHaveBeenLastCalledWith(false);
+  });
+
   it('records an error but keeps the room connected when screen sharing fails to start (permission denied or picker dismissed)', async () => {
     await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
     const room = roomInstances[0];
