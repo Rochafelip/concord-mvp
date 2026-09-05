@@ -5,12 +5,15 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { toVoicePresenceEntry } from '../features/calls/api';
 import { useAuthStore } from '../features/auth/authStore';
 import { websocketClient } from '../services/websocketClient';
+import { voiceClient } from '../services/voiceClient';
 import { useNotificationStore } from '../stores/notificationStore';
+import { useVoiceStore } from '../stores/voiceStore';
 import type { Channel } from '../types/channel';
 import type { Message } from '../types/message';
 import type { Server } from '../types/server';
 import type { VoicePresenceEntry } from '../types/voice';
 import type {
+  ChannelDeletedPayload,
   ErrorPayload,
   ServerDeletedPayload,
   ServerMemberEventPayload,
@@ -27,17 +30,23 @@ import type {
 export function useRealtimeSync(): void {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const { serverId: currentServerId } = useParams<{ serverId?: string }>();
+  const { serverId: currentServerId, channelId: currentChannelId } = useParams<{
+    serverId?: string;
+    channelId?: string;
+  }>();
   const token = useAuthStore((state) => state.token);
   const setNotification = useNotificationStore((state) => state.setMessage);
 
-  // The SERVER_DELETE subscriber below is set up once (empty-ish dep effect) but needs the
-  // *current* route's serverId at the moment the event arrives, not the one captured at
-  // subscribe time — a ref keeps it fresh without re-subscribing on every navigation.
+  // The SERVER_DELETE and CHANNEL_DELETE subscribers below are set up once (empty-ish dep
+  // effect) but need the *current* route's serverId/channelId at the moment the event arrives,
+  // not the values captured at subscribe time — refs keep them fresh without re-subscribing on
+  // every navigation.
   const currentServerIdRef = useRef(currentServerId);
+  const currentChannelIdRef = useRef(currentChannelId);
   useLayoutEffect(() => {
     currentServerIdRef.current = currentServerId;
-  }, [currentServerId]);
+    currentChannelIdRef.current = currentChannelId;
+  }, [currentServerId, currentChannelId]);
 
   useEffect(() => {
     if (!token) return;
@@ -69,6 +78,22 @@ export function useRealtimeSync(): void {
       websocketClient.subscribe('CHANNEL_CREATE', (payload) => {
         const channel = payload as Channel;
         queryClient.invalidateQueries({ queryKey: ['servers', channel.serverId, 'channels'] });
+      }),
+
+      websocketClient.subscribe('CHANNEL_DELETE', (payload) => {
+        const { channelId, serverId } = payload as ChannelDeletedPayload;
+
+        queryClient.setQueryData<Channel[]>(['servers', serverId, 'channels'], (old) =>
+          old?.filter((channel) => channel.id !== channelId),
+        );
+
+        if (currentServerIdRef.current === serverId && currentChannelIdRef.current === channelId) {
+          navigate(`/app/servers/${serverId}`);
+        }
+
+        if (useVoiceStore.getState().channelId === channelId) {
+          voiceClient.disconnect();
+        }
       }),
 
       websocketClient.subscribe('SERVER_MEMBER_JOIN', (payload) => {

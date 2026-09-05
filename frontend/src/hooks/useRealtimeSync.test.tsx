@@ -4,8 +4,11 @@ import { MemoryRouter, Outlet, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAuthStore } from '../features/auth/authStore';
 import { useNotificationStore } from '../stores/notificationStore';
+import type { Channel } from '../types/channel';
 import type { Server } from '../types/server';
 import type { VoicePresenceEntry } from '../types/voice';
+import { useVoiceStore } from '../stores/voiceStore';
+import { voiceClient } from '../services/voiceClient';
 import { useRealtimeSync } from './useRealtimeSync';
 
 const { handlers, mockConnect, mockDisconnect } = vi.hoisted(() => ({
@@ -33,6 +36,10 @@ vi.mock('../services/websocketClient', () => ({
   },
 }));
 
+vi.mock('../services/voiceClient', () => ({
+  voiceClient: { disconnect: vi.fn() },
+}));
+
 function emit(type: string, payload: unknown) {
   act(() => {
     handlers.get(type)?.forEach((handler) => handler(payload));
@@ -52,6 +59,10 @@ function renderHarness(queryClient: QueryClient, initialPath: string) {
           <Route path="/app" element={<TestHarness />}>
             <Route index element={<div data-testid="no-server">no server</div>} />
             <Route path="servers/:serverId" element={<div data-testid="server-view">server view</div>} />
+            <Route
+              path="servers/:serverId/channels/:channelId"
+              element={<div data-testid="channel-view">channel view</div>}
+            />
           </Route>
         </Routes>
       </MemoryRouter>
@@ -64,6 +75,8 @@ describe('useRealtimeSync', () => {
     handlers.clear();
     mockConnect.mockClear();
     mockDisconnect.mockClear();
+    vi.mocked(voiceClient.disconnect).mockClear();
+    useVoiceStore.setState({ status: 'disconnected', channelId: null, participants: [], error: null, isDeafened: false });
     useAuthStore.setState({
       token: 'jwt-abc',
       user: { id: 'u1', username: 'a', displayName: 'A', email: 'a@x.com', avatarUrl: null },
@@ -145,6 +158,62 @@ describe('useRealtimeSync', () => {
     emit('CHANNEL_CREATE', { id: 'ch1', serverId: 's1', name: 'general', type: 'TEXT' });
 
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['servers', 's1', 'channels'] });
+  });
+
+  it('CHANNEL_DELETE removes the channel from the cached channels list', () => {
+    const queryClient = newQueryClient();
+    const channels: Channel[] = [
+      { id: 'c1', serverId: 's1', name: 'general', type: 'TEXT', createdAt: 'x', updatedAt: 'x' },
+      { id: 'c2', serverId: 's1', name: 'lobby', type: 'VOICE', createdAt: 'x', updatedAt: 'x' },
+    ];
+    queryClient.setQueryData(['servers', 's1', 'channels'], channels);
+    renderHarness(queryClient, '/app');
+
+    emit('CHANNEL_DELETE', { channelId: 'c1', serverId: 's1' });
+
+    expect(queryClient.getQueryData<Channel[]>(['servers', 's1', 'channels'])).toEqual([channels[1]]);
+  });
+
+  it('CHANNEL_DELETE navigates to the server root when the deleted channel is the one currently open', async () => {
+    const queryClient = newQueryClient();
+    renderHarness(queryClient, '/app/servers/s1/channels/c1');
+
+    expect(await screen.findByTestId('channel-view')).toBeInTheDocument();
+
+    emit('CHANNEL_DELETE', { channelId: 'c1', serverId: 's1' });
+
+    expect(await screen.findByTestId('server-view')).toBeInTheDocument();
+  });
+
+  it('CHANNEL_DELETE does not navigate when a different channel is currently open', async () => {
+    const queryClient = newQueryClient();
+    renderHarness(queryClient, '/app/servers/s1/channels/c2');
+
+    expect(await screen.findByTestId('channel-view')).toBeInTheDocument();
+
+    emit('CHANNEL_DELETE', { channelId: 'c1', serverId: 's1' });
+
+    expect(screen.getByTestId('channel-view')).toBeInTheDocument();
+  });
+
+  it('CHANNEL_DELETE disconnects from voice when the deleted channel is the one currently connected to', () => {
+    const queryClient = newQueryClient();
+    useVoiceStore.setState({ status: 'connected', channelId: 'c2', participants: [], error: null, isDeafened: false });
+    renderHarness(queryClient, '/app');
+
+    emit('CHANNEL_DELETE', { channelId: 'c2', serverId: 's1' });
+
+    expect(voiceClient.disconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it('CHANNEL_DELETE does not disconnect from voice when a different channel is deleted', () => {
+    const queryClient = newQueryClient();
+    useVoiceStore.setState({ status: 'connected', channelId: 'c2', participants: [], error: null, isDeafened: false });
+    renderHarness(queryClient, '/app');
+
+    emit('CHANNEL_DELETE', { channelId: 'c1', serverId: 's1' });
+
+    expect(voiceClient.disconnect).not.toHaveBeenCalled();
   });
 
   it.each(['SERVER_MEMBER_JOIN', 'SERVER_MEMBER_LEAVE'])(
