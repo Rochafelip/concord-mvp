@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import { ConnectionQuality } from 'livekit-client';
 import { describe, expect, it, vi } from 'vitest';
 import type { VoiceParticipant } from '../../types/voice';
 import { ScreenShareTile } from './ScreenShareTile';
@@ -14,6 +15,7 @@ function sharingParticipant(overrides: Partial<VoiceParticipant> = {}): VoicePar
     videoTrack: null,
     screenShareEnabled: true,
     screenShareTrack: track,
+    connectionQuality: ConnectionQuality.Unknown,
     ...overrides,
   };
 }

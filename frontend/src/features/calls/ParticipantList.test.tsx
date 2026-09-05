@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { ConnectionQuality } from 'livekit-client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useVoiceStore } from '../../stores/voiceStore';
 import type { VoiceParticipant } from '../../types/voice';
@@ -19,6 +20,7 @@ function participant(overrides: Partial<VoiceParticipant> = {}): VoiceParticipan
     videoTrack: null,
     screenShareEnabled: false,
     screenShareTrack: null,
+    connectionQuality: ConnectionQuality.Unknown,
     ...overrides,
   };
 }

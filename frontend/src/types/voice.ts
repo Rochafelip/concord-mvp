@@ -1,4 +1,4 @@
-import type { LocalVideoTrack, RemoteVideoTrack } from 'livekit-client';
+import type { ConnectionQuality, LocalVideoTrack, RemoteVideoTrack } from 'livekit-client';
 
 export interface VoiceTokenResponse {
   token: string;
@@ -15,6 +15,7 @@ export interface VoiceParticipant {
   videoTrack: LocalVideoTrack | RemoteVideoTrack | null;
   screenShareEnabled: boolean;
   screenShareTrack: LocalVideoTrack | RemoteVideoTrack | null;
+  connectionQuality: ConnectionQuality;
 }
 
 /**
