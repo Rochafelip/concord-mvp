@@ -25,7 +25,13 @@ export function ChatWindow() {
           load-older-messages fetch still pending from the PREVIOUS channel) and MessageInput's
           draft text would otherwise carry over into the newly selected channel. */}
       <MessageList key={channelId} channelId={channelId} />
-      <MessageInput key={channelId} channelId={channelId} />
+      {channel?.type === 'ONBOARDING' ? (
+        <p className="border-t border-gray-200 p-3 text-center text-xs text-gray-500">
+          This channel is read-only.
+        </p>
+      ) : (
+        <MessageInput key={channelId} channelId={channelId} />
+      )}
     </div>
   );
 }
