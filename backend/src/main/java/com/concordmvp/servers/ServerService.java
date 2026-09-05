@@ -82,8 +82,7 @@ public class ServerService {
         onboardingChannel.setType(ChannelType.ONBOARDING);
         Channel savedOnboardingChannel = channelRepository.save(onboardingChannel);
 
-        User owner = userRepository.findById(ownerId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + ownerId));
+        User owner = requireUser(ownerId);
         messageService.postSystemMessage(savedOnboardingChannel.getId(), saved.getId(),
                 owner.getDisplayName() + " entrou no servidor");
 
@@ -129,10 +128,15 @@ public class ServerService {
         realtimeEventPublisher.broadcast(recipients,
                 new WsEvent(WsEventType.SERVER_MEMBER_JOIN, new ServerMemberEventPayload(serverId, userId)));
 
+        // Every server is guaranteed to have exactly one ONBOARDING channel: the one-time
+        // V7__add_onboarding_channel.sql migration backfilled one for every pre-existing server,
+        // and createServer (above) always creates one for every new server. So reaching this
+        // orElseThrow means that invariant was somehow violated (a bug or manual DB tampering) —
+        // which is exactly why this is an unchecked IllegalStateException rather than a normal
+        // request-level error.
         Channel onboardingChannel = channelRepository.findByServerIdAndType(serverId, ChannelType.ONBOARDING)
                 .orElseThrow(() -> new IllegalStateException("Server " + serverId + " has no onboarding channel"));
-        User joiningUser = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
+        User joiningUser = requireUser(userId);
         messageService.postSystemMessage(onboardingChannel.getId(), serverId,
                 joiningUser.getDisplayName() + " entrou no servidor");
 
@@ -246,6 +250,11 @@ public class ServerService {
         if (!serverMemberRepository.existsByServerIdAndUserId(serverId, userId)) {
             throw new ForbiddenException("Not a member of this server");
         }
+    }
+
+    private User requireUser(UUID userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
     }
 
     private void requireOwner(Server server, UUID requesterId) {
