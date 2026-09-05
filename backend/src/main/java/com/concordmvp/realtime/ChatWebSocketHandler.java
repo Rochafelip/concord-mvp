@@ -3,6 +3,8 @@ package com.concordmvp.realtime;
 import com.concordmvp.common.exception.BadRequestException;
 import com.concordmvp.common.exception.ForbiddenException;
 import com.concordmvp.common.exception.ResourceNotFoundException;
+import com.concordmvp.media.VoicePresenceService;
+import com.concordmvp.media.dto.VoicePresenceUpdateRequest;
 import com.concordmvp.messages.MessageService;
 import com.concordmvp.messages.dto.SendMessageRequest;
 import com.concordmvp.realtime.dto.ErrorPayload;
@@ -41,12 +43,14 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     private final WebSocketSessionRegistry sessionRegistry;
     private final ObjectMapper objectMapper;
     private final MessageService messageService;
+    private final VoicePresenceService voicePresenceService;
 
     public ChatWebSocketHandler(WebSocketSessionRegistry sessionRegistry, ObjectMapper objectMapper,
-                                 MessageService messageService) {
+                                 MessageService messageService, VoicePresenceService voicePresenceService) {
         this.sessionRegistry = sessionRegistry;
         this.objectMapper = objectMapper;
         this.messageService = messageService;
+        this.voicePresenceService = voicePresenceService;
     }
 
     @Override
@@ -56,7 +60,11 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     public void afterConnectionClosed(@NonNull WebSocketSession session, @NonNull CloseStatus status) {
-        sessionRegistry.unregister(userId(session), session);
+        UUID userId = userId(session);
+        sessionRegistry.unregister(userId, session);
+        if (sessionRegistry.getSessions(userId).isEmpty()) {
+            voicePresenceService.removePresence(userId);
+        }
     }
 
     @Override
@@ -69,6 +77,8 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
             switch (type == null ? "" : type) {
                 case "MESSAGE_CREATE" -> handleMessageCreate(session, root.get("payload"));
+                case "VOICE_PRESENCE_UPDATE" -> handleVoicePresenceUpdate(session, root.get("payload"));
+                case "VOICE_PRESENCE_LEAVE" -> voicePresenceService.removePresence(userId(session));
                 default -> sendError(session, "Unsupported message type: " + type);
             }
         } catch (IOException e) {
@@ -89,6 +99,19 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         } catch (Exception e) {
             log.warn("Failed to handle MESSAGE_CREATE from session {}", session.getId(), e);
             sendError(session, "Failed to send message");
+        }
+    }
+
+    private void handleVoicePresenceUpdate(WebSocketSession session, JsonNode payloadNode) {
+        try {
+            VoicePresenceUpdateRequest request = objectMapper.treeToValue(payloadNode, VoicePresenceUpdateRequest.class);
+            voicePresenceService.updatePresence(request.channelId(), userId(session), request.muted(),
+                    request.cameraOn(), request.screenSharing(), request.speaking());
+        } catch (ResourceNotFoundException | ForbiddenException | BadRequestException e) {
+            sendError(session, e.getMessage());
+        } catch (Exception e) {
+            log.warn("Failed to handle VOICE_PRESENCE_UPDATE from session {}", session.getId(), e);
+            sendError(session, "Failed to update voice presence");
         }
     }
 
