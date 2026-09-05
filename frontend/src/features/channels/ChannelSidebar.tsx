@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { VoiceConnectionBar } from '../calls/VoiceConnectionBar';
 import { useIsServerOwner, useServer } from '../servers/hooks';
 import { ServerSettingsPanel } from '../servers/ServerSettingsPanel';
 import { CreateChannelModal } from './CreateChannelModal';
@@ -92,6 +93,8 @@ export function ChannelSidebar() {
           </ul>
         </div>
       </div>
+
+      <VoiceConnectionBar />
 
       <CreateChannelModal serverId={serverId} open={createOpen} onClose={() => setCreateOpen(false)} />
       <ServerSettingsPanel serverId={serverId} open={settingsOpen} onClose={() => setSettingsOpen(false)} />
