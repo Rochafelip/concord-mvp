@@ -1,9 +1,11 @@
 package com.concordmvp.channels;
 
+import com.concordmvp.channels.dto.ChannelDeletedPayload;
 import com.concordmvp.channels.dto.ChannelResponse;
 import com.concordmvp.common.exception.BadRequestException;
 import com.concordmvp.common.exception.ForbiddenException;
 import com.concordmvp.common.exception.ResourceNotFoundException;
+import com.concordmvp.messages.MessageRepository;
 import com.concordmvp.realtime.RealtimeEventPublisher;
 import com.concordmvp.realtime.WsEvent;
 import com.concordmvp.realtime.WsEventType;
@@ -31,15 +33,18 @@ public class ChannelService {
     private final ChannelRepository channelRepository;
     private final ServerRepository serverRepository;
     private final ServerMemberRepository serverMemberRepository;
+    private final MessageRepository messageRepository;
     private final RealtimeEventPublisher realtimeEventPublisher;
 
     public ChannelService(ChannelRepository channelRepository,
                            ServerRepository serverRepository,
                            ServerMemberRepository serverMemberRepository,
+                           MessageRepository messageRepository,
                            RealtimeEventPublisher realtimeEventPublisher) {
         this.channelRepository = channelRepository;
         this.serverRepository = serverRepository;
         this.serverMemberRepository = serverMemberRepository;
+        this.messageRepository = messageRepository;
         this.realtimeEventPublisher = realtimeEventPublisher;
     }
 
@@ -66,6 +71,29 @@ public class ChannelService {
         realtimeEventPublisher.broadcast(recipients, new WsEvent(WsEventType.CHANNEL_CREATE, payload));
 
         return saved;
+    }
+
+    @Transactional
+    public void deleteChannel(UUID channelId, UUID requesterId) {
+        Channel channel = channelRepository.findById(channelId)
+                .orElseThrow(() -> new ResourceNotFoundException("Channel not found: " + channelId));
+
+        if (channel.getType() == ChannelType.ONBOARDING) {
+            throw new BadRequestException("The onboarding channel is managed by the system and cannot be deleted");
+        }
+
+        Server server = requireServer(channel.getServerId());
+
+        if (!server.getOwnerId().equals(requesterId)) {
+            throw new ForbiddenException("Only the server owner can delete channels");
+        }
+
+        messageRepository.deleteByChannelIdIn(List.of(channelId));
+        channelRepository.delete(channel);
+
+        Set<UUID> recipients = currentMemberIds(channel.getServerId());
+        realtimeEventPublisher.broadcast(recipients,
+                new WsEvent(WsEventType.CHANNEL_DELETE, new ChannelDeletedPayload(channelId, channel.getServerId())));
     }
 
     public List<Channel> listChannels(UUID serverId, UUID requesterId) {

@@ -1,9 +1,11 @@
 package com.concordmvp.channels;
 
+import com.concordmvp.channels.dto.ChannelDeletedPayload;
 import com.concordmvp.channels.dto.ChannelResponse;
 import com.concordmvp.common.exception.BadRequestException;
 import com.concordmvp.common.exception.ForbiddenException;
 import com.concordmvp.common.exception.ResourceNotFoundException;
+import com.concordmvp.messages.MessageRepository;
 import com.concordmvp.realtime.RealtimeEventPublisher;
 import com.concordmvp.realtime.WsEvent;
 import com.concordmvp.realtime.WsEventType;
@@ -47,11 +49,15 @@ class ChannelServiceTest {
     @Mock
     private RealtimeEventPublisher realtimeEventPublisher;
 
+    @Mock
+    private MessageRepository messageRepository;
+
     private ChannelService channelService;
 
     @BeforeEach
     void setUp() {
-        channelService = new ChannelService(channelRepository, serverRepository, serverMemberRepository, realtimeEventPublisher);
+        channelService = new ChannelService(channelRepository, serverRepository, serverMemberRepository,
+                messageRepository, realtimeEventPublisher);
     }
 
     private Server server(UUID id, UUID ownerId) {
@@ -234,5 +240,77 @@ class ChannelServiceTest {
         Channel result = channelService.getChannel(channelId, requesterId);
 
         assertThat(result.getId()).isEqualTo(channelId);
+    }
+
+    // --- deleteChannel ---
+
+    @Test
+    void deleteChannel_unknownChannel_throwsResourceNotFound() {
+        UUID channelId = UUID.randomUUID();
+        when(channelRepository.findById(channelId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> channelService.deleteChannel(channelId, UUID.randomUUID()))
+                .isInstanceOf(ResourceNotFoundException.class);
+
+        verify(channelRepository, never()).delete(any());
+        verifyNoInteractions(realtimeEventPublisher);
+    }
+
+    @Test
+    void deleteChannel_onboardingType_throwsBadRequest_evenForOwner() {
+        UUID serverId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        UUID channelId = UUID.randomUUID();
+        Channel onboarding = channel(channelId, serverId);
+        onboarding.setType(ChannelType.ONBOARDING);
+        when(channelRepository.findById(channelId)).thenReturn(Optional.of(onboarding));
+
+        assertThatThrownBy(() -> channelService.deleteChannel(channelId, ownerId))
+                .isInstanceOf(BadRequestException.class);
+
+        verify(channelRepository, never()).delete(any());
+        verifyNoInteractions(realtimeEventPublisher);
+    }
+
+    @Test
+    void deleteChannel_nonOwner_throwsForbidden() {
+        UUID serverId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        UUID channelId = UUID.randomUUID();
+        when(channelRepository.findById(channelId)).thenReturn(Optional.of(channel(channelId, serverId)));
+        when(serverRepository.findById(serverId)).thenReturn(Optional.of(server(serverId, ownerId)));
+
+        assertThatThrownBy(() -> channelService.deleteChannel(channelId, requesterId))
+                .isInstanceOf(ForbiddenException.class);
+
+        verify(channelRepository, never()).delete(any());
+        verifyNoInteractions(realtimeEventPublisher);
+    }
+
+    @Test
+    void deleteChannel_owner_succeeds_deletesMessagesAndChannel_andBroadcastsToAllMembers() {
+        UUID serverId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        UUID otherMemberId = UUID.randomUUID();
+        UUID channelId = UUID.randomUUID();
+        Channel existing = channel(channelId, serverId);
+        when(channelRepository.findById(channelId)).thenReturn(Optional.of(existing));
+        when(serverRepository.findById(serverId)).thenReturn(Optional.of(server(serverId, ownerId)));
+        when(serverMemberRepository.findByServerId(serverId))
+                .thenReturn(List.of(member(serverId, ownerId), member(serverId, otherMemberId)));
+
+        channelService.deleteChannel(channelId, ownerId);
+
+        verify(messageRepository).deleteByChannelIdIn(List.of(channelId));
+        verify(channelRepository).delete(existing);
+
+        ArgumentCaptor<WsEvent> eventCaptor = ArgumentCaptor.forClass(WsEvent.class);
+        verify(realtimeEventPublisher).broadcast(eq(Set.of(ownerId, otherMemberId)), eventCaptor.capture());
+        assertThat(eventCaptor.getValue().type()).isEqualTo(WsEventType.CHANNEL_DELETE);
+        assertThat(eventCaptor.getValue().payload()).isInstanceOf(ChannelDeletedPayload.class);
+        ChannelDeletedPayload payload = (ChannelDeletedPayload) eventCaptor.getValue().payload();
+        assertThat(payload.channelId()).isEqualTo(channelId);
+        assertThat(payload.serverId()).isEqualTo(serverId);
     }
 }
