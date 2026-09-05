@@ -1,7 +1,17 @@
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import userEvent from '@testing-library/user-event';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { voiceClient } from '../../services/voiceClient';
 import type { VoiceParticipant } from '../../types/voice';
 import { ParticipantTile } from './ParticipantTile';
+
+vi.mock('../../services/voiceClient', () => ({
+  voiceClient: {
+    toggleMute: vi.fn(),
+    toggleCamera: vi.fn(),
+    toggleScreenShare: vi.fn(),
+  },
+}));
 
 function participant(overrides: Partial<VoiceParticipant> = {}): VoiceParticipant {
   return {
@@ -58,5 +68,71 @@ describe('ParticipantTile', () => {
     render(<ParticipantTile participant={participant({ name: 'Felipe', videoTrack })} />);
 
     expect(screen.queryByText('F')).not.toBeInTheDocument();
+  });
+
+  describe('local control bar', () => {
+    beforeEach(() => {
+      vi.mocked(voiceClient.toggleMute).mockClear();
+      vi.mocked(voiceClient.toggleCamera).mockClear();
+      vi.mocked(voiceClient.toggleScreenShare).mockClear();
+    });
+
+    it('does not render controls for a remote participant, even with onLeave passed', () => {
+      render(<ParticipantTile participant={participant({ isLocal: false })} onLeave={vi.fn()} />);
+
+      expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    });
+
+    it('does not render controls for the local participant when onLeave is not passed', () => {
+      render(<ParticipantTile participant={participant({ isLocal: true })} />);
+
+      expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    });
+
+    it('toggles mute on click and reflects the current mic state', async () => {
+      const user = userEvent.setup();
+      render(<ParticipantTile participant={participant({ isLocal: true, micEnabled: true })} onLeave={vi.fn()} />);
+
+      await user.click(screen.getByRole('button', { name: 'Mute' }));
+
+      expect(voiceClient.toggleMute).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows an Unmute label when the local mic is off', () => {
+      render(<ParticipantTile participant={participant({ isLocal: true, micEnabled: false })} onLeave={vi.fn()} />);
+
+      expect(screen.getByRole('button', { name: 'Unmute' })).toBeInTheDocument();
+    });
+
+    it('toggles the camera on click and reflects the current camera state', async () => {
+      const user = userEvent.setup();
+      render(<ParticipantTile participant={participant({ isLocal: true, cameraEnabled: false })} onLeave={vi.fn()} />);
+
+      await user.click(screen.getByRole('button', { name: 'Camera on' }));
+
+      expect(voiceClient.toggleCamera).toHaveBeenCalledTimes(1);
+      expect(screen.queryByRole('button', { name: 'Camera off' })).not.toBeInTheDocument();
+    });
+
+    it('toggles screen share on click and reflects the current sharing state', async () => {
+      const user = userEvent.setup();
+      render(
+        <ParticipantTile participant={participant({ isLocal: true, screenShareEnabled: true })} onLeave={vi.fn()} />,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Stop sharing' }));
+
+      expect(voiceClient.toggleScreenShare).toHaveBeenCalledTimes(1);
+    });
+
+    it('calls onLeave on click', async () => {
+      const user = userEvent.setup();
+      const onLeave = vi.fn();
+      render(<ParticipantTile participant={participant({ isLocal: true })} onLeave={onLeave} />);
+
+      await user.click(screen.getByRole('button', { name: 'Leave call' }));
+
+      expect(onLeave).toHaveBeenCalledTimes(1);
+    });
   });
 });

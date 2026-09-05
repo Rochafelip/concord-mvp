@@ -1,8 +1,13 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useVoiceStore } from '../../stores/voiceStore';
 import type { VoiceParticipant } from '../../types/voice';
 import { ParticipantList } from './ParticipantList';
+
+vi.mock('../../services/voiceClient', () => ({
+  voiceClient: { toggleMute: vi.fn(), toggleCamera: vi.fn(), toggleScreenShare: vi.fn() },
+}));
 
 function participant(overrides: Partial<VoiceParticipant> = {}): VoiceParticipant {
   return {
@@ -78,5 +83,21 @@ describe('ParticipantList', () => {
     render(<ParticipantList />);
 
     expect(screen.queryByText(/'s screen/)).not.toBeInTheDocument();
+  });
+
+  it('wires onLeave to the local participant tile only, not remote ones', async () => {
+    const user = userEvent.setup();
+    const onLeave = vi.fn();
+    useVoiceStore.setState({
+      participants: [
+        participant({ identity: 'u1', name: 'Felipe', isLocal: true }),
+        participant({ identity: 'u2', name: 'João', isLocal: false }),
+      ],
+    });
+    render(<ParticipantList onLeave={onLeave} />);
+
+    expect(screen.getAllByRole('button', { name: 'Leave call' })).toHaveLength(1);
+    await user.click(screen.getByRole('button', { name: 'Leave call' }));
+    expect(onLeave).toHaveBeenCalledTimes(1);
   });
 });

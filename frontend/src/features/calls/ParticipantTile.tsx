@@ -1,8 +1,11 @@
 import { useEffect, useRef } from 'react';
+import { voiceClient } from '../../services/voiceClient';
 import type { VoiceParticipant } from '../../types/voice';
 
 interface ParticipantTileProps {
   participant: VoiceParticipant;
+  /** Only passed for the local participant's tile — renders the in-tile control bar. */
+  onLeave?: () => void;
 }
 
 /**
@@ -13,9 +16,10 @@ interface ParticipantTileProps {
  * over having voiceClient manage video elements itself, the way it does for hidden audio
  * elements.
  */
-export function ParticipantTile({ participant }: ParticipantTileProps) {
+export function ParticipantTile({ participant, onLeave }: ParticipantTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const { videoTrack } = participant;
+  const isLocal = participant.isLocal && onLeave;
 
   useEffect(() => {
     const element = videoRef.current;
@@ -35,11 +39,53 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
           {participant.name.charAt(0).toUpperCase()}
         </span>
       )}
-      <span className="absolute bottom-1 left-1 flex items-center gap-1 rounded bg-black/50 px-1.5 py-0.5 text-xs text-white">
+
+      {/* Name/mic label: bottom-left for everyone else, top-left for the local tile so it
+          doesn't collide with the control bar docked at the bottom below. */}
+      <span
+        className={`absolute left-1 flex items-center gap-1 rounded bg-black/50 px-1.5 py-0.5 text-xs text-white ${isLocal ? 'top-1' : 'bottom-1'}`}
+      >
         <span aria-hidden="true">{participant.micEnabled ? '🎤' : '🔇'}</span>
         {participant.name}
         {participant.isLocal ? ' (you)' : ''}
       </span>
+
+      {isLocal && (
+        <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1.5 bg-black/60 px-2 py-1.5">
+          <button
+            type="button"
+            aria-label={participant.micEnabled ? 'Mute' : 'Unmute'}
+            onClick={() => voiceClient.toggleMute()}
+            className="rounded-full bg-white/10 p-1.5 text-sm leading-none text-white hover:bg-white/20"
+          >
+            {participant.micEnabled ? '🎤' : '🔇'}
+          </button>
+          <button
+            type="button"
+            aria-label={participant.cameraEnabled ? 'Camera off' : 'Camera on'}
+            onClick={() => voiceClient.toggleCamera()}
+            className="rounded-full bg-white/10 p-1.5 text-sm leading-none text-white hover:bg-white/20"
+          >
+            {participant.cameraEnabled ? '📹' : '📷'}
+          </button>
+          <button
+            type="button"
+            aria-label={participant.screenShareEnabled ? 'Stop sharing' : 'Share screen'}
+            onClick={() => voiceClient.toggleScreenShare()}
+            className="rounded-full bg-white/10 p-1.5 text-sm leading-none text-white hover:bg-white/20"
+          >
+            {participant.screenShareEnabled ? '🛑' : '🖥️'}
+          </button>
+          <button
+            type="button"
+            aria-label="Leave call"
+            onClick={onLeave}
+            className="rounded-full bg-red-500/80 p-1.5 text-sm leading-none text-white hover:bg-red-500"
+          >
+            📵
+          </button>
+        </div>
+      )}
     </div>
   );
 }

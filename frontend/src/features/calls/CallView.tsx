@@ -1,8 +1,8 @@
 import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { voiceClient } from '../../services/voiceClient';
 import type { Channel } from '../../types/channel';
 import { ParticipantList } from './ParticipantList';
-import { VoiceControls } from './VoiceControls';
 import { useJoinVoiceChannel } from './hooks';
 
 interface CallViewProps {
@@ -19,6 +19,7 @@ interface CallViewProps {
  */
 export function CallView({ channel }: CallViewProps) {
   const { mutate: joinVoiceChannel } = useJoinVoiceChannel();
+  const navigate = useNavigate();
 
   useEffect(() => {
     joinVoiceChannel(channel.id);
@@ -28,13 +29,17 @@ export function CallView({ channel }: CallViewProps) {
     return () => voiceClient.disconnect();
   }, []);
 
+  function handleLeave() {
+    voiceClient.disconnect();
+    navigate(`/app/servers/${channel.serverId}`);
+  }
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex-shrink-0 border-b border-gray-200 px-4 py-3">
         <span className="font-semibold text-gray-900">🔊 {channel.name}</span>
       </div>
-      <ParticipantList />
-      <VoiceControls />
+      <ParticipantList onLeave={handleLeave} />
     </div>
   );
 }

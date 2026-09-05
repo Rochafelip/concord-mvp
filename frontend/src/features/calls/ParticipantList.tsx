@@ -2,7 +2,12 @@ import { useVoiceParticipants } from './hooks';
 import { ParticipantTile } from './ParticipantTile';
 import { ScreenShareTile } from './ScreenShareTile';
 
-export function ParticipantList() {
+interface ParticipantListProps {
+  /** Wired to the local participant's tile only — renders its in-tile control bar. */
+  onLeave?: () => void;
+}
+
+export function ParticipantList({ onLeave }: ParticipantListProps) {
   const participants = useVoiceParticipants();
 
   if (participants.length === 0) {
@@ -17,7 +22,11 @@ export function ParticipantList() {
         <ScreenShareTile key={`${participant.identity}-screen`} participant={participant} />
       ))}
       {participants.map((participant) => (
-        <ParticipantTile key={participant.identity} participant={participant} />
+        <ParticipantTile
+          key={participant.identity}
+          participant={participant}
+          onLeave={participant.isLocal ? onLeave : undefined}
+        />
       ))}
     </div>
   );
