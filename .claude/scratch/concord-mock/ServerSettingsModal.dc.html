@@ -1,0 +1,126 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    x-dc, x-dc * { box-sizing: border-box; }
+    x-dc {
+      display: block;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      color: #111827;
+    }
+    .app { position: relative; display: flex; flex-direction: column; width: 1440px; height: 900px; background: #ffffff; overflow: hidden; }
+    .header { display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; border-bottom: 1px solid #e5e7eb; padding: 8px 16px; }
+    .brand { font-weight: 600; color: #111827; font-size: 16px; }
+    .headerRight { display: flex; align-items: center; gap: 12px; }
+    .avatar { display: flex; align-items: center; justify-content: center; border-radius: 9999px; background: #4f46e5; color: #fff; font-size: 14px; font-weight: 500; flex-shrink: 0; }
+    .userName { font-size: 14px; color: #374151; }
+    .btn { border-radius: 4px; padding: 8px 16px; font-size: 14px; font-weight: 500; border: none; cursor: pointer; }
+    .btn-secondary { background: #e5e7eb; color: #111827; }
+    .btn-danger { background: #e5e7eb; color: #b91c1c; border: 1px solid #fca5a5; }
+    .body { display: flex; flex: 1; overflow: hidden; }
+    .rail { display: flex; width: 64px; flex-shrink: 0; flex-direction: column; align-items: center; gap: 8px; border-right: 1px solid #e5e7eb; background: #f9fafb; padding: 12px 0; }
+    .railItem { display: flex; height: 48px; width: 48px; flex-shrink: 0; align-items: center; justify-content: center; border-radius: 9999px; font-size: 14px; font-weight: 600; }
+    .railItem.selected { background: #4f46e5; color: #fff; }
+    .railAdd { display: flex; height: 48px; width: 48px; flex-shrink: 0; align-items: center; justify-content: center; border-radius: 9999px; background: #e5e7eb; color: #374151; font-size: 20px; line-height: 1; }
+    .channels { display: flex; width: 224px; flex-shrink: 0; flex-direction: column; border-right: 1px solid #e5e7eb; background: #f9fafb; }
+    .channelsHead { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e5e7eb; padding: 12px; }
+    .serverName { font-weight: 600; color: #111827; font-size: 14px; }
+    .channelsBody { flex: 1; padding: 12px 8px; display: flex; flex-direction: column; gap: 16px; }
+    .groupLabel { font-size: 12px; font-weight: 600; text-transform: uppercase; color: #6b7280; margin: 0; }
+    .channelList { margin-top: 4px; display: flex; flex-direction: column; gap: 2px; list-style: none; padding: 0; }
+    .channelLink { display: flex; align-items: center; gap: 6px; border-radius: 4px; padding: 4px 8px; font-size: 14px; color: #374151; }
+    .channelLink.active { background: #e0e7ff; color: #312e81; }
+    .main { flex: 1; }
+    .chatHead { border-bottom: 1px solid #e5e7eb; padding: 12px 16px; font-weight: 600; color: #111827; font-size: 14px; }
+    .overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.5); }
+    .panel { display: flex; width: 320px; flex-direction: column; gap: 16px; border-radius: 4px; background: #fff; padding: 16px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1); }
+    h2 { margin: 0; font-size: 18px; font-weight: 600; color: #111827; }
+    h3 { margin: 0; font-size: 14px; font-weight: 500; color: #374151; }
+    section { display: flex; flex-direction: column; gap: 8px; }
+    .inviteRow { display: flex; align-items: center; gap: 8px; }
+    code { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-radius: 4px; background: #f3f4f6; padding: 4px 8px; font-size: 14px; }
+    .memberList { max-height: 192px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; list-style: none; margin: 0; padding: 0; }
+    .memberRow { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 14px; }
+    .memberLeft { display: flex; align-items: center; gap: 8px; }
+    .memberAvatar { display: flex; height: 24px; width: 24px; flex-shrink: 0; align-items: center; justify-content: center; border-radius: 9999px; background: #4f46e5; color: #fff; font-size: 11px; font-weight: 500; }
+    .ownerTag { font-size: 11px; text-transform: uppercase; color: #9ca3af; }
+    .makeOwner { font-size: 12px; color: #4f46e5; }
+    .divider { border-top: 1px solid #e5e7eb; padding-top: 16px; display: flex; flex-direction: column; gap: 8px; }
+    .hint { font-size: 12px; color: #6b7280; margin: 0; }
+  </style>
+</helmet>
+<div class="app">
+  <div class="header">
+    <span class="brand">Concord</span>
+    <div class="headerRight">
+      <div class="avatar" style="height:32px;width:32px;">F</div>
+      <span class="userName">Felipe</span>
+      <button class="btn btn-secondary" type="button">Log out</button>
+    </div>
+  </div>
+  <div class="body">
+    <nav class="rail" aria-label="Servers">
+      <div class="railItem selected" title="Concord HQ">C</div>
+      <div class="railAdd" title="Create server">+</div>
+    </nav>
+    <aside class="channels">
+      <div class="channelsHead"><span class="serverName">Concord HQ</span></div>
+      <div class="channelsBody">
+        <div>
+          <h3 class="groupLabel">Text channels</h3>
+          <ul class="channelList"><li><span class="channelLink active"><span>#</span>general</span></li></ul>
+        </div>
+      </div>
+    </aside>
+    <main class="main">
+      <div class="chatHead"># general</div>
+    </main>
+  </div>
+
+  <div class="overlay">
+    <div class="panel">
+      <h2>Concord HQ settings</h2>
+
+      <section>
+        <h3>Invite code</h3>
+        <div class="inviteRow">
+          <code>Ab3xQ9Lm2k</code>
+          <button class="btn btn-secondary" type="button">Copy</button>
+        </div>
+        <button class="btn btn-secondary" type="button">Regenerate code</button>
+      </section>
+
+      <section>
+        <h3>Members</h3>
+        <ul class="memberList">
+          <li class="memberRow">
+            <span class="memberLeft"><span class="memberAvatar">F</span>Felipe<span class="ownerTag">Owner</span></span>
+          </li>
+          <li class="memberRow">
+            <span class="memberLeft"><span class="memberAvatar" style="background:#0891b2;">A</span>Alex</span>
+            <span class="makeOwner">Make owner</span>
+          </li>
+          <li class="memberRow">
+            <span class="memberLeft"><span class="memberAvatar" style="background:#b45309;">M</span>Marina</span>
+            <span class="makeOwner">Make owner</span>
+          </li>
+        </ul>
+      </section>
+
+      <section class="divider">
+        <p class="hint">You're the owner, so you can't leave directly — transfer ownership or delete the server instead.</p>
+        <button class="btn btn-secondary" type="button" disabled title="Transfer ownership or delete the server to leave" style="width:100%;opacity:0.6;cursor:not-allowed;">Leave server</button>
+        <button class="btn btn-danger" type="button" style="width:100%;">Delete server</button>
+      </section>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

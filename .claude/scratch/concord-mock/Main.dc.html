@@ -1,0 +1,149 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    x-dc, x-dc * { box-sizing: border-box; }
+    x-dc {
+      display: block;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      color: #111827;
+    }
+    .app { display: flex; flex-direction: column; width: 1440px; height: 900px; background: #ffffff; overflow: hidden; }
+    .header { display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; border-bottom: 1px solid #e5e7eb; padding: 8px 16px; }
+    .brand { font-weight: 600; color: #111827; font-size: 16px; }
+    .headerRight { display: flex; align-items: center; gap: 12px; }
+    .avatar { display: flex; align-items: center; justify-content: center; border-radius: 9999px; background: #4f46e5; color: #fff; font-size: 14px; font-weight: 500; flex-shrink: 0; }
+    .userName { font-size: 14px; color: #374151; }
+    .btn { border-radius: 4px; padding: 8px 16px; font-size: 14px; font-weight: 500; border: none; cursor: pointer; }
+    .btn-secondary { background: #e5e7eb; color: #111827; }
+    .body { display: flex; flex: 1; overflow: hidden; }
+    .rail { display: flex; width: 64px; flex-shrink: 0; flex-direction: column; align-items: center; gap: 8px; overflow-y: auto; border-right: 1px solid #e5e7eb; background: #f9fafb; padding: 12px 0; }
+    .railItem { display: flex; height: 48px; width: 48px; flex-shrink: 0; align-items: center; justify-content: center; border-radius: 9999px; font-size: 14px; font-weight: 600; }
+    .railItem.selected { background: #4f46e5; color: #fff; }
+    .railItem.idle { background: #e5e7eb; color: #374151; }
+    .railAdd { display: flex; height: 48px; width: 48px; flex-shrink: 0; align-items: center; justify-content: center; border-radius: 9999px; background: #e5e7eb; color: #374151; font-size: 20px; line-height: 1; }
+    .railJoin { display: flex; height: 40px; width: 40px; flex-shrink: 0; align-items: center; justify-content: center; border-radius: 9999px; background: #e5e7eb; color: #374151; font-size: 12px; font-weight: 500; }
+    .channels { display: flex; width: 224px; flex-shrink: 0; flex-direction: column; border-right: 1px solid #e5e7eb; background: #f9fafb; }
+    .channelsHead { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e5e7eb; padding: 12px; }
+    .serverName { font-weight: 600; color: #111827; font-size: 14px; }
+    .gear { color: #6b7280; font-size: 14px; }
+    .channelsBody { flex: 1; overflow-y: auto; padding: 12px 8px; display: flex; flex-direction: column; gap: 16px; }
+    .groupHead { display: flex; align-items: center; justify-content: space-between; padding: 0 4px; }
+    .groupLabel { font-size: 12px; font-weight: 600; text-transform: uppercase; color: #6b7280; }
+    .groupAdd { font-size: 18px; line-height: 1; color: #6b7280; }
+    .channelList { margin-top: 4px; display: flex; flex-direction: column; gap: 2px; list-style: none; padding: 0; }
+    .channelLink { display: flex; align-items: center; gap: 6px; border-radius: 4px; padding: 4px 8px; font-size: 14px; color: #374151; }
+    .icon { flex-shrink: 0; }
+    .channelLink.active { background: #e0e7ff; color: #312e81; }
+    .main { display: flex; min-width: 0; flex: 1; flex-direction: column; overflow: hidden; }
+    .chatHead { flex-shrink: 0; border-bottom: 1px solid #e5e7eb; padding: 12px 16px; font-weight: 600; color: #111827; font-size: 14px; }
+    .messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+    .msg { display: flex; align-items: flex-start; gap: 12px; }
+    .msgMeta { display: flex; align-items: baseline; gap: 8px; }
+    .msgAuthor { font-size: 14px; font-weight: 600; color: #111827; }
+    .msgTime { font-size: 12px; color: #9ca3af; }
+    .msgContent { font-size: 14px; color: #1f2937; white-space: pre-wrap; margin: 2px 0 0; }
+    .composer { flex-shrink: 0; border-top: 1px solid #e5e7eb; padding: 12px; display: flex; align-items: flex-end; gap: 8px; }
+    .inputWrap { flex: 1; }
+    .inputLabel { display: block; font-size: 12px; color: #6b7280; margin-bottom: 4px; }
+    .textInput { width: 100%; border: 1px solid #d1d5db; border-radius: 4px; padding: 8px 12px; font-size: 14px; color: #111827; }
+    .btn-primary { background: #4f46e5; color: #fff; }
+  </style>
+</helmet>
+<div class="app">
+  <div class="header">
+    <span class="brand">Concord</span>
+    <div class="headerRight">
+      <div class="avatar" style="height:32px;width:32px;">F</div>
+      <span class="userName">Felipe</span>
+      <button class="btn btn-secondary" type="button">Log out</button>
+    </div>
+  </div>
+
+  <div class="body">
+    <nav class="rail" aria-label="Servers">
+      <div class="railItem selected" title="Concord HQ">C</div>
+      <div class="railItem idle" title="Gaming Squad">G</div>
+      <div class="railItem idle" title="Design Crew">D</div>
+      <div class="railAdd" title="Create server">+</div>
+      <div class="railJoin" title="Join server">Join</div>
+    </nav>
+
+    <aside class="channels">
+      <div class="channelsHead">
+        <span class="serverName">Concord HQ</span>
+        <svg class="icon gear" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+      </div>
+      <div class="channelsBody">
+        <div>
+          <div class="groupHead">
+            <h3 class="groupLabel">Text channels</h3>
+            <span class="groupAdd">+</span>
+          </div>
+          <ul class="channelList">
+            <li><span class="channelLink active"><span>#</span>general</span></li>
+            <li><span class="channelLink"><span>#</span>random</span></li>
+            <li><span class="channelLink"><span>#</span>announcements</span></li>
+          </ul>
+        </div>
+        <div>
+          <h3 class="groupLabel">Voice channels</h3>
+          <ul class="channelList">
+            <li><span class="channelLink"><svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></svg>General Voice</span></li>
+            <li><span class="channelLink"><svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></svg>Gaming Lounge</span></li>
+          </ul>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="chatHead"># general</div>
+      <div class="messages">
+        <div class="msg">
+          <div class="avatar" style="height:32px;width:32px;">M</div>
+          <div>
+            <div class="msgMeta"><span class="msgAuthor">Marina</span><span class="msgTime">10:02 AM</span></div>
+            <p class="msgContent">morning! pulled the latest — screen sharing is live on my branch</p>
+          </div>
+        </div>
+        <div class="msg">
+          <div class="avatar" style="height:32px;width:32px;background:#0891b2;">A</div>
+          <div>
+            <div class="msgMeta"><span class="msgAuthor">Alex</span><span class="msgTime">10:03 AM</span></div>
+            <p class="msgContent">nice, jumping into General Voice in a sec to try it</p>
+          </div>
+        </div>
+        <div class="msg">
+          <div class="avatar" style="height:32px;width:32px;">F</div>
+          <div>
+            <div class="msgMeta"><span class="msgAuthor">Felipe</span><span class="msgTime">10:05 AM</span></div>
+            <p class="msgContent">on my way too, want to see how the layout holds up with 4 people</p>
+          </div>
+        </div>
+        <div class="msg">
+          <div class="avatar" style="height:32px;width:32px;background:#b45309;">S</div>
+          <div>
+            <div class="msgMeta"><span class="msgAuthor">Sofia</span><span class="msgTime">10:06 AM</span></div>
+            <p class="msgContent">already in there, camera's a bit grainy but audio is solid</p>
+          </div>
+        </div>
+      </div>
+      <div class="composer">
+        <div class="inputWrap">
+          <span class="inputLabel">Message</span>
+          <input class="textInput" type="text" placeholder="Message #general" readonly>
+        </div>
+        <button class="btn btn-primary" type="button">Send</button>
+      </div>
+    </main>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>
