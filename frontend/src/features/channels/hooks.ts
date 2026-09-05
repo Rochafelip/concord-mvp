@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import * as api from './api';
 
 export function useChannels(serverId: string | undefined) {
@@ -27,6 +27,22 @@ export function useCreateChannel(serverId: string) {
     onSuccess: (channel) => {
       queryClient.invalidateQueries({ queryKey: ['servers', serverId, 'channels'] });
       navigate(`/app/servers/${serverId}/channels/${channel.id}`);
+    },
+  });
+}
+
+export function useDeleteChannel(serverId: string | undefined) {
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const { channelId: currentChannelId } = useParams<{ channelId?: string }>();
+
+  return useMutation({
+    mutationFn: (channelId: string) => api.deleteChannel(channelId),
+    onSuccess: (_data, deletedChannelId) => {
+      queryClient.invalidateQueries({ queryKey: ['servers', serverId, 'channels'] });
+      if (deletedChannelId === currentChannelId) {
+        navigate(`/app/servers/${serverId}`);
+      }
     },
   });
 }
