@@ -26,7 +26,15 @@ public class WebSocketConfig implements WebSocketConfigurer {
 
     @Override
     public void registerWebSocketHandlers(@NonNull WebSocketHandlerRegistry registry) {
+        // Spring rejects cross-origin WebSocket handshakes (403) by default, comparing the
+        // browser's Origin header against the server's own perceived host/port — which never
+        // matches when running behind a reverse proxy (nginx here), regardless of proxy header
+        // configuration, since the backend container has no way to know what public host/port
+        // it's reached through. Safe to allow any origin here specifically because /ws
+        // authenticates via a JWT bearer token in the query string (JwtHandshakeInterceptor),
+        // not cookies — there's no cross-site credential to ride along with a forged request.
         registry.addHandler(chatWebSocketHandler, "/ws")
-                .addInterceptors(jwtHandshakeInterceptor);
+                .addInterceptors(jwtHandshakeInterceptor)
+                .setAllowedOrigins("*");
     }
 }
