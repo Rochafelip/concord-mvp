@@ -2,6 +2,7 @@ import { render } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { voiceClient } from '../../services/voiceClient';
+import { useVoiceStore } from '../../stores/voiceStore';
 import type { Channel } from '../../types/channel';
 import { CallView } from './CallView';
 import * as hooksModule from './hooks';
@@ -37,6 +38,7 @@ describe('CallView', () => {
     mutate.mockClear();
     vi.mocked(voiceClient.disconnect).mockClear();
     vi.mocked(hooksModule.useJoinVoiceChannel).mockReturnValue({ mutate } as never);
+    useVoiceStore.setState({ status: 'disconnected', channelId: null, participants: [], error: null });
   });
 
   it('joins the voice channel on mount', () => {
@@ -73,5 +75,19 @@ describe('CallView', () => {
 
     unmount();
     expect(voiceClient.disconnect).not.toHaveBeenCalled();
+  });
+
+  it('does not rejoin when remounted for the channel it is already connected to', () => {
+    useVoiceStore.setState({ status: 'connected', channelId: 'c1' });
+    renderCallView(channel('c1'));
+
+    expect(mutate).not.toHaveBeenCalled();
+  });
+
+  it('joins when remounted for a different channel than the one currently connected', () => {
+    useVoiceStore.setState({ status: 'connected', channelId: 'c1' });
+    renderCallView(channel('c2'));
+
+    expect(mutate).toHaveBeenCalledWith('c2');
   });
 });

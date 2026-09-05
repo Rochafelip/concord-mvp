@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { voiceClient } from '../../services/voiceClient';
+import { useVoiceStore } from '../../stores/voiceStore';
 import type { Channel } from '../../types/channel';
 import { ParticipantList } from './ParticipantList';
 import { useJoinVoiceChannel } from './hooks';
@@ -25,6 +26,10 @@ export function CallView({ channel }: CallViewProps) {
   const navigate = useNavigate();
 
   useEffect(() => {
+    const voiceState = useVoiceStore.getState();
+    if (voiceState.channelId === channel.id && voiceState.status !== 'disconnected') {
+      return;
+    }
     joinVoiceChannel(channel.id);
   }, [channel.id, joinVoiceChannel]);
 
