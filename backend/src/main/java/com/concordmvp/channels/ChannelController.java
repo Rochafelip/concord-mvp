@@ -6,6 +6,7 @@ import com.concordmvp.common.CurrentUser;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -43,6 +44,12 @@ public class ChannelController {
     public ChannelResponse getChannel(@PathVariable UUID channelId) {
         Channel channel = channelService.getChannel(channelId, CurrentUser.id());
         return toResponse(channel);
+    }
+
+    @DeleteMapping("/api/v1/channels/{channelId}")
+    public ResponseEntity<Void> deleteChannel(@PathVariable UUID channelId) {
+        channelService.deleteChannel(channelId, CurrentUser.id());
+        return ResponseEntity.noContent().build();
     }
 
     private ChannelResponse toResponse(Channel channel) {
