@@ -1,10 +1,16 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const createdOscillators: MockOscillator[] = [];
+const createdContexts: WorkingMockAudioContext[] = [];
 
 class MockOscillator {
   frequency = { setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn() };
   connect = vi.fn();
   start = vi.fn();
   stop = vi.fn();
+  constructor() {
+    createdOscillators.push(this);
+  }
 }
 
 class MockGain {
@@ -18,6 +24,9 @@ class WorkingMockAudioContext {
   resume = vi.fn().mockResolvedValue(undefined);
   createOscillator = vi.fn(() => new MockOscillator());
   createGain = vi.fn(() => new MockGain());
+  constructor() {
+    createdContexts.push(this);
+  }
 }
 
 class ThrowingMockAudioContext {
@@ -27,6 +36,11 @@ class ThrowingMockAudioContext {
 }
 
 describe('soundEffects', () => {
+  beforeEach(() => {
+    createdOscillators.length = 0;
+    createdContexts.length = 0;
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.resetModules();
@@ -37,6 +51,10 @@ describe('soundEffects', () => {
     const { playSelfJoin } = await import('./soundEffects');
 
     expect(() => playSelfJoin()).not.toThrow();
+
+    expect(createdOscillators).toHaveLength(2);
+    expect(createdOscillators[0].frequency.setValueAtTime).toHaveBeenCalledWith(440, expect.any(Number));
+    expect(createdOscillators[1].frequency.setValueAtTime).toHaveBeenCalledWith(660, expect.any(Number));
   });
 
   it('playSelfLeave plays two descending tones', async () => {
@@ -44,37 +62,29 @@ describe('soundEffects', () => {
     const { playSelfLeave } = await import('./soundEffects');
 
     expect(() => playSelfLeave()).not.toThrow();
+
+    expect(createdOscillators).toHaveLength(2);
+    expect(createdOscillators[0].frequency.setValueAtTime).toHaveBeenCalledWith(660, expect.any(Number));
+    expect(createdOscillators[1].frequency.setValueAtTime).toHaveBeenCalledWith(440, expect.any(Number));
   });
 
   it('playParticipantJoined plays a single tone', async () => {
-    let created: WorkingMockAudioContext | undefined;
-    class RecordingAudioContext extends WorkingMockAudioContext {
-      constructor() {
-        super();
-        created = this;
-      }
-    }
-    vi.stubGlobal('AudioContext', RecordingAudioContext);
+    vi.stubGlobal('AudioContext', WorkingMockAudioContext);
     const { playParticipantJoined } = await import('./soundEffects');
 
     playParticipantJoined();
 
+    const created = createdContexts.at(-1);
     expect(created?.createOscillator).toHaveBeenCalledTimes(1);
   });
 
   it('playParticipantLeft plays a single tone', async () => {
-    let created: WorkingMockAudioContext | undefined;
-    class RecordingAudioContext extends WorkingMockAudioContext {
-      constructor() {
-        super();
-        created = this;
-      }
-    }
-    vi.stubGlobal('AudioContext', RecordingAudioContext);
+    vi.stubGlobal('AudioContext', WorkingMockAudioContext);
     const { playParticipantLeft } = await import('./soundEffects');
 
     playParticipantLeft();
 
+    const created = createdContexts.at(-1);
     expect(created?.createOscillator).toHaveBeenCalledTimes(1);
   });
 
