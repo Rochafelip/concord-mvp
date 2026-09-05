@@ -1,12 +1,28 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useVoiceStore } from '../stores/voiceStore';
 
-const { roomInstances, MockRoom, micState, cameraState, screenShareState, connectResolvers, mockSend } = vi.hoisted(() => {
+const {
+  roomInstances,
+  MockRoom,
+  micState,
+  cameraState,
+  screenShareState,
+  connectResolvers,
+  mockSend,
+  mockPlaySelfJoin,
+  mockPlaySelfLeave,
+  mockPlayParticipantJoined,
+  mockPlayParticipantLeft,
+} = vi.hoisted(() => {
   const micState = { shouldFail: false };
   const cameraState = { shouldFail: false };
   const screenShareState = { shouldFail: false };
   const connectResolvers: Array<() => void> = [];
   const mockSend = vi.fn();
+  const mockPlaySelfJoin = vi.fn();
+  const mockPlaySelfLeave = vi.fn();
+  const mockPlayParticipantJoined = vi.fn();
+  const mockPlayParticipantLeft = vi.fn();
 
   class MockRoom {
     connect = vi.fn(() => new Promise<void>((resolve) => connectResolvers.push(resolve)));
@@ -49,7 +65,19 @@ const { roomInstances, MockRoom, micState, cameraState, screenShareState, connec
     }
   }
   const roomInstances: MockRoom[] = [];
-  return { roomInstances, MockRoom, micState, cameraState, screenShareState, connectResolvers, mockSend };
+  return {
+    roomInstances,
+    MockRoom,
+    micState,
+    cameraState,
+    screenShareState,
+    connectResolvers,
+    mockSend,
+    mockPlaySelfJoin,
+    mockPlaySelfLeave,
+    mockPlayParticipantJoined,
+    mockPlayParticipantLeft,
+  };
 });
 
 vi.mock('livekit-client', () => ({
@@ -71,6 +99,13 @@ vi.mock('livekit-client', () => ({
 
 vi.mock('./websocketClient', () => ({
   websocketClient: { send: mockSend },
+}));
+
+vi.mock('./soundEffects', () => ({
+  playSelfJoin: mockPlaySelfJoin,
+  playSelfLeave: mockPlaySelfLeave,
+  playParticipantJoined: mockPlayParticipantJoined,
+  playParticipantLeft: mockPlayParticipantLeft,
 }));
 
 // Imported after the mock so voiceClient's module-level `new Room()` calls use MockRoom.
@@ -97,6 +132,10 @@ describe('voiceClient', () => {
     cameraState.shouldFail = false;
     screenShareState.shouldFail = false;
     mockSend.mockClear();
+    mockPlaySelfJoin.mockClear();
+    mockPlaySelfLeave.mockClear();
+    mockPlayParticipantJoined.mockClear();
+    mockPlayParticipantLeft.mockClear();
     useVoiceStore.setState({ status: 'disconnected', channelId: null, participants: [], error: null, isDeafened: false });
   });
 
@@ -616,6 +655,39 @@ describe('voiceClient', () => {
         type: 'VOICE_PRESENCE_UPDATE',
         payload: { channelId: 'channel-2', muted: false, cameraOn: false, screenSharing: false, speaking: false },
       }]);
+    });
+  });
+
+  describe('sound notifications', () => {
+    it('plays a self-join sound after connecting', async () => {
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+
+      expect(mockPlaySelfJoin).toHaveBeenCalledTimes(1);
+    });
+
+    it('plays a self-leave sound when disconnect() is called explicitly', async () => {
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+      mockPlaySelfJoin.mockClear();
+
+      voiceClient.disconnect();
+
+      expect(mockPlaySelfLeave).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not play a self-leave sound when disconnect() is called without an active connection', () => {
+      voiceClient.disconnect();
+
+      expect(mockPlaySelfLeave).not.toHaveBeenCalled();
+    });
+
+    it('plays self-join for the new channel but not self-leave for the old one when switching channels', async () => {
+      await connectVoice('channel-1', 'token-a', 'wss://example.test/livekit');
+      mockPlaySelfJoin.mockClear();
+
+      await connectVoice('channel-2', 'token-b', 'wss://example.test/livekit');
+
+      expect(mockPlaySelfLeave).not.toHaveBeenCalled();
+      expect(mockPlaySelfJoin).toHaveBeenCalledTimes(1);
     });
   });
 });

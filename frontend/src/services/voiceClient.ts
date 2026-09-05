@@ -1,5 +1,6 @@
 import { Room, RoomEvent, Track, type LocalParticipant, type Participant, type RemoteTrack } from 'livekit-client';
 import { websocketClient } from './websocketClient';
+import * as soundEffects from './soundEffects';
 import { useVoiceStore } from '../stores/voiceStore';
 import type { VoiceParticipant } from '../types/voice';
 
@@ -32,8 +33,10 @@ class VoiceClient {
   async connect(channelId: string, token: string, url: string): Promise<void> {
     if (this.room) {
       // disconnect() also bumps connectGeneration, invalidating any older in-flight connect()
-      // still running — this call's own generation is captured AFTER that, below.
-      this.disconnect();
+      // still running — this call's own generation is captured AFTER that, below. silent: true
+      // since this is an internal teardown ahead of the new connection below, not a real "leave"
+      // — playSelfLeave() must not fire for it (only the explicit-disconnect path plays that).
+      this.disconnect({ silent: true });
     }
     const generation = ++this.connectGeneration;
     this.currentChannelId = channelId;
@@ -80,10 +83,11 @@ class VoiceClient {
     }
 
     useVoiceStore.getState().setStatus('connected', channelId);
+    soundEffects.playSelfJoin();
     this.syncParticipants();
   }
 
-  disconnect(): void {
+  disconnect(options: { silent?: boolean } = {}): void {
     this.connectGeneration++;
     if (this.room) {
       abandonRoom(this.room);
@@ -91,6 +95,9 @@ class VoiceClient {
     this.room = null;
     if (this.currentChannelId) {
       websocketClient.send({ type: 'VOICE_PRESENCE_LEAVE', payload: {} });
+      if (!options.silent) {
+        soundEffects.playSelfLeave();
+      }
     }
     this.currentChannelId = null;
     this.lastReportedPresence = null;
