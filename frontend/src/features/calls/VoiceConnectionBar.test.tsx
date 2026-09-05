@@ -1,16 +1,21 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { voiceClient } from '../../services/voiceClient';
+import { useVoiceStore } from '../../stores/voiceStore';
 import type { Channel } from '../../types/channel';
 import type { Server } from '../../types/server';
-import { useVoiceStore } from '../../stores/voiceStore';
 import * as channelsApi from '../channels/api';
 import * as serversApi from '../servers/api';
 import { VoiceConnectionBar } from './VoiceConnectionBar';
 
 vi.mock('../channels/api');
 vi.mock('../servers/api');
+vi.mock('../../services/voiceClient', () => ({
+  voiceClient: { disconnect: vi.fn() },
+}));
 
 const channel: Channel = {
   id: 'c1',
@@ -44,6 +49,7 @@ describe('VoiceConnectionBar', () => {
   beforeEach(() => {
     vi.mocked(channelsApi.getChannel).mockResolvedValue(channel);
     vi.mocked(serversApi.getServer).mockResolvedValue(server);
+    vi.mocked(voiceClient.disconnect).mockClear();
     useVoiceStore.setState({ status: 'disconnected', channelId: null, participants: [], error: null });
   });
 
@@ -67,5 +73,16 @@ describe('VoiceConnectionBar', () => {
     const link = screen.getByRole('link', { name: /lobby/ });
     expect(link).toHaveTextContent('Alpha');
     expect(link).toHaveAttribute('href', '/app/servers/s1/channels/c1');
+  });
+
+  it('disconnects the call when Leave is clicked, without navigating', async () => {
+    const user = userEvent.setup();
+    useVoiceStore.setState({ status: 'connected', channelId: 'c1' });
+    renderBar();
+
+    await screen.findByText('Alpha');
+    await user.click(screen.getByRole('button', { name: 'Leave' }));
+
+    expect(voiceClient.disconnect).toHaveBeenCalledTimes(1);
   });
 });
