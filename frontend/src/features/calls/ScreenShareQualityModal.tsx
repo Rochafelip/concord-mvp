@@ -1,33 +1,40 @@
 import { useState } from 'react';
 import { Button } from '../../components/Button';
 import { Modal } from '../../components/Modal';
-import type { ScreenShareQuality } from '../../types/voice';
-import { getLastScreenShareQuality, setLastScreenShareQuality } from './screenShareQuality';
+import type { ScreenShareOptions, ScreenShareQuality } from '../../types/voice';
+import {
+  getLastScreenShareAudioPreference,
+  getLastScreenShareQuality,
+  setLastScreenShareAudioPreference,
+  setLastScreenShareQuality,
+} from './screenShareQuality';
 
 interface ScreenShareQualityModalProps {
   open: boolean;
   onClose: () => void;
-  onConfirm: (quality: ScreenShareQuality) => void;
+  onConfirm: (options: ScreenShareOptions) => void;
 }
 
 /**
  * Shown before a screen share actually starts (see ParticipantTile), never while stopping one.
  * Mirrors CreateChannelModal's shape: shared Modal shell, a radio fieldset, Cancel/confirm
- * buttons. The last choice is read once as React state's lazy initializer and only written back
- * to storage on confirm, so canceling never overwrites a previously remembered preference.
+ * buttons. Both choices are read once as React state's lazy initializer and only written back to
+ * storage on confirm, so canceling never overwrites a previously remembered preference.
  */
 export function ScreenShareQualityModal({ open, onClose, onConfirm }: ScreenShareQualityModalProps) {
   const [quality, setQuality] = useState<ScreenShareQuality>(getLastScreenShareQuality);
+  const [withAudio, setWithAudio] = useState<boolean>(getLastScreenShareAudioPreference);
 
   function handleConfirm() {
     setLastScreenShareQuality(quality);
-    onConfirm(quality);
+    setLastScreenShareAudioPreference(withAudio);
+    onConfirm({ quality, withAudio });
   }
 
   return (
     <Modal open={open} onClose={onClose}>
       <div className="w-64 space-y-4">
-        <h2 className="text-lg font-semibold text-gray-900">Choose share quality</h2>
+        <h2 className="text-lg font-semibold text-gray-900">Share your screen</h2>
 
         <fieldset className="space-y-1">
           <legend className="text-sm font-medium text-gray-700">Quality</legend>
@@ -52,6 +59,11 @@ export function ScreenShareQualityModal({ open, onClose, onConfirm }: ScreenShar
             FHD (1080p)
           </label>
         </fieldset>
+
+        <label className="flex items-center gap-2 text-sm text-gray-700">
+          <input type="checkbox" checked={withAudio} onChange={(event) => setWithAudio(event.target.checked)} />
+          Share system/tab audio
+        </label>
 
         <div className="flex justify-end gap-2">
           <Button type="button" variant="secondary" onClick={onClose}>
