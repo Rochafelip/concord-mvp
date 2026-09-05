@@ -2,16 +2,20 @@ package com.concordmvp.servers;
 
 import com.concordmvp.channels.Channel;
 import com.concordmvp.channels.ChannelRepository;
+import com.concordmvp.channels.ChannelType;
 import com.concordmvp.common.exception.BadRequestException;
 import com.concordmvp.common.exception.ForbiddenException;
 import com.concordmvp.common.exception.ResourceNotFoundException;
 import com.concordmvp.messages.MessageRepository;
+import com.concordmvp.messages.MessageService;
 import com.concordmvp.realtime.RealtimeEventPublisher;
 import com.concordmvp.realtime.WsEvent;
 import com.concordmvp.realtime.WsEventType;
 import com.concordmvp.servers.dto.ServerDeletedPayload;
 import com.concordmvp.servers.dto.ServerMemberEventPayload;
 import com.concordmvp.servers.dto.ServerOwnerChangePayload;
+import com.concordmvp.users.User;
+import com.concordmvp.users.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,6 +41,8 @@ public class ServerService {
     private final ServerInviteRepository serverInviteRepository;
     private final ChannelRepository channelRepository;
     private final MessageRepository messageRepository;
+    private final MessageService messageService;
+    private final UserRepository userRepository;
     private final RealtimeEventPublisher realtimeEventPublisher;
     private final SecureRandom secureRandom = new SecureRandom();
 
@@ -45,12 +51,16 @@ public class ServerService {
                           ServerInviteRepository serverInviteRepository,
                           ChannelRepository channelRepository,
                           MessageRepository messageRepository,
+                          MessageService messageService,
+                          UserRepository userRepository,
                           RealtimeEventPublisher realtimeEventPublisher) {
         this.serverRepository = serverRepository;
         this.serverMemberRepository = serverMemberRepository;
         this.serverInviteRepository = serverInviteRepository;
         this.channelRepository = channelRepository;
         this.messageRepository = messageRepository;
+        this.messageService = messageService;
+        this.userRepository = userRepository;
         this.realtimeEventPublisher = realtimeEventPublisher;
     }
 
@@ -65,6 +75,17 @@ public class ServerService {
         ownerMembership.setServerId(saved.getId());
         ownerMembership.setUserId(ownerId);
         serverMemberRepository.save(ownerMembership);
+
+        Channel onboardingChannel = new Channel();
+        onboardingChannel.setServerId(saved.getId());
+        onboardingChannel.setName("onboarding");
+        onboardingChannel.setType(ChannelType.ONBOARDING);
+        Channel savedOnboardingChannel = channelRepository.save(onboardingChannel);
+
+        User owner = userRepository.findById(ownerId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + ownerId));
+        messageService.postSystemMessage(savedOnboardingChannel.getId(), saved.getId(),
+                owner.getDisplayName() + " entrou no servidor");
 
         return saved;
     }
@@ -107,6 +128,13 @@ public class ServerService {
         Set<UUID> recipients = currentMemberIds(serverId);
         realtimeEventPublisher.broadcast(recipients,
                 new WsEvent(WsEventType.SERVER_MEMBER_JOIN, new ServerMemberEventPayload(serverId, userId)));
+
+        Channel onboardingChannel = channelRepository.findByServerIdAndType(serverId, ChannelType.ONBOARDING)
+                .orElseThrow(() -> new IllegalStateException("Server " + serverId + " has no onboarding channel"));
+        User joiningUser = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
+        messageService.postSystemMessage(onboardingChannel.getId(), serverId,
+                joiningUser.getDisplayName() + " entrou no servidor");
 
         return server;
     }

@@ -2,15 +2,19 @@ package com.concordmvp.servers;
 
 import com.concordmvp.channels.Channel;
 import com.concordmvp.channels.ChannelRepository;
+import com.concordmvp.channels.ChannelType;
 import com.concordmvp.common.exception.BadRequestException;
 import com.concordmvp.common.exception.ForbiddenException;
 import com.concordmvp.common.exception.ResourceNotFoundException;
 import com.concordmvp.messages.MessageRepository;
+import com.concordmvp.messages.MessageService;
 import com.concordmvp.realtime.RealtimeEventPublisher;
 import com.concordmvp.realtime.WsEvent;
 import com.concordmvp.realtime.WsEventType;
 import com.concordmvp.servers.dto.ServerMemberEventPayload;
 import com.concordmvp.servers.dto.ServerOwnerChangePayload;
+import com.concordmvp.users.User;
+import com.concordmvp.users.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -56,13 +60,20 @@ class ServerServiceTest {
     private MessageRepository messageRepository;
 
     @Mock
+    private MessageService messageService;
+
+    @Mock
+    private UserRepository userRepository;
+
+    @Mock
     private RealtimeEventPublisher realtimeEventPublisher;
 
     private ServerService serverService;
 
     @BeforeEach
     void setUp() {
-        serverService = new ServerService(serverRepository, serverMemberRepository, serverInviteRepository, channelRepository, messageRepository, realtimeEventPublisher);
+        serverService = new ServerService(serverRepository, serverMemberRepository, serverInviteRepository,
+                channelRepository, messageRepository, messageService, userRepository, realtimeEventPublisher);
     }
 
     /** Mimics JPA assigning an id on save/persist for a {@link Server} that doesn't already have one. */
@@ -87,6 +98,17 @@ class ServerServiceTest {
         });
     }
 
+    /** Mimics JPA assigning an id on save/persist for a {@link Channel} that doesn't already have one. */
+    private void stubChannelSaveAssignsId() {
+        when(channelRepository.save(any(Channel.class))).thenAnswer(invocation -> {
+            Channel channel = invocation.getArgument(0);
+            if (channel.getId() == null) {
+                channel.setId(UUID.randomUUID());
+            }
+            return channel;
+        });
+    }
+
     private Server server(UUID id, UUID ownerId) {
         Server server = new Server();
         server.setId(id);
@@ -103,13 +125,25 @@ class ServerServiceTest {
         return member;
     }
 
+    private User user(UUID id, String displayName) {
+        User user = new User();
+        user.setId(id);
+        user.setUsername(displayName.toLowerCase());
+        user.setDisplayName(displayName);
+        user.setEmail(displayName.toLowerCase() + "@example.com");
+        user.setPasswordHash("hash");
+        return user;
+    }
+
     // --- createServer ---
 
     @Test
-    void createServer_savesServerAndOwnerMembership() {
+    void createServer_savesServerAndOwnerMembership_andCreatesOnboardingChannelWithJoinMessage() {
         UUID ownerId = UUID.randomUUID();
         stubServerSaveAssignsId();
         stubMemberSaveAssignsId();
+        stubChannelSaveAssignsId();
+        when(userRepository.findById(ownerId)).thenReturn(Optional.of(user(ownerId, "Alice")));
 
         Server result = serverService.createServer("My Server", ownerId);
 
@@ -122,6 +156,15 @@ class ServerServiceTest {
         verify(serverMemberRepository).save(memberCaptor.capture());
         assertThat(memberCaptor.getValue().getUserId()).isEqualTo(ownerId);
         assertThat(memberCaptor.getValue().getServerId()).isEqualTo(result.getId());
+
+        ArgumentCaptor<Channel> channelCaptor = ArgumentCaptor.forClass(Channel.class);
+        verify(channelRepository).save(channelCaptor.capture());
+        assertThat(channelCaptor.getValue().getServerId()).isEqualTo(result.getId());
+        assertThat(channelCaptor.getValue().getName()).isEqualTo("onboarding");
+        assertThat(channelCaptor.getValue().getType()).isEqualTo(ChannelType.ONBOARDING);
+
+        verify(messageService).postSystemMessage(channelCaptor.getValue().getId(), result.getId(),
+                "Alice entrou no servidor");
     }
 
     // --- getServer / listMembers access control ---
@@ -409,11 +452,20 @@ class ServerServiceTest {
         invite.setCode("code123");
         Server server = server(serverId, ownerId);
 
+        Channel onboardingChannel = new Channel();
+        onboardingChannel.setId(UUID.randomUUID());
+        onboardingChannel.setServerId(serverId);
+        onboardingChannel.setName("onboarding");
+        onboardingChannel.setType(ChannelType.ONBOARDING);
+
         when(serverInviteRepository.findByCode("code123")).thenReturn(Optional.of(invite));
         when(serverRepository.findById(serverId)).thenReturn(Optional.of(server));
         when(serverMemberRepository.existsByServerIdAndUserId(serverId, userId)).thenReturn(false);
         when(serverMemberRepository.findByServerId(serverId))
                 .thenReturn(List.of(member(serverId, ownerId), member(serverId, userId)));
+        when(channelRepository.findByServerIdAndType(serverId, ChannelType.ONBOARDING))
+                .thenReturn(Optional.of(onboardingChannel));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user(userId, "Newcomer")));
         stubMemberSaveAssignsId();
 
         Server result = serverService.joinServer("code123", userId);
@@ -429,5 +481,37 @@ class ServerServiceTest {
         verify(realtimeEventPublisher).broadcast(eq(Set.of(ownerId, userId)), eventCaptor.capture());
         assertThat(eventCaptor.getValue().type()).isEqualTo(WsEventType.SERVER_MEMBER_JOIN);
         assertThat(eventCaptor.getValue().payload()).isEqualTo(new ServerMemberEventPayload(serverId, userId));
+    }
+
+    @Test
+    void joinServer_fresh_postsOnboardingJoinMessage() {
+        UUID serverId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        UUID onboardingChannelId = UUID.randomUUID();
+        ServerInvite invite = new ServerInvite();
+        invite.setId(UUID.randomUUID());
+        invite.setServerId(serverId);
+        invite.setCode("code123");
+        Server server = server(serverId, ownerId);
+        Channel onboardingChannel = new Channel();
+        onboardingChannel.setId(onboardingChannelId);
+        onboardingChannel.setServerId(serverId);
+        onboardingChannel.setName("onboarding");
+        onboardingChannel.setType(ChannelType.ONBOARDING);
+
+        when(serverInviteRepository.findByCode("code123")).thenReturn(Optional.of(invite));
+        when(serverRepository.findById(serverId)).thenReturn(Optional.of(server));
+        when(serverMemberRepository.existsByServerIdAndUserId(serverId, userId)).thenReturn(false);
+        when(serverMemberRepository.findByServerId(serverId))
+                .thenReturn(List.of(member(serverId, ownerId), member(serverId, userId)));
+        when(channelRepository.findByServerIdAndType(serverId, ChannelType.ONBOARDING))
+                .thenReturn(Optional.of(onboardingChannel));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user(userId, "Bob")));
+        stubMemberSaveAssignsId();
+
+        serverService.joinServer("code123", userId);
+
+        verify(messageService).postSystemMessage(onboardingChannelId, serverId, "Bob entrou no servidor");
     }
 }
