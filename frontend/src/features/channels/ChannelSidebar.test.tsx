@@ -4,13 +4,16 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Channel } from '../../types/channel';
 import type { Server } from '../../types/server';
+import type { VoicePresenceEntry } from '../../types/voice';
 import { useAuthStore } from '../auth/authStore';
+import * as callsApi from '../calls/api';
 import * as serversApi from '../servers/api';
 import * as api from './api';
 import { ChannelSidebar } from './ChannelSidebar';
 
 vi.mock('./api');
 vi.mock('../servers/api');
+vi.mock('../calls/api');
 
 const server: Server = {
   id: 's1',
@@ -46,6 +49,7 @@ describe('ChannelSidebar', () => {
     vi.mocked(serversApi.getServer).mockResolvedValue(server);
     vi.mocked(serversApi.getServerMembers).mockResolvedValue([]);
     vi.mocked(serversApi.getInvite).mockResolvedValue({ code: 'ABC' });
+    vi.mocked(callsApi.getVoicePresence).mockResolvedValue([]);
   });
 
   it('lists channels grouped into Text/Voice sections', async () => {
@@ -81,5 +85,72 @@ describe('ChannelSidebar', () => {
 
     await screen.findByText('Alpha');
     expect(screen.queryByRole('button', { name: 'Create channel' })).not.toBeInTheDocument();
+  });
+
+  describe('voice channel participant preview', () => {
+    function presence(overrides: Partial<VoicePresenceEntry> = {}): VoicePresenceEntry {
+      return {
+        channelId: 'c2',
+        userId: 'u2',
+        displayName: 'Ana',
+        avatarUrl: null,
+        muted: false,
+        cameraOn: false,
+        screenSharing: false,
+        speaking: false,
+        ...overrides,
+      };
+    }
+
+    beforeEach(() => {
+      useAuthStore.setState({
+        token: 't',
+        user: { id: 'member-1', username: 'm', displayName: 'M', email: 'm@x.com', avatarUrl: null },
+      });
+    });
+
+    it('shows nothing under a voice channel with no one in it', async () => {
+      renderSidebar();
+
+      await screen.findByRole('link', { name: /lobby/ });
+      expect(screen.queryByText('Ana')).not.toBeInTheDocument();
+    });
+
+    it('shows a row with the display name for each participant in that voice channel', async () => {
+      vi.mocked(callsApi.getVoicePresence).mockResolvedValue([presence()]);
+      renderSidebar();
+
+      expect(await screen.findByText('Ana')).toBeInTheDocument();
+    });
+
+    it('shows no status icons for a participant with every flag false', async () => {
+      vi.mocked(callsApi.getVoicePresence).mockResolvedValue([presence()]);
+      renderSidebar();
+
+      await screen.findByText('Ana');
+      expect(screen.queryByLabelText('Muted')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Camera on')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Sharing screen')).not.toBeInTheDocument();
+    });
+
+    it('shows the muted, camera, and screen-share icons matching that participant\'s state', async () => {
+      vi.mocked(callsApi.getVoicePresence).mockResolvedValue([
+        presence({ muted: true, cameraOn: true, screenSharing: true }),
+      ]);
+      renderSidebar();
+
+      await screen.findByText('Ana');
+      expect(screen.getByLabelText('Muted')).toBeInTheDocument();
+      expect(screen.getByLabelText('Camera on')).toBeInTheDocument();
+      expect(screen.getByLabelText('Sharing screen')).toBeInTheDocument();
+    });
+
+    it('only lists a participant under the voice channel they are actually in', async () => {
+      vi.mocked(callsApi.getVoicePresence).mockResolvedValue([presence({ channelId: 'some-other-channel' })]);
+      renderSidebar();
+
+      await screen.findByRole('link', { name: /lobby/ });
+      expect(screen.queryByText('Ana')).not.toBeInTheDocument();
+    });
   });
 });

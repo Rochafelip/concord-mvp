@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { Avatar } from '../../components/Avatar';
 import { VoiceConnectionBar } from '../calls/VoiceConnectionBar';
+import { useVoicePresence } from '../calls/hooks';
 import { useIsServerOwner, useServer } from '../servers/hooks';
 import { ServerSettingsPanel } from '../servers/ServerSettingsPanel';
 import { CreateChannelModal } from './CreateChannelModal';
@@ -21,6 +23,7 @@ export function ChannelSidebar() {
   const { serverId, channelId } = useParams<{ serverId: string; channelId?: string }>();
   const { data: server } = useServer(serverId);
   const { data: channels } = useChannels(serverId);
+  const { data: voicePresence } = useVoicePresence(serverId);
   const isOwner = useIsServerOwner(serverId);
   const [createOpen, setCreateOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -78,18 +81,40 @@ export function ChannelSidebar() {
         <div>
           <h3 className="px-1 text-xs font-semibold uppercase text-gray-500">Voice channels</h3>
           <ul className="mt-1 space-y-0.5">
-            {voiceChannels.map((channel) => (
-              <li key={channel.id}>
-                <Link
-                  to={`/app/servers/${serverId}/channels/${channel.id}`}
-                  aria-current={channel.id === channelId ? 'page' : undefined}
-                  className={channelLinkClassName(channel.id === channelId)}
-                >
-                  <span aria-hidden="true">🔊</span>
-                  {channel.name}
-                </Link>
-              </li>
-            ))}
+            {voiceChannels.map((channel) => {
+              const participants = (voicePresence ?? []).filter((entry) => entry.channelId === channel.id);
+              return (
+                <li key={channel.id}>
+                  <Link
+                    to={`/app/servers/${serverId}/channels/${channel.id}`}
+                    aria-current={channel.id === channelId ? 'page' : undefined}
+                    className={channelLinkClassName(channel.id === channelId)}
+                  >
+                    <span aria-hidden="true">🔊</span>
+                    {channel.name}
+                  </Link>
+                  {participants.length > 0 && (
+                    <ul className="ml-5 mt-0.5 space-y-0.5">
+                      {participants.map((participant) => (
+                        <li key={participant.userId} className="flex items-center gap-1.5 px-1 py-0.5">
+                          <Avatar
+                            displayName={participant.displayName}
+                            avatarUrl={participant.avatarUrl}
+                            className={`h-5 w-5 flex-shrink-0 text-xs ${participant.speaking ? 'ring-2 ring-green-500' : ''}`}
+                          />
+                          <span className="truncate text-xs text-gray-600">{participant.displayName}</span>
+                          <span className="ml-auto flex flex-shrink-0 gap-0.5 text-xs">
+                            {participant.muted && <span aria-label="Muted">🔇</span>}
+                            {participant.cameraOn && <span aria-label="Camera on">📹</span>}
+                            {participant.screenSharing && <span aria-label="Sharing screen">🖥️</span>}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </div>
       </div>
