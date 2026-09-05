@@ -8,9 +8,11 @@ interface VoiceState {
   channelId: string | null;
   participants: VoiceParticipant[];
   error: string | null;
+  isDeafened: boolean;
   setStatus: (status: VoiceConnectionStatus, channelId: string | null) => void;
   setParticipants: (participants: VoiceParticipant[]) => void;
   setError: (error: string | null) => void;
+  setDeafened: (value: boolean) => void;
   reset: () => void;
 }
 
@@ -24,8 +26,10 @@ export const useVoiceStore = create<VoiceState>((set) => ({
   channelId: null,
   participants: [],
   error: null,
+  isDeafened: false,
   setStatus: (status, channelId) => set({ status, channelId }),
   setParticipants: (participants) => set({ participants }),
   setError: (error) => set({ error }),
-  reset: () => set({ status: 'disconnected', channelId: null, participants: [], error: null }),
+  setDeafened: (value) => set({ isDeafened: value }),
+  reset: () => set({ status: 'disconnected', channelId: null, participants: [], error: null, isDeafened: false }),
 }));
