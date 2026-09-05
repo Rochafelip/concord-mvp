@@ -61,7 +61,7 @@ const {
         this.localParticipant.isCameraEnabled = enabled;
         return Promise.resolve(undefined);
       }),
-      setScreenShareEnabled: vi.fn((enabled: boolean, _captureOptions?: Record<string, unknown>) => {
+      setScreenShareEnabled: vi.fn((enabled: boolean) => {
         if (screenShareState.shouldFail) {
           return Promise.reject(new Error('Permission denied'));
         }
@@ -298,8 +298,11 @@ describe('voiceClient', () => {
     expect(room.localParticipant.setScreenShareEnabled).toHaveBeenLastCalledWith(true, {
       resolution: { width: 1280, height: 720 },
     });
-    const [, captureOptions] = vi.mocked(room.localParticipant.setScreenShareEnabled).mock.calls.at(-1)!;
-    expect(captureOptions).not.toHaveProperty('audio');
+    const lastCall = vi.mocked(room.localParticipant.setScreenShareEnabled).mock.calls.at(-1) as [
+      boolean,
+      Record<string, unknown>?,
+    ];
+    expect(lastCall[1]).not.toHaveProperty('audio');
   });
 
   it('starts screen sharing with an FHD resolution constraint when a quality is given', async () => {
