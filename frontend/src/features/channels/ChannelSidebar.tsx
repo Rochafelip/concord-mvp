@@ -1,3 +1,4 @@
+import { MicOff, Plus, Settings, Trash2, Video, MonitorUp } from 'lucide-react';
 import { useState, type MouseEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Avatar } from '../../components/Avatar';
@@ -10,7 +11,7 @@ import { useChannels, useDeleteChannel } from './hooks';
 
 function channelLinkClassName(isSelected: boolean) {
   return `flex items-center gap-1.5 rounded px-2 py-1 text-sm ${
-    isSelected ? 'bg-indigo-100 text-indigo-900' : 'text-gray-700 hover:bg-gray-200'
+    isSelected ? 'bg-brand/10 text-brand' : 'text-muted hover:bg-border/40'
   }`;
 }
 
@@ -44,22 +45,22 @@ export function ChannelSidebar() {
   const voiceChannels = (channels ?? []).filter((channel) => channel.type === 'VOICE');
 
   return (
-    <aside className="flex w-56 flex-shrink-0 flex-col border-r border-gray-200 bg-gray-50">
-      <div className="flex items-center justify-between border-b border-gray-200 px-3 py-3">
-        <span className="truncate font-semibold text-gray-900">{server?.name ?? 'Loading…'}</span>
+    <aside className="flex w-56 flex-shrink-0 flex-col border-r bg-sidebar">
+      <div className="flex items-center justify-between border-b px-3 py-3">
+        <span className="truncate font-semibold text-ink">{server?.name ?? 'Loading…'}</span>
         <button
           type="button"
           aria-label="Server settings"
           onClick={() => setSettingsOpen(true)}
-          className="flex-shrink-0 text-gray-500 hover:text-gray-900"
+          className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded text-muted hover:text-ink"
         >
-          ⚙
+          <Settings size={18} aria-hidden="true" />
         </button>
       </div>
 
       <div className="flex-1 space-y-4 overflow-y-auto px-2 py-3">
         <div>
-          <h3 className="px-1 text-xs font-semibold uppercase text-gray-500">Onboarding</h3>
+          <h3 className="px-1 text-xs font-semibold uppercase text-muted">Onboarding</h3>
           <ul className="mt-1 space-y-0.5">
             {onboardingChannels.map((channel) => (
               <li key={channel.id}>
@@ -78,15 +79,15 @@ export function ChannelSidebar() {
 
         <div>
           <div className="flex items-center justify-between px-1">
-            <h3 className="text-xs font-semibold uppercase text-gray-500">Text channels</h3>
+            <h3 className="text-xs font-semibold uppercase text-muted">Text channels</h3>
             {isOwner && (
               <button
                 type="button"
                 aria-label="Create channel"
                 onClick={() => setCreateOpen(true)}
-                className="text-lg leading-none text-gray-500 hover:text-gray-900"
+                className="flex h-8 w-8 items-center justify-center rounded text-muted hover:text-ink"
               >
-                +
+                <Plus size={16} aria-hidden="true" />
               </button>
             )}
           </div>
@@ -106,9 +107,9 @@ export function ChannelSidebar() {
                     type="button"
                     aria-label="Delete channel"
                     onClick={(event) => handleDeleteChannel(event, channel)}
-                    className="flex-shrink-0 px-1 text-gray-400 opacity-0 hover:text-red-600 group-hover:opacity-100"
+                    className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded text-muted opacity-0 hover:text-danger focus-visible:opacity-100 group-hover:opacity-100"
                   >
-                    🗑
+                    <Trash2 size={16} aria-hidden="true" />
                   </button>
                 )}
               </li>
@@ -117,7 +118,7 @@ export function ChannelSidebar() {
         </div>
 
         <div>
-          <h3 className="px-1 text-xs font-semibold uppercase text-gray-500">Voice channels</h3>
+          <h3 className="px-1 text-xs font-semibold uppercase text-muted">Voice channels</h3>
           <ul className="mt-1 space-y-0.5">
             {voiceChannels.map((channel) => {
               const participants = (voicePresence ?? []).filter((entry) => entry.channelId === channel.id);
@@ -137,9 +138,9 @@ export function ChannelSidebar() {
                         type="button"
                         aria-label="Delete channel"
                         onClick={(event) => handleDeleteChannel(event, channel)}
-                        className="flex-shrink-0 px-1 text-gray-400 opacity-0 hover:text-red-600 group-hover:opacity-100"
+                        className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded text-muted opacity-0 hover:text-danger focus-visible:opacity-100 group-hover:opacity-100"
                       >
-                        🗑
+                        <Trash2 size={16} aria-hidden="true" />
                       </button>
                     )}
                   </div>
@@ -150,13 +151,13 @@ export function ChannelSidebar() {
                           <Avatar
                             displayName={participant.displayName}
                             avatarUrl={participant.avatarUrl}
-                            className={`h-5 w-5 flex-shrink-0 text-xs ${participant.speaking ? 'ring-2 ring-green-500' : ''}`}
+                            className={`h-5 w-5 flex-shrink-0 text-xs ${participant.speaking ? 'ring-2 ring-success' : ''}`}
                           />
-                          <span className="truncate text-xs text-gray-600">{participant.displayName}</span>
-                          <span className="ml-auto flex flex-shrink-0 gap-0.5 text-xs">
-                            {participant.muted && <span aria-label="Muted">🔇</span>}
-                            {participant.cameraOn && <span aria-label="Camera on">📹</span>}
-                            {participant.screenSharing && <span aria-label="Sharing screen">🖥️</span>}
+                          <span className="truncate text-xs text-muted">{participant.displayName}</span>
+                          <span className="ml-auto flex flex-shrink-0 items-center gap-1 text-muted">
+                            {participant.muted && <MicOff aria-label="Muted" size={14} />}
+                            {participant.cameraOn && <Video aria-label="Camera on" size={14} />}
+                            {participant.screenSharing && <MonitorUp aria-label="Sharing screen" size={14} />}
                           </span>
                         </li>
                       ))}
