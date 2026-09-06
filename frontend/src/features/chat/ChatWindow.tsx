@@ -15,8 +15,8 @@ export function ChatWindow() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex-shrink-0 border-b border-gray-200 px-4 py-3">
-        <span className="font-semibold text-gray-900">
+      <div className="flex-shrink-0 border-b bg-surface px-4 py-3">
+        <span className="font-semibold text-ink">
           {channel ? `# ${channel.name}` : 'Loading…'}
         </span>
       </div>
@@ -26,7 +26,7 @@ export function ChatWindow() {
           draft text would otherwise carry over into the newly selected channel. */}
       <MessageList key={channelId} channelId={channelId} />
       {channel?.type === 'ONBOARDING' ? (
-        <p className="border-t border-gray-200 p-3 text-center text-xs text-gray-500">
+        <p className="border-t p-3 text-center text-xs text-muted">
           This channel is read-only.
         </p>
       ) : (
