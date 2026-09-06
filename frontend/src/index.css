@@ -2,6 +2,40 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --color-brand: 88 101 242;
+  --color-brand-hover: 114 137 218;
+  --color-bg-app: 245 245 250;
+  --color-bg-rail: 237 237 245;
+  --color-bg-sidebar: 232 233 242;
+  --color-bg-surface: 255 255 255;
+  --color-text-primary: 35 36 58;
+  --color-text-secondary: 107 111 133;
+  --color-border: 217 219 231;
+  --color-success: 35 165 89;
+  --color-warning: 240 178 50;
+  --color-danger: 242 63 66;
+  --color-danger-hover: 217 56 64;
+}
+
+:root[data-theme='dark'] {
+  --color-brand: 88 101 242;
+  --color-brand-hover: 71 82 196;
+  --color-bg-app: 49 51 56;
+  --color-bg-rail: 30 31 34;
+  --color-bg-sidebar: 43 45 49;
+  --color-bg-surface: 56 58 64;
+  --color-text-primary: 242 243 245;
+  --color-text-secondary: 148 155 164;
+  --color-border: 63 65 71;
+  --color-success: 35 165 89;
+  --color-warning: 240 178 50;
+  --color-danger: 242 63 66;
+  --color-danger-hover: 218 55 60;
+}
+
 body {
   margin: 0;
+  background-color: rgb(var(--color-bg-app));
+  color: rgb(var(--color-text-primary));
 }
