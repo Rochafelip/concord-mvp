@@ -67,7 +67,7 @@ export function MessageList({ channelId }: MessageListProps) {
   }
 
   if (isPending) {
-    return <div className="p-4 text-gray-500">Loading messages…</div>;
+    return <div className="p-4 text-muted">Loading messages…</div>;
   }
 
   return (
@@ -78,7 +78,7 @@ export function MessageList({ channelId }: MessageListProps) {
             type="button"
             onClick={handleLoadOlder}
             disabled={isFetchingNextPage}
-            className="text-sm text-indigo-600 hover:underline disabled:text-gray-400"
+            className="text-sm text-brand hover:underline disabled:text-muted"
           >
             {isFetchingNextPage ? 'Loading…' : 'Load older messages'}
           </button>
@@ -90,14 +90,14 @@ export function MessageList({ channelId }: MessageListProps) {
           <Avatar displayName={message.author.displayName} avatarUrl={message.author.avatarUrl} />
           <div className="min-w-0">
             <div className="flex items-baseline gap-2">
-              <span className="text-sm font-semibold text-gray-900">
+              <span className="text-sm font-semibold text-ink">
                 {message.author.displayName}
               </span>
-              <span className="text-xs text-gray-400">
+              <span className="text-xs text-muted">
                 {new Date(message.createdAt).toLocaleTimeString()}
               </span>
             </div>
-            <p data-testid="message-content" className="whitespace-pre-wrap text-sm text-gray-800">
+            <p data-testid="message-content" className="whitespace-pre-wrap text-sm text-ink">
               {message.content}
             </p>
           </div>
