@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ConnectionQuality } from 'livekit-client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -11,6 +11,7 @@ vi.mock('../../services/voiceClient', () => ({
     toggleMute: vi.fn(),
     toggleCamera: vi.fn(),
     toggleScreenShare: vi.fn(),
+    setParticipantVolume: vi.fn(),
   },
 }));
 
@@ -24,6 +25,7 @@ function participant(overrides: Partial<VoiceParticipant> = {}): VoiceParticipan
     videoTrack: null,
     screenShareEnabled: false,
     screenShareTrack: null,
+    screenShareHasAudio: false,
     connectionQuality: ConnectionQuality.Unknown,
     ...overrides,
   };
@@ -80,10 +82,11 @@ describe('ParticipantTile', () => {
       vi.mocked(voiceClient.toggleScreenShare).mockClear();
     });
 
-    it('does not render controls for a remote participant, even with onLeave passed', () => {
+    it('does not render the local control bar for a remote participant, even with onLeave passed', () => {
       render(<ParticipantTile participant={participant({ isLocal: false })} onLeave={vi.fn()} />);
 
-      expect(screen.queryByRole('button')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Leave call' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Mute' })).not.toBeInTheDocument();
     });
 
     it('does not render controls for the local participant when onLeave is not passed', () => {
@@ -176,6 +179,32 @@ describe('ParticipantTile', () => {
 
       expect(voiceClient.toggleScreenShare).not.toHaveBeenCalled();
       expect(screen.queryByText('Share your screen')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('remote volume control', () => {
+    beforeEach(() => {
+      vi.mocked(voiceClient.setParticipantVolume).mockClear();
+    });
+
+    it('renders a volume control for a remote participant', () => {
+      render(<ParticipantTile participant={participant({ isLocal: false, identity: 'bob' })} />);
+
+      expect(screen.getByRole('slider', { name: 'Volume for Felipe' })).toBeInTheDocument();
+    });
+
+    it('does not render a volume control for the local participant', () => {
+      render(<ParticipantTile participant={participant({ isLocal: true })} onLeave={vi.fn()} />);
+
+      expect(screen.queryByRole('slider')).not.toBeInTheDocument();
+    });
+
+    it('forwards volume changes to voiceClient.setParticipantVolume for that identity', () => {
+      render(<ParticipantTile participant={participant({ isLocal: false, identity: 'bob' })} />);
+
+      fireEvent.change(screen.getByRole('slider', { name: 'Volume for Felipe' }), { target: { value: '30' } });
+
+      expect(voiceClient.setParticipantVolume).toHaveBeenCalledWith('bob', 0.3);
     });
   });
 });

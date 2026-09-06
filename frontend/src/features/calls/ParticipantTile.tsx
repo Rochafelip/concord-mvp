@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { voiceClient } from '../../services/voiceClient';
 import type { VoiceParticipant } from '../../types/voice';
 import { ScreenShareQualityModal } from './ScreenShareQualityModal';
+import { VolumeControl } from './VolumeControl';
 
 interface ParticipantTileProps {
   participant: VoiceParticipant;
@@ -33,7 +34,7 @@ export function ParticipantTile({ participant, onLeave }: ParticipantTileProps) 
   }, [videoTrack]);
 
   return (
-    <div className="relative flex aspect-video items-center justify-center overflow-hidden rounded bg-gray-800">
+    <div className="group relative flex aspect-video items-center justify-center overflow-hidden rounded bg-gray-800">
       {videoTrack ? (
         <video ref={videoRef} muted autoPlay playsInline className="h-full w-full object-cover" />
       ) : (
@@ -51,6 +52,15 @@ export function ParticipantTile({ participant, onLeave }: ParticipantTileProps) 
         {participant.name}
         {participant.isLocal ? ' (you)' : ''}
       </span>
+
+      {!participant.isLocal && (
+        <div className="absolute right-1 top-1 opacity-0 transition-opacity group-hover:opacity-100">
+          <VolumeControl
+            label={participant.name}
+            onVolumeChange={(volume) => voiceClient.setParticipantVolume(participant.identity, volume)}
+          />
+        </div>
+      )}
 
       {isLocal && (
         <>
