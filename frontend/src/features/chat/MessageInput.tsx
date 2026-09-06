@@ -34,12 +34,14 @@ export function MessageInput({ channelId }: MessageInputProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-1 border-t border-gray-200 p-3">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-1 border-t p-3">
       <div className="flex items-end gap-2">
         <TextInput
           label="Message"
           name="content"
           autoComplete="off"
+          hideLabel
+          pill
           className="flex-1"
           placeholder={isConnected ? 'Message…' : 'Reconnecting…'}
           value={content}
@@ -50,7 +52,7 @@ export function MessageInput({ channelId }: MessageInputProps) {
         </Button>
       </div>
       {!isConnected && (
-        <p className="text-xs text-amber-600">
+        <p className="text-xs text-warning">
           Not connected — reconnecting… messages can&apos;t be sent right now.
         </p>
       )}
