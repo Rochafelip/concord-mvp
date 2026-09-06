@@ -1,3 +1,4 @@
+import { Moon, Sun, X } from 'lucide-react';
 import { Outlet } from 'react-router-dom';
 import { Avatar } from '../components/Avatar';
 import { Button } from '../components/Button';
@@ -7,6 +8,7 @@ import { VoiceConnectionBar } from '../features/calls/VoiceConnectionBar';
 import { useDisconnectVoiceOnLogout } from '../features/calls/hooks';
 import { ServerSidebar } from '../features/servers/ServerSidebar';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
+import { useTheme } from '../hooks/useTheme';
 import { useNotificationStore } from '../stores/notificationStore';
 
 /**
@@ -28,21 +30,30 @@ export function AppShell() {
   useDisconnectVoiceOnLogout();
   const notification = useNotificationStore((state) => state.message);
   const clearNotification = useNotificationStore((state) => state.clear);
+  const { theme, toggle } = useTheme();
 
   return (
-    <div className="flex h-screen flex-col">
-      <header className="flex flex-shrink-0 items-center justify-between border-b border-gray-200 px-4 py-2">
-        <span className="font-semibold text-gray-900">Concord</span>
+    <div className="flex h-screen flex-col bg-app">
+      <header className="flex flex-shrink-0 items-center justify-between border-b bg-surface px-4 py-2">
+        <span className="font-semibold text-ink">Concord</span>
 
         {/* Gated on `token`, not `user`: if the backend is briefly unreachable during boot
             rehydration (network error, not a 401), `token` stays set but `user` never
             populates — the logout button must still be reachable in that case. */}
         {token && (
           <div className="flex items-center gap-3">
+            <button
+              type="button"
+              aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+              onClick={toggle}
+              className="flex h-10 w-10 items-center justify-center rounded text-muted hover:text-ink"
+            >
+              {theme === 'dark' ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
+            </button>
             {user && (
               <>
                 <Avatar displayName={user.displayName} avatarUrl={user.avatarUrl} />
-                <span className="text-sm text-gray-700">{user.displayName}</span>
+                <span className="text-sm text-ink">{user.displayName}</span>
               </>
             )}
             <Button variant="secondary" onClick={logout}>
@@ -61,9 +72,9 @@ export function AppShell() {
             type="button"
             aria-label="Dismiss notification"
             onClick={clearNotification}
-            className="text-red-700 hover:text-red-900"
+            className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded text-danger hover:text-danger-hover"
           >
-            ×
+            <X size={18} aria-hidden="true" />
           </button>
         </div>
       )}
