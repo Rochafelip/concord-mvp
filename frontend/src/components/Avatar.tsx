@@ -20,7 +20,7 @@ export function Avatar({ displayName, avatarUrl, className = '' }: AvatarProps) 
   return (
     <div
       aria-label={displayName}
-      className={`flex h-8 w-8 items-center justify-center rounded-full bg-indigo-600 text-sm font-medium text-white ${className}`}
+      className={`flex h-8 w-8 items-center justify-center rounded-full bg-brand text-sm font-medium text-white ${className}`}
     >
       {initial}
     </div>
