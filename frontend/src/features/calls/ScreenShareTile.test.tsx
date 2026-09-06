@@ -1,8 +1,15 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { ConnectionQuality } from 'livekit-client';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { voiceClient } from '../../services/voiceClient';
 import type { VoiceParticipant } from '../../types/voice';
 import { ScreenShareTile } from './ScreenShareTile';
+
+vi.mock('../../services/voiceClient', () => ({
+  voiceClient: {
+    setScreenShareVolume: vi.fn(),
+  },
+}));
 
 function sharingParticipant(overrides: Partial<VoiceParticipant> = {}): VoiceParticipant {
   const track = { attach: vi.fn(), detach: vi.fn() } as never;
@@ -15,6 +22,7 @@ function sharingParticipant(overrides: Partial<VoiceParticipant> = {}): VoicePar
     videoTrack: null,
     screenShareEnabled: true,
     screenShareTrack: track,
+    screenShareHasAudio: false,
     connectionQuality: ConnectionQuality.Unknown,
     ...overrides,
   };
@@ -54,5 +62,52 @@ describe('ScreenShareTile', () => {
 
     unmount();
     expect(detach).toHaveBeenCalledWith(videoElement);
+  });
+
+  describe('volume control', () => {
+    beforeEach(() => {
+      vi.mocked(voiceClient.setScreenShareVolume).mockClear();
+    });
+
+    it('renders a volume control when the share has audio and the sharer is remote', () => {
+      render(
+        <ScreenShareTile
+          participant={sharingParticipant({ isLocal: false, screenShareHasAudio: true, name: 'Felipe' })}
+        />,
+      );
+
+      expect(screen.getByRole('slider', { name: "Volume for Felipe's screen" })).toBeInTheDocument();
+    });
+
+    it('does not render a volume control when the share has no audio', () => {
+      render(<ScreenShareTile participant={sharingParticipant({ isLocal: false, screenShareHasAudio: false })} />);
+
+      expect(screen.queryByRole('slider')).not.toBeInTheDocument();
+    });
+
+    it('does not render a volume control for your own screen share, even with audio', () => {
+      render(<ScreenShareTile participant={sharingParticipant({ isLocal: true, screenShareHasAudio: true })} />);
+
+      expect(screen.queryByRole('slider')).not.toBeInTheDocument();
+    });
+
+    it('forwards volume changes to voiceClient.setScreenShareVolume for that identity', () => {
+      render(
+        <ScreenShareTile
+          participant={sharingParticipant({
+            isLocal: false,
+            identity: 'bob',
+            screenShareHasAudio: true,
+            name: 'Felipe',
+          })}
+        />,
+      );
+
+      fireEvent.change(screen.getByRole('slider', { name: "Volume for Felipe's screen" }), {
+        target: { value: '65' },
+      });
+
+      expect(voiceClient.setScreenShareVolume).toHaveBeenCalledWith('bob', 0.65);
+    });
   });
 });

@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react';
+import { voiceClient } from '../../services/voiceClient';
 import type { VoiceParticipant } from '../../types/voice';
+import { VolumeControl } from './VolumeControl';
 
 interface ScreenShareTileProps {
   participant: VoiceParticipant;
@@ -29,7 +31,7 @@ export function ScreenShareTile({ participant }: ScreenShareTileProps) {
   }, [screenShareTrack]);
 
   return (
-    <div className="relative col-span-2 flex aspect-video items-center justify-center overflow-hidden rounded bg-gray-900">
+    <div className="group relative col-span-2 flex aspect-video items-center justify-center overflow-hidden rounded bg-gray-900">
       <video ref={videoRef} muted autoPlay playsInline className="h-full w-full object-contain" />
       <span className="absolute bottom-1 left-1 flex items-center gap-1 rounded bg-black/50 px-1.5 py-0.5 text-xs text-white">
         <span aria-hidden="true">🖥️</span>
@@ -37,6 +39,14 @@ export function ScreenShareTile({ participant }: ScreenShareTileProps) {
         's screen
         {participant.isLocal ? ' (you)' : ''}
       </span>
+      {!participant.isLocal && participant.screenShareHasAudio && (
+        <div className="absolute right-1 top-1 opacity-0 transition-opacity group-hover:opacity-100">
+          <VolumeControl
+            label={`${participant.name}'s screen`}
+            onVolumeChange={(volume) => voiceClient.setScreenShareVolume(participant.identity, volume)}
+          />
+        </div>
+      )}
     </div>
   );
 }
