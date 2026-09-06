@@ -1,3 +1,4 @@
+import { LogIn, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { CreateServerModal } from './CreateServerModal';
@@ -18,46 +19,50 @@ export function ServerSidebar() {
   return (
     <nav
       aria-label="Servers"
-      className="flex w-16 flex-shrink-0 flex-col items-center gap-2 overflow-y-auto border-r border-gray-200 bg-gray-50 py-3"
+      className="flex w-16 flex-shrink-0 flex-col items-center gap-2 overflow-y-auto border-r bg-rail py-3"
     >
       {(servers ?? []).map((server) => {
         const isSelected = server.id === serverId;
         const initial = server.name.trim().charAt(0).toUpperCase() || '?';
 
         return (
-          <Link
-            key={server.id}
-            to={`/app/servers/${server.id}`}
-            aria-label={server.name}
-            aria-current={isSelected ? 'page' : undefined}
-            title={server.name}
-            className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full text-sm font-semibold transition-colors ${
-              isSelected
-                ? 'bg-indigo-600 text-white'
-                : 'bg-gray-200 text-gray-700 hover:bg-indigo-100'
-            }`}
-          >
-            {initial}
-          </Link>
+          <div key={server.id} className="relative flex w-full items-center justify-center">
+            {isSelected && (
+              <span className="absolute left-0 h-8 w-1 rounded-r bg-brand" aria-hidden="true" />
+            )}
+            <Link
+              to={`/app/servers/${server.id}`}
+              aria-label={server.name}
+              aria-current={isSelected ? 'page' : undefined}
+              title={server.name}
+              className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full text-sm font-semibold transition-colors ${
+                isSelected ? 'bg-brand text-white' : 'bg-sidebar text-muted hover:bg-brand/20'
+              }`}
+            >
+              {initial}
+            </Link>
+          </div>
         );
       })}
 
-      <button
-        type="button"
-        aria-label="Create server"
-        onClick={() => setCreateOpen(true)}
-        className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-gray-200 text-xl leading-none text-gray-700 hover:bg-indigo-100"
-      >
-        +
-      </button>
-      <button
-        type="button"
-        aria-label="Join server"
-        onClick={() => setJoinOpen(true)}
-        className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-gray-200 text-xs font-medium text-gray-700 hover:bg-indigo-100"
-      >
-        Join
-      </button>
+      <div className="flex w-full flex-col items-center gap-2 border-t pt-2">
+        <button
+          type="button"
+          aria-label="Create server"
+          onClick={() => setCreateOpen(true)}
+          className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-sidebar text-muted hover:bg-brand/20"
+        >
+          <Plus size={20} aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          aria-label="Join server"
+          onClick={() => setJoinOpen(true)}
+          className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-sidebar text-muted hover:bg-brand/20"
+        >
+          <LogIn size={16} aria-hidden="true" />
+        </button>
+      </div>
 
       <CreateServerModal open={createOpen} onClose={() => setCreateOpen(false)} />
       <JoinServerModal open={joinOpen} onClose={() => setJoinOpen(false)} />
