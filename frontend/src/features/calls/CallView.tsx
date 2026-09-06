@@ -1,3 +1,4 @@
+import { Volume2 } from 'lucide-react';
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { voiceClient } from '../../services/voiceClient';
@@ -40,8 +41,9 @@ export function CallView({ channel }: CallViewProps) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex-shrink-0 border-b border-gray-200 px-4 py-3">
-        <span className="font-semibold text-gray-900">🔊 {channel.name}</span>
+      <div className="flex flex-shrink-0 items-center gap-1.5 border-b bg-surface px-4 py-3">
+        <Volume2 size={16} className="text-muted" aria-hidden="true" />
+        <span className="font-semibold text-ink">{channel.name}</span>
       </div>
       <ParticipantList onLeave={handleLeave} />
     </div>
