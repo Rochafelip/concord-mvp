@@ -66,6 +66,11 @@ export function useRealtimeSync(): void {
             // Only update if this channel's history is already cached (the user has opened it
             // before) — don't force-create a cache entry for a channel nobody's looking at.
             if (!old || old.pages.length === 0) return old;
+            // A redelivered event (e.g. a reconnect window where more than one session briefly
+            // sees the broadcast) must not insert the same message twice.
+            if (old.pages.some((page) => page.some((existing) => existing.id === message.id))) {
+              return old;
+            }
             // pages[0] holds the newest-fetched (most recent) messages — see hooks.ts.
             const pages = old.pages.map((page, index) =>
               index === 0 ? [...page, message] : page,

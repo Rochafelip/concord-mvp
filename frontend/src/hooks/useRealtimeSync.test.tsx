@@ -141,6 +141,21 @@ describe('useRealtimeSync', () => {
     ]);
   });
 
+  it('MESSAGE_CREATE ignores a redelivery of a message id already in the cache', () => {
+    const queryClient = newQueryClient();
+    const existing = { id: 'm1', channelId: 'c1', content: 'hi', createdAt: '2026-01-01T00:00:00Z', author: {} };
+    queryClient.setQueryData(['channels', 'c1', 'messages'], {
+      pages: [[existing]],
+      pageParams: [undefined],
+    });
+    renderHarness(queryClient, '/app');
+
+    emit('MESSAGE_CREATE', existing);
+
+    const cached = queryClient.getQueryData<{ pages: unknown[][] }>(['channels', 'c1', 'messages']);
+    expect(cached?.pages[0]).toEqual([existing]);
+  });
+
   it('MESSAGE_CREATE does nothing when there is no cached data for that channel', () => {
     const queryClient = newQueryClient();
     renderHarness(queryClient, '/app');
