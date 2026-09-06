@@ -1,3 +1,4 @@
+import { Mic, MicOff, MonitorUp, MonitorX, PhoneOff, Video, VideoOff } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { voiceClient } from '../../services/voiceClient';
 import type { VoiceParticipant } from '../../types/voice';
@@ -17,6 +18,9 @@ interface ParticipantTileProps {
  * spec (docs/superpowers/specs/2026-09-03-phase3-camera-design.md §4.1) for why this was chosen
  * over having voiceClient manage video elements itself, the way it does for hidden audio
  * elements.
+ *
+ * The tile background and control-bar chrome (black/white overlays) stay literal colors
+ * rather than tokens — they sit on top of live video and must read the same in both themes.
  */
 export function ParticipantTile({ participant, onLeave }: ParticipantTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -34,7 +38,11 @@ export function ParticipantTile({ participant, onLeave }: ParticipantTileProps) 
   }, [videoTrack]);
 
   return (
-    <div className="group relative flex aspect-video items-center justify-center overflow-hidden rounded bg-gray-800">
+    <div
+      className={`group relative flex aspect-video items-center justify-center overflow-hidden rounded bg-gray-800 ${
+        participant.isLocal ? 'ring-2 ring-brand' : ''
+      }`}
+    >
       {videoTrack ? (
         <video ref={videoRef} muted autoPlay playsInline className="h-full w-full object-cover" />
       ) : (
@@ -48,7 +56,11 @@ export function ParticipantTile({ participant, onLeave }: ParticipantTileProps) 
       <span
         className={`absolute left-1 flex items-center gap-1 rounded bg-black/50 px-1.5 py-0.5 text-xs text-white ${isLocal ? 'top-1' : 'bottom-1'}`}
       >
-        <span aria-hidden="true">{participant.micEnabled ? '🎤' : '🔇'}</span>
+        {participant.micEnabled ? (
+          <Mic data-testid="mic-status-on" size={12} aria-hidden="true" />
+        ) : (
+          <MicOff data-testid="mic-status-off" size={12} aria-hidden="true" />
+        )}
         {participant.name}
         {participant.isLocal ? ' (you)' : ''}
       </span>
@@ -69,17 +81,21 @@ export function ParticipantTile({ participant, onLeave }: ParticipantTileProps) 
               type="button"
               aria-label={participant.micEnabled ? 'Mute' : 'Unmute'}
               onClick={() => voiceClient.toggleMute()}
-              className="rounded-full bg-white/10 p-1.5 text-sm leading-none text-white hover:bg-white/20"
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
             >
-              {participant.micEnabled ? '🎤' : '🔇'}
+              {participant.micEnabled ? <Mic size={16} aria-hidden="true" /> : <MicOff size={16} aria-hidden="true" />}
             </button>
             <button
               type="button"
               aria-label={participant.cameraEnabled ? 'Camera off' : 'Camera on'}
               onClick={() => voiceClient.toggleCamera()}
-              className="rounded-full bg-white/10 p-1.5 text-sm leading-none text-white hover:bg-white/20"
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
             >
-              {participant.cameraEnabled ? '📹' : '📷'}
+              {participant.cameraEnabled ? (
+                <Video size={16} aria-hidden="true" />
+              ) : (
+                <VideoOff size={16} aria-hidden="true" />
+              )}
             </button>
             <button
               type="button"
@@ -87,17 +103,21 @@ export function ParticipantTile({ participant, onLeave }: ParticipantTileProps) 
               onClick={() =>
                 participant.screenShareEnabled ? voiceClient.toggleScreenShare() : setQualityModalOpen(true)
               }
-              className="rounded-full bg-white/10 p-1.5 text-sm leading-none text-white hover:bg-white/20"
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
             >
-              {participant.screenShareEnabled ? '🛑' : '🖥️'}
+              {participant.screenShareEnabled ? (
+                <MonitorX size={16} aria-hidden="true" />
+              ) : (
+                <MonitorUp size={16} aria-hidden="true" />
+              )}
             </button>
             <button
               type="button"
               aria-label="Leave call"
               onClick={onLeave}
-              className="rounded-full bg-red-500/80 p-1.5 text-sm leading-none text-white hover:bg-red-500"
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-danger/80 text-white hover:bg-danger"
             >
-              📵
+              <PhoneOff size={16} aria-hidden="true" />
             </button>
           </div>
           <ScreenShareQualityModal

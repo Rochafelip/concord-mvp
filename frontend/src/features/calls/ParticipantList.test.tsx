@@ -56,8 +56,8 @@ describe('ParticipantList', () => {
 
     const felipeTile = screen.getByText(/Felipe/).closest('div');
     const joaoTile = screen.getByText(/João/).closest('div');
-    expect(felipeTile).toHaveTextContent('🎤');
-    expect(joaoTile).toHaveTextContent('🔇');
+    expect(felipeTile?.querySelector('[data-testid="mic-status-on"]')).toBeInTheDocument();
+    expect(joaoTile?.querySelector('[data-testid="mic-status-off"]')).toBeInTheDocument();
   });
 
   it('renders a ScreenShareTile for a participant actively sharing their screen', () => {

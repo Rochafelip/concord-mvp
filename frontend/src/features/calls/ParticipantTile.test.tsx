@@ -43,13 +43,13 @@ describe('ParticipantTile', () => {
     render(<ParticipantTile participant={participant({ name: 'Felipe', micEnabled: false })} />);
 
     expect(screen.getByText(/Felipe/)).toBeInTheDocument();
-    expect(screen.getByText('🔇')).toBeInTheDocument();
+    expect(screen.getByTestId('mic-status-off')).toBeInTheDocument();
   });
 
   it('shows a mic-on icon when unmuted', () => {
     render(<ParticipantTile participant={participant({ micEnabled: true })} />);
 
-    expect(screen.getByText('🎤')).toBeInTheDocument();
+    expect(screen.getByTestId('mic-status-on')).toBeInTheDocument();
   });
 
   it('attaches the video track to the <video> element when present, and detaches it on unmount', () => {
