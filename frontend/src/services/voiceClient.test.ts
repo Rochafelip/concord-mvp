@@ -106,7 +106,15 @@ vi.mock('livekit-client', () => ({
     ConnectionQualityChanged: 'connectionQualityChanged',
     Disconnected: 'disconnected',
   },
-  Track: { Kind: { Audio: 'audio', Video: 'video' }, Source: { Camera: 'camera', ScreenShare: 'screen_share' } },
+  Track: {
+    Kind: { Audio: 'audio', Video: 'video' },
+    Source: {
+      Camera: 'camera',
+      Microphone: 'microphone',
+      ScreenShare: 'screen_share',
+      ScreenShareAudio: 'screen_share_audio',
+    },
+  },
 }));
 
 vi.mock('./websocketClient', () => ({
@@ -196,6 +204,7 @@ describe('voiceClient', () => {
     const local = useVoiceStore.getState().participants.find((p) => p.isLocal);
     expect(local?.screenShareEnabled).toBe(false);
     expect(local?.screenShareTrack).toBeNull();
+    expect(local?.screenShareHasAudio).toBe(false);
   });
 
   it('disconnects the previous room before connecting to a different voice channel', async () => {
@@ -450,6 +459,28 @@ describe('voiceClient', () => {
     const bobEntry = useVoiceStore.getState().participants.find((p) => p.identity === 'bob');
     expect(bobEntry?.screenShareEnabled).toBe(true);
     expect(bobEntry?.screenShareTrack).toBe(screenTrackStub);
+    expect(bobEntry?.screenShareHasAudio).toBe(false);
+  });
+
+  it('marks screenShareHasAudio true when the participant has a published screen-share audio track', async () => {
+    await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+    const room = roomInstances[0];
+
+    const bob = {
+      identity: 'bob',
+      name: 'Bob',
+      isMicrophoneEnabled: true,
+      isCameraEnabled: false,
+      isScreenShareEnabled: true,
+      getTrackPublication: vi.fn((source: string) => (source === 'screen_share_audio' ? {} : undefined)),
+    };
+    room.remoteParticipants.set('bob', bob);
+
+    const onParticipantConnected = handlerFor(room, 'participantConnected');
+    onParticipantConnected();
+
+    const bobEntry = useVoiceStore.getState().participants.find((p) => p.identity === 'bob');
+    expect(bobEntry?.screenShareHasAudio).toBe(true);
   });
 
   it('refreshes participant mic state when a remote track is subscribed, not just on explicit mute/unmute events', async () => {

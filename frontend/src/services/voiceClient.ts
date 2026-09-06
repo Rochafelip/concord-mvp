@@ -342,6 +342,7 @@ function toVoiceParticipant(participant: Participant | LocalParticipant, isLocal
     videoTrack: participant.getTrackPublication(Track.Source.Camera)?.videoTrack ?? null,
     screenShareEnabled: participant.isScreenShareEnabled,
     screenShareTrack: participant.getTrackPublication(Track.Source.ScreenShare)?.videoTrack ?? null,
+    screenShareHasAudio: participant.getTrackPublication(Track.Source.ScreenShareAudio) != null,
     connectionQuality: participant.connectionQuality,
   };
 }

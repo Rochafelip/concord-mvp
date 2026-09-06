@@ -46,6 +46,7 @@ function localParticipant(overrides: Partial<VoiceParticipant>): VoiceParticipan
     videoTrack: null,
     screenShareEnabled: false,
     screenShareTrack: null,
+    screenShareHasAudio: false,
     connectionQuality: ConnectionQuality.Unknown,
     ...overrides,
   };
