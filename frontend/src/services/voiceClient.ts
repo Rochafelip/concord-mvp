@@ -1,9 +1,22 @@
-import { Room, RoomEvent, Track, type LocalParticipant, type Participant, type RemoteTrack } from 'livekit-client';
+import {
+  Room,
+  RoomEvent,
+  Track,
+  type LocalParticipant,
+  type Participant,
+  type RemoteParticipant,
+  type RemoteTrack,
+  type RemoteTrackPublication,
+} from 'livekit-client';
 import { websocketClient } from './websocketClient';
 import * as soundEffects from './soundEffects';
 import { SCREEN_SHARE_QUALITY_PRESETS } from '../features/calls/screenShareQuality';
 import { useVoiceStore } from '../stores/voiceStore';
 import type { ScreenShareOptions, VoiceParticipant } from '../types/voice';
+
+function audioKey(identity: string, source: Track.Source): string {
+  return `${identity}:${source}`;
+}
 
 interface ReportedPresence {
   muted: boolean;
@@ -194,6 +207,16 @@ class VoiceClient {
       .catch(() => useVoiceStore.getState().setError('Failed to change screen sharing state'));
   }
 
+  setParticipantVolume(identity: string, volume: number): void {
+    const element = this.audioElements.get(audioKey(identity, Track.Source.Microphone));
+    if (element) element.volume = volume;
+  }
+
+  setScreenShareVolume(identity: string, volume: number): void {
+    const element = this.audioElements.get(audioKey(identity, Track.Source.ScreenShareAudio));
+    if (element) element.volume = volume;
+  }
+
   private setDeafened(value: boolean): void {
     useVoiceStore.getState().setDeafened(value);
     this.audioElements.forEach((element) => {
@@ -244,24 +267,32 @@ class VoiceClient {
   // mock), so the isMicrophoneEnabled snapshot taken at that moment reads false. Without a resync
   // on subscribe, the UI would show them as muted indefinitely — until they happened to
   // explicitly toggle mute once and trigger TrackMuted/TrackUnmuted.
-  private handleTrackSubscribed = (track: RemoteTrack): void => {
-    if (track.kind === Track.Kind.Audio && track.sid) {
+  private handleTrackSubscribed = (
+    track: RemoteTrack,
+    _publication: RemoteTrackPublication,
+    participant: RemoteParticipant,
+  ): void => {
+    if (track.kind === Track.Kind.Audio) {
       const element = track.attach();
       element.muted = useVoiceStore.getState().isDeafened;
-      element.dataset.trackSid = track.sid;
+      element.dataset.trackSid = track.sid ?? '';
       document.body.appendChild(element);
-      this.audioElements.set(track.sid, element);
+      this.audioElements.set(audioKey(participant.identity, track.source), element);
     }
     this.syncParticipants();
   };
 
-  private handleTrackUnsubscribed = (track: RemoteTrack): void => {
-    if (!track.sid) return;
-    const element = this.audioElements.get(track.sid);
+  private handleTrackUnsubscribed = (
+    track: RemoteTrack,
+    _publication: RemoteTrackPublication,
+    participant: RemoteParticipant,
+  ): void => {
+    const key = audioKey(participant.identity, track.source);
+    const element = this.audioElements.get(key);
     if (element) {
       track.detach(element);
       element.remove();
-      this.audioElements.delete(track.sid);
+      this.audioElements.delete(key);
     }
     this.syncParticipants();
   };

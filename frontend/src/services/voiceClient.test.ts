@@ -614,6 +614,66 @@ describe('voiceClient', () => {
     expect(room.localParticipant.isMicrophoneEnabled).toBe(false);
   });
 
+  it("sets a remote participant's microphone volume independently of their screen-share audio", async () => {
+    await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+    const room = roomInstances[0];
+    const onTrackSubscribed = handlerFor(room, 'trackSubscribed');
+    const micElement = document.createElement('audio');
+    const screenAudioElement = document.createElement('audio');
+    const bob = { identity: 'bob', name: 'Bob' };
+
+    onTrackSubscribed(
+      { kind: 'audio', sid: 'track-mic', source: 'microphone', attach: vi.fn().mockReturnValue(micElement) },
+      {},
+      bob,
+    );
+    onTrackSubscribed(
+      {
+        kind: 'audio',
+        sid: 'track-screen-audio',
+        source: 'screen_share_audio',
+        attach: vi.fn().mockReturnValue(screenAudioElement),
+      },
+      {},
+      bob,
+    );
+
+    voiceClient.setParticipantVolume('bob', 0.4);
+    voiceClient.setScreenShareVolume('bob', 0.9);
+
+    expect(micElement.volume).toBe(0.4);
+    expect(screenAudioElement.volume).toBe(0.9);
+  });
+
+  it('does not throw when setting volume for a participant with no matching subscribed track', async () => {
+    await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+
+    expect(() => voiceClient.setParticipantVolume('nobody', 0.5)).not.toThrow();
+    expect(() => voiceClient.setScreenShareVolume('nobody', 0.5)).not.toThrow();
+  });
+
+  it("stops affecting a track's element after it is unsubscribed", async () => {
+    await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+    const room = roomInstances[0];
+    const onTrackSubscribed = handlerFor(room, 'trackSubscribed');
+    const onTrackUnsubscribed = handlerFor(room, 'trackUnsubscribed');
+    const micElement = document.createElement('audio');
+    const bob = { identity: 'bob', name: 'Bob' };
+    const track = {
+      kind: 'audio',
+      sid: 'track-mic',
+      source: 'microphone',
+      attach: vi.fn().mockReturnValue(micElement),
+      detach: vi.fn(),
+    };
+
+    onTrackSubscribed(track, {}, bob);
+    onTrackUnsubscribed(track, {}, bob);
+    voiceClient.setParticipantVolume('bob', 0.4);
+
+    expect(micElement.volume).toBe(1); // untouched default — the setter found nothing to act on
+  });
+
   it('turning the mic on while deafened clears deafened state and unmutes remote audio', async () => {
     await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
     const room = roomInstances[0];
