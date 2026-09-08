@@ -39,6 +39,10 @@ async function loadClient() {
   return { websocketClient, useWsConnectionStore };
 }
 
+function resolvedTicket(ticket: string) {
+  return () => Promise.resolve(ticket);
+}
+
 describe('websocketClient', () => {
   beforeEach(() => {
     vi.resetModules();
@@ -51,19 +55,20 @@ describe('websocketClient', () => {
     vi.useRealTimers();
   });
 
-  it('connect() opens a socket with the token in the query string, built from window.location', async () => {
+  it('connect() opens a socket with the ticket in the query string, built from window.location', async () => {
     const { websocketClient } = await loadClient();
-    websocketClient.connect('jwt-abc');
+    await websocketClient.connect(resolvedTicket('ticket-abc'));
 
     expect(FakeWebSocket.instances).toHaveLength(1);
     const socket = FakeWebSocket.instances[0];
-    expect(socket.url).toBe(`ws://${window.location.host}/ws?token=jwt-abc`);
+    expect(socket.url).toBe(`ws://${window.location.host}/ws?token=ticket-abc`);
   });
 
   it('updates wsConnectionStore status to connected on open', async () => {
     const { websocketClient, useWsConnectionStore } = await loadClient();
-    websocketClient.connect('jwt-abc');
+    const connecting = websocketClient.connect(resolvedTicket('ticket-abc'));
     expect(useWsConnectionStore.getState().status).toBe('connecting');
+    await connecting;
 
     const socket = FakeWebSocket.instances[0];
     socket.readyState = FakeWebSocket.OPEN;
@@ -74,7 +79,7 @@ describe('websocketClient', () => {
 
   it('send() serializes and sends over the socket when open', async () => {
     const { websocketClient } = await loadClient();
-    websocketClient.connect('jwt-abc');
+    await websocketClient.connect(resolvedTicket('ticket-abc'));
     const socket = FakeWebSocket.instances[0];
     socket.readyState = FakeWebSocket.OPEN;
 
@@ -89,7 +94,7 @@ describe('websocketClient', () => {
 
   it('send() does not throw and does not send when the socket is not open', async () => {
     const { websocketClient } = await loadClient();
-    websocketClient.connect('jwt-abc');
+    await websocketClient.connect(resolvedTicket('ticket-abc'));
     // Left in CONNECTING state — never transitioned to OPEN.
 
     expect(() =>
@@ -100,7 +105,7 @@ describe('websocketClient', () => {
 
   it('subscribe() delivers an incoming event to every subscriber of that type', async () => {
     const { websocketClient } = await loadClient();
-    websocketClient.connect('jwt-abc');
+    await websocketClient.connect(resolvedTicket('ticket-abc'));
     const socket = FakeWebSocket.instances[0];
 
     const handlerA = vi.fn();
@@ -116,7 +121,7 @@ describe('websocketClient', () => {
 
   it('subscribe()s returned unsubscribe function stops that handler from firing', async () => {
     const { websocketClient } = await loadClient();
-    websocketClient.connect('jwt-abc');
+    await websocketClient.connect(resolvedTicket('ticket-abc'));
     const socket = FakeWebSocket.instances[0];
 
     const handlerA = vi.fn();
@@ -133,7 +138,7 @@ describe('websocketClient', () => {
 
   it('logs and ignores an unrecognized event type instead of crashing', async () => {
     const { websocketClient } = await loadClient();
-    websocketClient.connect('jwt-abc');
+    await websocketClient.connect(resolvedTicket('ticket-abc'));
     const socket = FakeWebSocket.instances[0];
 
     expect(() =>
@@ -141,35 +146,60 @@ describe('websocketClient', () => {
     ).not.toThrow();
   });
 
-  it('schedules a reconnect using the last token after an unintentional close', async () => {
+  it('schedules a reconnect using a freshly fetched ticket after an unintentional close', async () => {
     vi.useFakeTimers();
     const { websocketClient, useWsConnectionStore } = await loadClient();
-    websocketClient.connect('jwt-abc');
+    let callCount = 0;
+    const getTicket = vi.fn(() => Promise.resolve(`ticket-${++callCount}`));
+    await websocketClient.connect(getTicket);
     expect(FakeWebSocket.instances).toHaveLength(1);
+    expect(FakeWebSocket.instances[0].url).toContain('token=ticket-1');
 
     // Simulate the browser/server closing the connection (not via disconnect()).
     FakeWebSocket.instances[0].onclose?.();
     expect(useWsConnectionStore.getState().status).toBe('disconnected');
     expect(FakeWebSocket.instances).toHaveLength(1);
 
-    vi.advanceTimersByTime(2999);
+    await vi.advanceTimersByTimeAsync(2999);
     expect(FakeWebSocket.instances).toHaveLength(1);
 
-    vi.advanceTimersByTime(1);
+    await vi.advanceTimersByTimeAsync(1);
     expect(FakeWebSocket.instances).toHaveLength(2);
-    expect(FakeWebSocket.instances[1].url).toContain('token=jwt-abc');
+    expect(getTicket).toHaveBeenCalledTimes(2);
+    expect(FakeWebSocket.instances[1].url).toContain('token=ticket-2');
+  });
+
+  it('does not throw when the ticket provider rejects, and still schedules a reconnect', async () => {
+    vi.useFakeTimers();
+    const { websocketClient, useWsConnectionStore } = await loadClient();
+    let attempt = 0;
+    const getTicket = vi.fn(() => {
+      attempt += 1;
+      return attempt === 1
+        ? Promise.reject(new Error('network down'))
+        : Promise.resolve('ticket-2');
+    });
+
+    await expect(websocketClient.connect(getTicket)).resolves.toBeUndefined();
+    expect(FakeWebSocket.instances).toHaveLength(0);
+    expect(useWsConnectionStore.getState().status).toBe('disconnected');
+
+    await vi.advanceTimersByTimeAsync(3000);
+
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    expect(FakeWebSocket.instances[0].url).toContain('token=ticket-2');
   });
 
   it('disconnect() closes intentionally and prevents the reconnect from firing', async () => {
     vi.useFakeTimers();
     const { websocketClient, useWsConnectionStore } = await loadClient();
-    websocketClient.connect('jwt-abc');
+    await websocketClient.connect(resolvedTicket('ticket-abc'));
 
     websocketClient.disconnect();
     expect(FakeWebSocket.instances).toHaveLength(1);
     expect(useWsConnectionStore.getState().status).toBe('disconnected');
 
-    vi.advanceTimersByTime(10_000);
+    await vi.advanceTimersByTimeAsync(10_000);
 
     expect(FakeWebSocket.instances).toHaveLength(1);
   });
