@@ -1,4 +1,4 @@
-import { MicOff, Plus, Settings, Trash2, Video, MonitorUp } from 'lucide-react';
+import { MicOff, MonitorUp, Plus, Settings, Trash2, Video, Volume2 } from 'lucide-react';
 import { useState, type MouseEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Avatar } from '../../components/Avatar';
@@ -130,7 +130,7 @@ export function ChannelSidebar() {
                       aria-current={channel.id === channelId ? 'page' : undefined}
                       className={`flex-1 ${channelLinkClassName(channel.id === channelId)}`}
                     >
-                      <span aria-hidden="true">🔊</span>
+                      <Volume2 size={14} aria-hidden="true" />
                       {channel.name}
                     </Link>
                     {isOwner && (

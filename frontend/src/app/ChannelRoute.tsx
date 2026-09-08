@@ -13,7 +13,7 @@ export function ChannelRoute() {
   const { data: channel } = useChannel(channelId);
 
   if (!channelId) return null;
-  if (!channel) return <div className="p-4 text-gray-500">Loading…</div>;
+  if (!channel) return <div className="p-4 text-muted">Loading…</div>;
 
   // Deliberately NOT keyed by channel.id (unlike ChatWindow): CallView relies on staying
   // mounted across a voice-channel switch so its join effect can re-fire without an

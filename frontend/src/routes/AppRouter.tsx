@@ -9,12 +9,12 @@ import { ProtectedRoute } from './ProtectedRoute';
 
 // Placeholder for /app (no server selected yet).
 function NoServerSelected() {
-  return <div className="p-4 text-gray-500">Select a server</div>;
+  return <div className="p-4 text-muted">Select a server</div>;
 }
 
 // Placeholder for /app/servers/:serverId (no channel selected yet).
 function NoChannelSelected() {
-  return <div className="p-4 text-gray-500">Select a channel</div>;
+  return <div className="p-4 text-muted">Select a channel</div>;
 }
 
 // Catch-all target: send authenticated users back into the app, everyone else to /login.
