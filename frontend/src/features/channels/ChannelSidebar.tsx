@@ -47,7 +47,7 @@ export function ChannelSidebar() {
   return (
     <aside className="flex w-56 flex-shrink-0 flex-col border-r bg-sidebar">
       <div className="flex items-center justify-between border-b px-3 py-3">
-        <span className="truncate font-semibold text-ink">{server?.name ?? 'Loading…'}</span>
+        <span className="truncate text-heading font-semibold text-ink">{server?.name ?? 'Loading…'}</span>
         <button
           type="button"
           aria-label="Server settings"
