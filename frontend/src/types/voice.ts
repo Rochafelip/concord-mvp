@@ -41,4 +41,5 @@ export interface VoicePresenceEntry {
   cameraOn: boolean;
   screenSharing: boolean;
   speaking: boolean;
+  deafened: boolean;
 }

@@ -58,6 +58,7 @@ export interface VoicePresencePayload {
   cameraOn: boolean;
   screenSharing: boolean;
   speaking: boolean;
+  deafened: boolean;
 }
 
 export interface VoicePresenceLeavePayload {

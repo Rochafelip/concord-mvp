@@ -21,6 +21,7 @@ export function toVoicePresenceEntry(raw: VoicePresencePayload): VoicePresenceEn
     cameraOn: raw.cameraOn,
     screenSharing: raw.screenSharing,
     speaking: raw.speaking,
+    deafened: raw.deafened,
   };
 }
 
