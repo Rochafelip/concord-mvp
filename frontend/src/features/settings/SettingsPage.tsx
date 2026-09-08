@@ -64,7 +64,7 @@ export function SettingsPage() {
 
   return (
     <div className="mx-auto max-w-lg space-y-8 p-8">
-      <h1 className="text-2xl font-semibold text-ink">Settings</h1>
+      <h1 className="text-title font-semibold text-ink">Settings</h1>
 
       <form onSubmit={handleProfileSubmit} className="space-y-4" noValidate>
         <h2 className="text-heading font-medium text-ink">Profile</h2>

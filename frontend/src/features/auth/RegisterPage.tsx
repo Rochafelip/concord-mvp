@@ -28,7 +28,7 @@ export function RegisterPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-app px-4">
       <div className="w-full max-w-sm space-y-4 rounded-lg border bg-surface p-8 shadow-sm">
-        <h1 className="text-center text-2xl font-semibold text-ink">Create an account</h1>
+        <h1 className="text-center text-title font-semibold text-ink">Create an account</h1>
 
         <form onSubmit={handleSubmit} className="space-y-4" noValidate>
           <ErrorBanner message={errorMessage} />
