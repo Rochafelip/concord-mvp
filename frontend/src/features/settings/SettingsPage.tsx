@@ -67,7 +67,7 @@ export function SettingsPage() {
       <h1 className="text-2xl font-semibold text-ink">Settings</h1>
 
       <form onSubmit={handleProfileSubmit} className="space-y-4" noValidate>
-        <h2 className="text-lg font-medium text-ink">Profile</h2>
+        <h2 className="text-heading font-medium text-ink">Profile</h2>
         <ErrorBanner message={errorMessage(updateProfileMutation.error)} />
         {profileSaved && <p className="text-body text-brand">Profile updated successfully</p>}
 
@@ -93,7 +93,7 @@ export function SettingsPage() {
       </form>
 
       <form onSubmit={handlePasswordSubmit} className="space-y-4" noValidate>
-        <h2 className="text-lg font-medium text-ink">Password</h2>
+        <h2 className="text-heading font-medium text-ink">Password</h2>
         <ErrorBanner
           message={
             passwordMismatch

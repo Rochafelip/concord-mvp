@@ -88,7 +88,7 @@ export function ServerSettingsPanel({ serverId, open, onClose }: ServerSettingsP
   return (
     <Modal open={open} onClose={onClose}>
       <div className="w-80 space-y-4">
-        <h2 className="text-lg font-semibold text-ink">{server?.name ?? 'Server'} settings</h2>
+        <h2 className="text-heading font-semibold text-ink">{server?.name ?? 'Server'} settings</h2>
 
         {isOwner && (
           <section className="space-y-2">

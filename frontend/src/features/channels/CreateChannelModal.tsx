@@ -42,7 +42,7 @@ export function CreateChannelModal({ serverId, open, onClose }: CreateChannelMod
   return (
     <Modal open={open} onClose={onClose}>
       <form onSubmit={handleSubmit} className="w-72 space-y-4">
-        <h2 className="text-lg font-semibold text-ink">Create a channel</h2>
+        <h2 className="text-heading font-semibold text-ink">Create a channel</h2>
 
         <ErrorBanner message={errorMessage} />
 

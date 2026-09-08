@@ -34,7 +34,7 @@ export function ScreenShareQualityModal({ open, onClose, onConfirm }: ScreenShar
   return (
     <Modal open={open} onClose={onClose}>
       <div className="w-64 space-y-4">
-        <h2 className="text-lg font-semibold text-ink">Share your screen</h2>
+        <h2 className="text-heading font-semibold text-ink">Share your screen</h2>
 
         <fieldset className="space-y-1">
           <legend className="text-body font-medium text-muted">Quality</legend>
