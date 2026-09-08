@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { ConnectionQuality } from 'livekit-client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { voiceClient } from '../../services/voiceClient';
@@ -10,6 +11,20 @@ vi.mock('../../services/voiceClient', () => ({
     setScreenShareVolume: vi.fn(),
   },
 }));
+
+beforeEach(() => {
+  Object.defineProperty(document, 'fullscreenElement', { value: null, writable: true, configurable: true });
+  Element.prototype.requestFullscreen = vi.fn(function (this: HTMLElement) {
+    Object.defineProperty(document, 'fullscreenElement', { value: this, writable: true, configurable: true });
+    document.dispatchEvent(new Event('fullscreenchange'));
+    return Promise.resolve();
+  }) as never;
+  document.exitFullscreen = vi.fn(() => {
+    Object.defineProperty(document, 'fullscreenElement', { value: null, writable: true, configurable: true });
+    document.dispatchEvent(new Event('fullscreenchange'));
+    return Promise.resolve();
+  }) as never;
+});
 
 function sharingParticipant(overrides: Partial<VoiceParticipant> = {}): VoiceParticipant {
   const track = { attach: vi.fn(), detach: vi.fn() } as never;
@@ -123,6 +138,36 @@ describe('ScreenShareTile', () => {
       });
 
       expect(voiceClient.setScreenShareVolume).toHaveBeenCalledWith('bob', 0.65);
+    });
+  });
+
+  describe('fullscreen', () => {
+    it('requests fullscreen on the tile when the expand button is clicked', async () => {
+      const user = userEvent.setup();
+      const { container } = render(<ScreenShareTile participant={sharingParticipant()} />);
+
+      await user.click(screen.getByRole('button', { name: 'Enter fullscreen' }));
+
+      expect(container.firstChild).toBe(document.fullscreenElement);
+    });
+
+    it('switches the tile to a full-viewport layout once fullscreen is entered', async () => {
+      const user = userEvent.setup();
+      const { container } = render(<ScreenShareTile participant={sharingParticipant()} />);
+
+      await user.click(screen.getByRole('button', { name: 'Enter fullscreen' }));
+
+      expect(container.firstChild).toHaveClass('fixed', 'inset-0');
+    });
+
+    it('hides the sharer label and the expand button once fullscreen is entered', async () => {
+      const user = userEvent.setup();
+      render(<ScreenShareTile participant={sharingParticipant({ name: 'Felipe' })} />);
+
+      await user.click(screen.getByRole('button', { name: 'Enter fullscreen' }));
+
+      expect(screen.queryByText(/Felipe's screen/)).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Enter fullscreen' })).not.toBeInTheDocument();
     });
   });
 });
