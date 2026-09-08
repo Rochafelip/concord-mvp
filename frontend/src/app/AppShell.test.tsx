@@ -90,4 +90,10 @@ describe('AppShell', () => {
 
     expect(screen.queryByText('lobby')).not.toBeInTheDocument();
   });
+
+  it('renders a link to the settings page in the header', () => {
+    renderShell('/app');
+
+    expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/app/settings');
+  });
 });

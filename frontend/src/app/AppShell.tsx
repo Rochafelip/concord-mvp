@@ -1,5 +1,5 @@
-import { Moon, Sun, X } from 'lucide-react';
-import { Outlet } from 'react-router-dom';
+import { Moon, Settings, Sun, X } from 'lucide-react';
+import { Link, Outlet } from 'react-router-dom';
 import { Avatar } from '../components/Avatar';
 import { Button } from '../components/Button';
 import { ErrorBanner } from '../components/ErrorBanner';
@@ -50,6 +50,13 @@ export function AppShell() {
             >
               {theme === 'dark' ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
             </button>
+            <Link
+              to="/app/settings"
+              aria-label="Settings"
+              className="flex h-10 w-10 items-center justify-center rounded text-muted hover:text-ink"
+            >
+              <Settings size={18} aria-hidden="true" />
+            </Link>
             {user && (
               <>
                 <Avatar displayName={user.displayName} avatarUrl={user.avatarUrl} />
