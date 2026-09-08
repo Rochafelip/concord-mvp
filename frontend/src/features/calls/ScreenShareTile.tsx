@@ -46,8 +46,21 @@ export function ScreenShareTile({ participant }: ScreenShareTileProps) {
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
+  useEffect(() => {
+    if (!isFullscreen || document.fullscreenElement === containerRef.current) return;
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setIsFullscreen(false);
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isFullscreen]);
+
   async function handleEnterFullscreen() {
-    await containerRef.current?.requestFullscreen();
+    try {
+      await containerRef.current?.requestFullscreen();
+    } catch {
+      setIsFullscreen(true);
+    }
   }
 
   async function handleExitFullscreen() {

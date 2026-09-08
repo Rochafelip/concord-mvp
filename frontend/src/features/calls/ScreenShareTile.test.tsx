@@ -190,5 +190,38 @@ describe('ScreenShareTile', () => {
       expect(container.firstChild).not.toHaveClass('fixed', 'inset-0');
       expect(screen.getByRole('button', { name: 'Enter fullscreen' })).toBeInTheDocument();
     });
+
+    it('falls back to the full-viewport layout when requestFullscreen() rejects', async () => {
+      vi.mocked(Element.prototype.requestFullscreen).mockRejectedValueOnce(new Error('not allowed'));
+      const user = userEvent.setup();
+      const { container } = render(<ScreenShareTile participant={sharingParticipant()} />);
+
+      await user.click(screen.getByRole('button', { name: 'Enter fullscreen' }));
+
+      expect(container.firstChild).toHaveClass('fixed', 'inset-0');
+    });
+
+    it('exits the CSS-only fallback on Escape', async () => {
+      vi.mocked(Element.prototype.requestFullscreen).mockRejectedValueOnce(new Error('not allowed'));
+      const user = userEvent.setup();
+      const { container } = render(<ScreenShareTile participant={sharingParticipant()} />);
+
+      await user.click(screen.getByRole('button', { name: 'Enter fullscreen' }));
+      await user.keyboard('{Escape}');
+
+      expect(container.firstChild).not.toHaveClass('fixed', 'inset-0');
+    });
+
+    it('exits the CSS-only fallback via the exit button without calling document.exitFullscreen', async () => {
+      vi.mocked(Element.prototype.requestFullscreen).mockRejectedValueOnce(new Error('not allowed'));
+      const user = userEvent.setup();
+      const { container } = render(<ScreenShareTile participant={sharingParticipant()} />);
+
+      await user.click(screen.getByRole('button', { name: 'Enter fullscreen' }));
+      await user.click(screen.getByRole('button', { name: 'Exit fullscreen' }));
+
+      expect(document.exitFullscreen).not.toHaveBeenCalled();
+      expect(container.firstChild).not.toHaveClass('fixed', 'inset-0');
+    });
   });
 });
