@@ -36,7 +36,7 @@ export function CallView({ channel }: CallViewProps) {
 
   function handleLeave() {
     voiceClient.disconnect();
-    navigate(`/app/servers/${channel.serverId}`);
+    navigate(`/app/servers/${channel.serverId}`, { replace: true });
   }
 
   return (

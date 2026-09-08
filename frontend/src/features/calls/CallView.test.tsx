@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { voiceClient } from '../../services/voiceClient';
@@ -6,6 +6,13 @@ import { useVoiceStore } from '../../stores/voiceStore';
 import type { Channel } from '../../types/channel';
 import { CallView } from './CallView';
 import * as hooksModule from './hooks';
+
+const { navigateMock } = vi.hoisted(() => ({ navigateMock: vi.fn() }));
+
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return { ...actual, useNavigate: () => navigateMock };
+});
 
 vi.mock('../../services/voiceClient', () => ({
   voiceClient: { disconnect: vi.fn() },
@@ -19,6 +26,22 @@ vi.mock('./hooks', () => ({
 
 function channel(id: string): Channel {
   return { id, serverId: 's1', name: 'lobby', type: 'VOICE', createdAt: '2026-01-01', updatedAt: '2026-01-01' };
+}
+
+function localParticipant() {
+  return {
+    identity: 'u1',
+    name: 'Ana',
+    isLocal: true,
+    micEnabled: true,
+    cameraEnabled: false,
+    videoTrack: null,
+    screenShareEnabled: false,
+    screenShareTrack: null,
+    screenShareHasAudio: false,
+    screenShareAudioEnabled: false,
+    connectionQuality: 'unknown',
+  };
 }
 
 function renderCallView(ch: Channel) {
@@ -36,8 +59,10 @@ describe('CallView', () => {
 
   beforeEach(() => {
     mutate.mockClear();
+    navigateMock.mockClear();
     vi.mocked(voiceClient.disconnect).mockClear();
     vi.mocked(hooksModule.useJoinVoiceChannel).mockReturnValue({ mutate } as never);
+    vi.mocked(hooksModule.useVoiceParticipants).mockReturnValue([]);
     useVoiceStore.setState({ status: 'disconnected', channelId: null, participants: [], error: null });
   });
 
@@ -89,5 +114,16 @@ describe('CallView', () => {
     renderCallView(channel('c2'));
 
     expect(mutate).toHaveBeenCalledWith('c2');
+  });
+
+  it('navigates back to the server root with replace when leaving the call', () => {
+    vi.mocked(hooksModule.useVoiceParticipants).mockReturnValue([localParticipant()] as never);
+
+    renderCallView(channel('c1'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Leave call' }));
+
+    expect(voiceClient.disconnect).toHaveBeenCalled();
+    expect(navigateMock).toHaveBeenCalledWith('/app/servers/s1', { replace: true });
   });
 });
