@@ -1,16 +1,25 @@
+import { useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { CallView } from '../features/calls/CallView';
 import { useChannel } from '../features/channels/hooks';
+import { setLastVisitedTextChannelId } from '../features/channels/lastVisitedChannel';
 import { ChatWindow } from '../features/chat/ChatWindow';
 
 /**
  * Replaces the /app/servers/:serverId/channels/:channelId placeholder. Branches on the
  * channel's type: VOICE channels get the LiveKit call UI, TEXT channels get the existing chat
- * UI unchanged.
+ * UI unchanged. Every navigation to a channel passes through here, so it's also where a TEXT
+ * visit is recorded for ServerIndexRoute's auto-select to read back later.
  */
 export function ChannelRoute() {
   const { channelId } = useParams<{ channelId: string }>();
   const { data: channel } = useChannel(channelId);
+
+  useEffect(() => {
+    if (channel?.type === 'TEXT') {
+      setLastVisitedTextChannelId(channel.serverId, channel.id);
+    }
+  }, [channel]);
 
   if (!channelId) return null;
   if (!channel) return <div className="p-4 text-muted">Loading…</div>;

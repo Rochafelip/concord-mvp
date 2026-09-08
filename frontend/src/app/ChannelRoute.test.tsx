@@ -1,12 +1,17 @@
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Channel } from '../types/channel';
 import { ChannelRoute } from './ChannelRoute';
 import * as channelsHooks from '../features/channels/hooks';
+import * as lastVisitedChannel from '../features/channels/lastVisitedChannel';
 
 vi.mock('../features/channels/hooks', () => ({
   useChannel: vi.fn(),
+}));
+
+vi.mock('../features/channels/lastVisitedChannel', () => ({
+  setLastVisitedTextChannelId: vi.fn(),
 }));
 
 vi.mock('../features/chat/ChatWindow', () => ({
@@ -28,6 +33,10 @@ function renderRoute(channelId = 'c1') {
 }
 
 describe('ChannelRoute', () => {
+  beforeEach(() => {
+    vi.mocked(lastVisitedChannel.setLastVisitedTextChannelId).mockClear();
+  });
+
   it('renders ChatWindow for a TEXT channel', async () => {
     vi.mocked(channelsHooks.useChannel).mockReturnValue({
       data: { id: 'c1', serverId: 's1', name: 'general', type: 'TEXT', createdAt: '', updatedAt: '' },
@@ -54,5 +63,27 @@ describe('ChannelRoute', () => {
     renderRoute();
 
     expect(screen.getByText(/loading/i)).toBeInTheDocument();
+  });
+
+  it('records the visit for a TEXT channel', async () => {
+    vi.mocked(channelsHooks.useChannel).mockReturnValue({
+      data: { id: 'c1', serverId: 's1', name: 'general', type: 'TEXT', createdAt: '', updatedAt: '' },
+    } as never);
+
+    renderRoute();
+
+    await screen.findByText('chat-window');
+    expect(vi.mocked(lastVisitedChannel.setLastVisitedTextChannelId)).toHaveBeenCalledWith('s1', 'c1');
+  });
+
+  it('does not record the visit for a VOICE channel', async () => {
+    vi.mocked(channelsHooks.useChannel).mockReturnValue({
+      data: { id: 'c1', serverId: 's1', name: 'lobby', type: 'VOICE', createdAt: '', updatedAt: '' },
+    } as never);
+
+    renderRoute();
+
+    await screen.findByText('call-view-c1');
+    expect(vi.mocked(lastVisitedChannel.setLastVisitedTextChannelId)).not.toHaveBeenCalled();
   });
 });
