@@ -6,6 +6,7 @@ import { ServerLayout } from '../app/ServerLayout';
 import { LoginPage } from '../features/auth/LoginPage';
 import { RegisterPage } from '../features/auth/RegisterPage';
 import { useAuthStore } from '../features/auth/authStore';
+import { SettingsPage } from '../features/settings/SettingsPage';
 import { ProtectedRoute } from './ProtectedRoute';
 
 // Placeholder for /app (no server selected yet).
@@ -34,6 +35,7 @@ export function AppRouter() {
         }
       >
         <Route index element={<NoServerSelected />} />
+        <Route path="settings" element={<SettingsPage />} />
         <Route path="servers/:serverId" element={<ServerLayout />}>
           <Route index element={<ServerIndexRoute />} />
           <Route path="channels/:channelId" element={<ChannelRoute />} />
