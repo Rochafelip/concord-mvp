@@ -44,4 +44,22 @@ class UserServiceTest {
         assertThatThrownBy(() -> userService.getCurrentUser(userId))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
+
+    @Test
+    void updateProfile_updatesUsernameAndDisplayName() {
+        UUID userId = UUID.randomUUID();
+        User user = new User();
+        user.setId(userId);
+        user.setUsername("alice");
+        user.setDisplayName("Alice");
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(userRepository.save(user)).thenReturn(user);
+
+        UserService userService = new UserService(userRepository);
+        User result = userService.updateProfile(userId, "alice2", "Alice Two");
+
+        assertThat(result.getUsername()).isEqualTo("alice2");
+        assertThat(result.getDisplayName()).isEqualTo("Alice Two");
+    }
 }

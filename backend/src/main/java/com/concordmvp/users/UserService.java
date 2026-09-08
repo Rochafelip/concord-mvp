@@ -23,4 +23,11 @@ public class UserService {
         return userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
     }
+
+    public User updateProfile(UUID userId, String username, String displayName) {
+        User user = getCurrentUser(userId);
+        user.setUsername(username);
+        user.setDisplayName(displayName);
+        return userRepository.save(user);
+    }
 }
