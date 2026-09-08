@@ -36,17 +36,18 @@ export function MessageInput({ channelId }: MessageInputProps) {
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-1 border-t p-3">
       <div className="flex items-end gap-2">
-        <TextInput
-          label="Message"
-          name="content"
-          autoComplete="off"
-          hideLabel
-          pill
-          className="flex-1"
-          placeholder={isConnected ? 'Message…' : 'Reconnecting…'}
-          value={content}
-          onChange={(event) => setContent(event.target.value)}
-        />
+        <div className="flex-1">
+          <TextInput
+            label="Message"
+            name="content"
+            autoComplete="off"
+            hideLabel
+            pill
+            placeholder={isConnected ? 'Message…' : 'Reconnecting…'}
+            value={content}
+            onChange={(event) => setContent(event.target.value)}
+          />
+        </div>
         <Button type="submit" disabled={!isConnected || content.trim().length === 0}>
           Send
         </Button>
