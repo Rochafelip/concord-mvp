@@ -1,6 +1,8 @@
 package com.concordmvp.users;
 
+import com.concordmvp.common.exception.BadRequestException;
 import com.concordmvp.common.exception.ResourceNotFoundException;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.UUID;
@@ -9,9 +11,11 @@ import java.util.UUID;
 public class UserService {
 
     private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
 
-    public UserService(UserRepository userRepository) {
+    public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
     }
 
     /**
@@ -28,6 +32,15 @@ public class UserService {
         User user = getCurrentUser(userId);
         user.setUsername(username);
         user.setDisplayName(displayName);
+        return userRepository.save(user);
+    }
+
+    public User changePassword(UUID userId, String currentPassword, String newPassword) {
+        User user = getCurrentUser(userId);
+        if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
+            throw new BadRequestException("Current password is incorrect");
+        }
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
         return userRepository.save(user);
     }
 }
