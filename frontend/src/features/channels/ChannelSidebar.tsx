@@ -46,7 +46,7 @@ export function ChannelSidebar() {
 
   return (
     <aside className="flex w-56 flex-shrink-0 flex-col border-r bg-sidebar">
-      <div className="flex items-center justify-between border-b px-3 py-3">
+      <div className="flex h-16 flex-shrink-0 items-center justify-between border-b px-3">
         <span className="truncate text-heading font-semibold text-ink">{server?.name ?? 'Loading…'}</span>
         <button
           type="button"

@@ -41,7 +41,7 @@ export function CallView({ channel }: CallViewProps) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex flex-shrink-0 items-center gap-1.5 border-b bg-surface px-4 py-3">
+      <div className="flex h-16 flex-shrink-0 items-center gap-1.5 border-b bg-surface px-4">
         <Volume2 size={16} className="text-muted" aria-hidden="true" />
         <span className="text-heading font-semibold text-ink">{channel.name}</span>
       </div>
