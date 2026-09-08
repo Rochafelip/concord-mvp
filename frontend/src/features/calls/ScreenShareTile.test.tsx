@@ -47,6 +47,16 @@ function sharingParticipant(overrides: Partial<VoiceParticipant> = {}): VoicePar
   };
 }
 
+/** Renders and, for a remote share (minimized by default), clicks "Watch" so the full tile is visible. */
+async function renderWatching(participant: VoiceParticipant) {
+  const user = userEvent.setup();
+  const result = render(<ScreenShareTile participant={participant} />);
+  if (!participant.isLocal) {
+    await user.click(screen.getByRole('button', { name: `Watch ${participant.name}'s screen` }));
+  }
+  return { user, ...result };
+}
+
 describe('ScreenShareTile', () => {
   it("labels the tile with the sharer's name", () => {
     render(<ScreenShareTile participant={sharingParticipant({ name: 'Felipe' })} />);
@@ -72,7 +82,7 @@ describe('ScreenShareTile', () => {
     const track = { attach, detach } as never;
 
     const { unmount, container } = render(
-      <ScreenShareTile participant={sharingParticipant({ screenShareTrack: track })} />,
+      <ScreenShareTile participant={sharingParticipant({ screenShareTrack: track, isLocal: true })} />,
     );
 
     const videoElement = container.querySelector('video');
@@ -83,36 +93,85 @@ describe('ScreenShareTile', () => {
     expect(detach).toHaveBeenCalledWith(videoElement);
   });
 
+  describe('watch/leave', () => {
+    it("renders a remote participant's share minimized by default, with no video", () => {
+      const { container } = render(<ScreenShareTile participant={sharingParticipant({ isLocal: false })} />);
+
+      expect(container.querySelector('video')).toBeNull();
+      expect(screen.getByRole('button', { name: "Watch Felipe's screen" })).toBeInTheDocument();
+    });
+
+    it('does not attach the screen share track while minimized', () => {
+      const attach = vi.fn();
+      const track = { attach, detach: vi.fn() } as never;
+
+      render(<ScreenShareTile participant={sharingParticipant({ isLocal: false, screenShareTrack: track })} />);
+
+      expect(attach).not.toHaveBeenCalled();
+    });
+
+    it("renders the local participant's own share already expanded, with no Watch button", () => {
+      const { container } = render(<ScreenShareTile participant={sharingParticipant({ isLocal: true })} />);
+
+      expect(container.querySelector('video')).not.toBeNull();
+      expect(screen.queryByRole('button', { name: /^Watch/ })).not.toBeInTheDocument();
+    });
+
+    it('expands to the full tile and attaches the track when Watch is clicked', async () => {
+      const attach = vi.fn();
+      const track = { attach, detach: vi.fn() } as never;
+      const user = userEvent.setup();
+      const { container } = render(
+        <ScreenShareTile participant={sharingParticipant({ isLocal: false, screenShareTrack: track })} />,
+      );
+
+      await user.click(screen.getByRole('button', { name: "Watch Felipe's screen" }));
+
+      const videoElement = container.querySelector('video');
+      expect(videoElement).not.toBeNull();
+      expect(attach).toHaveBeenCalledWith(videoElement);
+    });
+
+    it('returns to the minimized card when Stop watching is clicked', async () => {
+      const { user, container } = await renderWatching(sharingParticipant({ isLocal: false }));
+
+      await user.click(screen.getByRole('button', { name: "Stop watching Felipe's screen" }));
+
+      expect(container.querySelector('video')).toBeNull();
+      expect(screen.getByRole('button', { name: "Watch Felipe's screen" })).toBeInTheDocument();
+    });
+
+    it("does not show a Stop watching button for the local participant's own share", () => {
+      render(<ScreenShareTile participant={sharingParticipant({ isLocal: true })} />);
+
+      expect(screen.queryByRole('button', { name: /^Stop watching/ })).not.toBeInTheDocument();
+    });
+  });
+
   describe('volume control', () => {
     beforeEach(() => {
       vi.mocked(voiceClient.setScreenShareVolume).mockClear();
     });
 
-    it('renders a volume control when the share has audio and the sharer is remote', () => {
-      render(
-        <ScreenShareTile
-          participant={sharingParticipant({ isLocal: false, screenShareHasAudio: true, name: 'Felipe' })}
-        />,
-      );
+    it('renders a volume control when the share has audio and the sharer is remote', async () => {
+      await renderWatching(sharingParticipant({ isLocal: false, screenShareHasAudio: true, name: 'Felipe' }));
 
       expect(screen.getByRole('slider', { name: "Volume for Felipe's screen" })).toBeInTheDocument();
     });
 
-    it('does not render a volume control when the share has no audio', () => {
-      render(<ScreenShareTile participant={sharingParticipant({ isLocal: false, screenShareHasAudio: false })} />);
+    it('does not render a volume control when the share has no audio', async () => {
+      await renderWatching(sharingParticipant({ isLocal: false, screenShareHasAudio: false }));
 
       expect(screen.queryByRole('slider')).not.toBeInTheDocument();
     });
 
-    it('does not render a volume control when the presenter has muted the shared audio', () => {
-      render(
-        <ScreenShareTile
-          participant={sharingParticipant({
-            isLocal: false,
-            screenShareHasAudio: true,
-            screenShareAudioEnabled: false,
-          })}
-        />,
+    it('does not render a volume control when the presenter has muted the shared audio', async () => {
+      await renderWatching(
+        sharingParticipant({
+          isLocal: false,
+          screenShareHasAudio: true,
+          screenShareAudioEnabled: false,
+        }),
       );
 
       expect(screen.queryByRole('slider')).not.toBeInTheDocument();
@@ -124,16 +183,14 @@ describe('ScreenShareTile', () => {
       expect(screen.queryByRole('slider')).not.toBeInTheDocument();
     });
 
-    it('forwards volume changes to voiceClient.setScreenShareVolume for that identity', () => {
-      render(
-        <ScreenShareTile
-          participant={sharingParticipant({
-            isLocal: false,
-            identity: 'bob',
-            screenShareHasAudio: true,
-            name: 'Felipe',
-          })}
-        />,
+    it('forwards volume changes to voiceClient.setScreenShareVolume for that identity', async () => {
+      await renderWatching(
+        sharingParticipant({
+          isLocal: false,
+          identity: 'bob',
+          screenShareHasAudio: true,
+          name: 'Felipe',
+        }),
       );
 
       fireEvent.change(screen.getByRole('slider', { name: "Volume for Felipe's screen" }), {
@@ -146,8 +203,7 @@ describe('ScreenShareTile', () => {
 
   describe('fullscreen', () => {
     it('requests fullscreen on the tile when the expand button is clicked', async () => {
-      const user = userEvent.setup();
-      const { container } = render(<ScreenShareTile participant={sharingParticipant()} />);
+      const { user, container } = await renderWatching(sharingParticipant());
 
       await user.click(screen.getByRole('button', { name: 'Enter fullscreen' }));
 
@@ -155,8 +211,7 @@ describe('ScreenShareTile', () => {
     });
 
     it('switches the tile to a full-viewport layout once fullscreen is entered', async () => {
-      const user = userEvent.setup();
-      const { container } = render(<ScreenShareTile participant={sharingParticipant()} />);
+      const { user, container } = await renderWatching(sharingParticipant());
 
       await user.click(screen.getByRole('button', { name: 'Enter fullscreen' }));
 
@@ -164,8 +219,7 @@ describe('ScreenShareTile', () => {
     });
 
     it('hides the sharer label and the expand button once fullscreen is entered', async () => {
-      const user = userEvent.setup();
-      render(<ScreenShareTile participant={sharingParticipant({ name: 'Felipe' })} />);
+      const { user } = await renderWatching(sharingParticipant({ name: 'Felipe' }));
 
       await user.click(screen.getByRole('button', { name: 'Enter fullscreen' }));
 
@@ -174,8 +228,7 @@ describe('ScreenShareTile', () => {
     });
 
     it('shows an exit-fullscreen button once fullscreen is entered, and none of the normal-mode controls', async () => {
-      const user = userEvent.setup();
-      render(<ScreenShareTile participant={sharingParticipant()} />);
+      const { user } = await renderWatching(sharingParticipant());
 
       await user.click(screen.getByRole('button', { name: 'Enter fullscreen' }));
 
@@ -183,11 +236,8 @@ describe('ScreenShareTile', () => {
     });
 
     it('keeps the volume control available once fullscreen is entered', async () => {
-      const user = userEvent.setup();
-      render(
-        <ScreenShareTile
-          participant={sharingParticipant({ isLocal: false, screenShareHasAudio: true, name: 'Felipe' })}
-        />,
+      const { user } = await renderWatching(
+        sharingParticipant({ isLocal: false, screenShareHasAudio: true, name: 'Felipe' }),
       );
 
       await user.click(screen.getByRole('button', { name: 'Enter fullscreen' }));
@@ -196,8 +246,7 @@ describe('ScreenShareTile', () => {
     });
 
     it('calls document.exitFullscreen when the exit button is clicked, and reverts the layout', async () => {
-      const user = userEvent.setup();
-      const { container } = render(<ScreenShareTile participant={sharingParticipant()} />);
+      const { user, container } = await renderWatching(sharingParticipant());
 
       await user.click(screen.getByRole('button', { name: 'Enter fullscreen' }));
       await user.click(screen.getByRole('button', { name: 'Exit fullscreen' }));
@@ -209,8 +258,7 @@ describe('ScreenShareTile', () => {
 
     it('falls back to the full-viewport layout when requestFullscreen() rejects', async () => {
       vi.mocked(Element.prototype.requestFullscreen).mockRejectedValueOnce(new Error('not allowed'));
-      const user = userEvent.setup();
-      const { container } = render(<ScreenShareTile participant={sharingParticipant()} />);
+      const { user, container } = await renderWatching(sharingParticipant());
 
       await user.click(screen.getByRole('button', { name: 'Enter fullscreen' }));
 
@@ -219,8 +267,7 @@ describe('ScreenShareTile', () => {
 
     it('exits the CSS-only fallback on Escape', async () => {
       vi.mocked(Element.prototype.requestFullscreen).mockRejectedValueOnce(new Error('not allowed'));
-      const user = userEvent.setup();
-      const { container } = render(<ScreenShareTile participant={sharingParticipant()} />);
+      const { user, container } = await renderWatching(sharingParticipant());
 
       await user.click(screen.getByRole('button', { name: 'Enter fullscreen' }));
       await user.keyboard('{Escape}');
@@ -230,8 +277,7 @@ describe('ScreenShareTile', () => {
 
     it('exits the CSS-only fallback via the exit button without calling document.exitFullscreen', async () => {
       vi.mocked(Element.prototype.requestFullscreen).mockRejectedValueOnce(new Error('not allowed'));
-      const user = userEvent.setup();
-      const { container } = render(<ScreenShareTile participant={sharingParticipant()} />);
+      const { user, container } = await renderWatching(sharingParticipant());
 
       await user.click(screen.getByRole('button', { name: 'Enter fullscreen' }));
       await user.click(screen.getByRole('button', { name: 'Exit fullscreen' }));
@@ -246,8 +292,7 @@ describe('ScreenShareTile', () => {
       });
 
       it('does not show a mute button when there is no local participant in the call', async () => {
-        const user = userEvent.setup();
-        render(<ScreenShareTile participant={sharingParticipant()} />);
+        const { user } = await renderWatching(sharingParticipant());
 
         await user.click(screen.getByRole('button', { name: 'Enter fullscreen' }));
 
@@ -260,8 +305,7 @@ describe('ScreenShareTile', () => {
             { ...sharingParticipant({ isLocal: false }), identity: 'me', isLocal: true, micEnabled: true },
           ],
         });
-        const user = userEvent.setup();
-        render(<ScreenShareTile participant={sharingParticipant()} />);
+        const { user } = await renderWatching(sharingParticipant());
 
         await user.click(screen.getByRole('button', { name: 'Enter fullscreen' }));
         await user.click(screen.getByRole('button', { name: 'Mute' }));
@@ -275,8 +319,7 @@ describe('ScreenShareTile', () => {
             { ...sharingParticipant({ isLocal: false }), identity: 'me', isLocal: true, micEnabled: false },
           ],
         });
-        const user = userEvent.setup();
-        render(<ScreenShareTile participant={sharingParticipant()} />);
+        const { user } = await renderWatching(sharingParticipant());
 
         await user.click(screen.getByRole('button', { name: 'Enter fullscreen' }));
 
@@ -284,8 +327,7 @@ describe('ScreenShareTile', () => {
       });
 
       it('calls voiceClient.disconnect when the leave-call button is clicked', async () => {
-        const user = userEvent.setup();
-        render(<ScreenShareTile participant={sharingParticipant()} />);
+        const { user } = await renderWatching(sharingParticipant());
 
         await user.click(screen.getByRole('button', { name: 'Enter fullscreen' }));
         await user.click(screen.getByRole('button', { name: 'Leave call' }));

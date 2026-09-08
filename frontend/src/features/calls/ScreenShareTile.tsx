@@ -1,4 +1,4 @@
-import { Maximize2, Mic, MicOff, Minimize2, MonitorUp, PhoneOff } from 'lucide-react';
+import { EyeOff, Maximize2, Mic, MicOff, Minimize2, MonitorUp, PhoneOff } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { voiceClient } from '../../services/voiceClient';
 import type { VoiceParticipant } from '../../types/voice';
@@ -12,12 +12,18 @@ interface ScreenShareTileProps {
 /**
  * Renders one participant's active screen share. Only ever rendered by ParticipantList for a
  * participant whose screenShareTrack is non-null, so — unlike ParticipantTile — there is no
- * placeholder branch: a mounted ScreenShareTile always has a track to attach. Same attach/detach-
- * via-ref pattern as ParticipantTile (see its doc comment, and design spec
+ * placeholder branch: a mounted ScreenShareTile always has a track to attach once watched. Same
+ * attach/detach-via-ref pattern as ParticipantTile (see its doc comment, and design spec
  * docs/superpowers/specs/2026-09-04-phase4-screenshare-design.md §4.1) for why.
  *
- * Spans the grid's full row width (col-span-full) rather than sharing camera tiles' size —
- * screen content (text, code, slides) is illegible squeezed into a small tile.
+ * A remote participant's share starts minimized (isWatching = false) — watching is a voluntary,
+ * per-viewer choice via the Watch/Stop watching buttons below, so a new share never auto-plays
+ * video for everyone in the channel (see
+ * docs/superpowers/specs/2026-09-08-screenshare-opt-in-watch-design.md). The local participant's
+ * own share starts already watching, since it's their own screen.
+ *
+ * Spans the grid's full row width (col-span-full) rather than sharing camera tiles' size once
+ * watched — screen content (text, code, slides) is illegible squeezed into a small tile.
  *
  * The root element also doubles as the Fullscreen API target (see
  * docs/superpowers/specs/2026-09-08-fullscreen-screenshare-design.md): fullscreening it hides
@@ -28,17 +34,18 @@ export function ScreenShareTile({ participant }: ScreenShareTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isWatching, setIsWatching] = useState(participant.isLocal);
   const { screenShareTrack } = participant;
   const localParticipant = useVoiceParticipants().find((candidate) => candidate.isLocal);
 
   useEffect(() => {
     const element = videoRef.current;
-    if (!screenShareTrack || !element) return;
+    if (!isWatching || !screenShareTrack || !element) return;
     screenShareTrack.attach(element);
     return () => {
       screenShareTrack.detach(element);
     };
-  }, [screenShareTrack]);
+  }, [isWatching, screenShareTrack]);
 
   useEffect(() => {
     function handleFullscreenChange() {
@@ -73,6 +80,23 @@ export function ScreenShareTile({ participant }: ScreenShareTileProps) {
     }
   }
 
+  if (!isWatching) {
+    return (
+      <div className="flex aspect-video flex-col items-center justify-center gap-2 rounded bg-gray-800 p-2 text-center">
+        <MonitorUp size={20} className="text-gray-300" aria-hidden="true" />
+        <span className="text-caption text-gray-100">{participant.name}'s screen</span>
+        <button
+          type="button"
+          aria-label={`Watch ${participant.name}'s screen`}
+          onClick={() => setIsWatching(true)}
+          className="rounded bg-white/10 px-2 py-1 text-caption text-white hover:bg-white/20"
+        >
+          Watch
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div
       ref={containerRef}
@@ -99,6 +123,16 @@ export function ScreenShareTile({ participant }: ScreenShareTileProps) {
           >
             <Maximize2 size={16} className="text-white" aria-hidden="true" />
           </button>
+          {!participant.isLocal && (
+            <button
+              type="button"
+              aria-label={`Stop watching ${participant.name}'s screen`}
+              onClick={() => setIsWatching(false)}
+              className="absolute left-9 top-1 opacity-0 transition-opacity group-hover:opacity-100"
+            >
+              <EyeOff size={16} className="text-white" aria-hidden="true" />
+            </button>
+          )}
           {!participant.isLocal && participant.screenShareHasAudio && participant.screenShareAudioEnabled && (
             <div className="absolute right-1 top-1 opacity-0 transition-opacity group-hover:opacity-100">
               <VolumeControl
