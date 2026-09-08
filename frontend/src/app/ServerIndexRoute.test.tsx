@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useParams } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import type { Channel } from '../types/channel';
 import { ServerIndexRoute } from './ServerIndexRoute';
@@ -13,12 +13,19 @@ function channel(id: string, type: Channel['type']): Channel {
   return { id, serverId: 's1', name: id, type, createdAt: '2026-01-01', updatedAt: '2026-01-01' };
 }
 
+// Renders the resolved :channelId so the redirect target can be asserted on, not just
+// that *some* channel screen was reached.
+function ChannelScreenStub() {
+  const { channelId } = useParams<{ channelId: string }>();
+  return <div>channel-screen-{channelId}</div>;
+}
+
 function renderRoute() {
   return render(
     <MemoryRouter initialEntries={['/app/servers/s1']}>
       <Routes>
         <Route path="/app/servers/:serverId" element={<ServerIndexRoute />} />
-        <Route path="/app/servers/:serverId/channels/:channelId" element={<div>channel-screen</div>} />
+        <Route path="/app/servers/:serverId/channels/:channelId" element={<ChannelScreenStub />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -40,7 +47,7 @@ describe('ServerIndexRoute', () => {
 
     renderRoute();
 
-    expect(await screen.findByText('channel-screen')).toBeInTheDocument();
+    expect(await screen.findByText('channel-screen-text-1')).toBeInTheDocument();
   });
 
   it('shows a "no text channel" placeholder when the server has no TEXT channel', () => {
