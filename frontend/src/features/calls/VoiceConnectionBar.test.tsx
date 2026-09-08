@@ -16,7 +16,7 @@ import { VoiceConnectionBar } from './VoiceConnectionBar';
 vi.mock('../channels/api');
 vi.mock('../servers/api');
 vi.mock('../../services/voiceClient', () => ({
-  voiceClient: { disconnect: vi.fn(), toggleMute: vi.fn(), toggleDeafen: vi.fn() },
+  voiceClient: { disconnect: vi.fn(), toggleMute: vi.fn(), toggleDeafen: vi.fn(), toggleScreenShare: vi.fn() },
 }));
 
 const channel: Channel = {
@@ -71,6 +71,7 @@ describe('VoiceConnectionBar', () => {
     vi.mocked(voiceClient.disconnect).mockClear();
     vi.mocked(voiceClient.toggleMute).mockClear();
     vi.mocked(voiceClient.toggleDeafen).mockClear();
+    vi.mocked(voiceClient.toggleScreenShare).mockClear();
     useVoiceStore.setState({ status: 'disconnected', channelId: null, participants: [], error: null, isDeafened: false });
   });
 
@@ -152,5 +153,74 @@ describe('VoiceConnectionBar', () => {
     await user.click(screen.getByRole('button', { name: 'Leave call' }));
 
     expect(voiceClient.disconnect).toHaveBeenCalledTimes(1);
+  });
+
+  describe('screen share', () => {
+    it('toggles screen share off directly when already sharing', async () => {
+      const user = userEvent.setup();
+      useVoiceStore.setState({
+        status: 'connected',
+        channelId: 'c1',
+        participants: [localParticipant({ screenShareEnabled: true })],
+      });
+      renderBar();
+
+      await screen.findByText('Alpha');
+      await user.click(screen.getByRole('button', { name: 'Stop sharing' }));
+
+      expect(voiceClient.toggleScreenShare).toHaveBeenCalledTimes(1);
+    });
+
+    it('opens the quality modal instead of toggling immediately when starting to share', async () => {
+      const user = userEvent.setup();
+      useVoiceStore.setState({
+        status: 'connected',
+        channelId: 'c1',
+        participants: [localParticipant({ screenShareEnabled: false })],
+      });
+      renderBar();
+
+      await screen.findByText('Alpha');
+      await user.click(screen.getByRole('button', { name: 'Share screen' }));
+
+      expect(voiceClient.toggleScreenShare).not.toHaveBeenCalled();
+      expect(screen.getByText('Share your screen')).toBeInTheDocument();
+    });
+
+    it('starts sharing with the chosen quality and audio preference after confirming the modal', async () => {
+      const user = userEvent.setup();
+      useVoiceStore.setState({
+        status: 'connected',
+        channelId: 'c1',
+        participants: [localParticipant({ screenShareEnabled: false })],
+      });
+      renderBar();
+
+      await screen.findByText('Alpha');
+      await user.click(screen.getByRole('button', { name: 'Share screen' }));
+      await user.click(screen.getByLabelText('HD (720p)'));
+      await user.click(screen.getByLabelText('Share system/tab audio'));
+      await user.click(screen.getByRole('button', { name: 'Share' }));
+
+      expect(voiceClient.toggleScreenShare).toHaveBeenCalledWith({ quality: 'hd', withAudio: true });
+      expect(screen.queryByText('Share your screen')).not.toBeInTheDocument();
+    });
+
+    it('closes the quality modal without toggling when canceled', async () => {
+      const user = userEvent.setup();
+      useVoiceStore.setState({
+        status: 'connected',
+        channelId: 'c1',
+        participants: [localParticipant({ screenShareEnabled: false })],
+      });
+      renderBar();
+
+      await screen.findByText('Alpha');
+      await user.click(screen.getByRole('button', { name: 'Share screen' }));
+      await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+      expect(voiceClient.toggleScreenShare).not.toHaveBeenCalled();
+      expect(screen.queryByText('Share your screen')).not.toBeInTheDocument();
+    });
   });
 });
