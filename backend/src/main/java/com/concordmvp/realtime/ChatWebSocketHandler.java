@@ -106,7 +106,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         try {
             VoicePresenceUpdateRequest request = objectMapper.treeToValue(payloadNode, VoicePresenceUpdateRequest.class);
             voicePresenceService.updatePresence(request.channelId(), userId(session), request.muted(),
-                    request.cameraOn(), request.screenSharing(), request.speaking());
+                    request.cameraOn(), request.screenSharing(), request.speaking(), request.deafened());
         } catch (ResourceNotFoundException | ForbiddenException | BadRequestException e) {
             sendError(session, e.getMessage());
         } catch (Exception e) {

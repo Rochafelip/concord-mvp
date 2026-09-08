@@ -92,7 +92,7 @@ class VoicePresenceServiceTest {
         UUID userId = UUID.randomUUID();
         when(channelService.getChannel(channelId, userId)).thenReturn(channel(channelId, serverId, ChannelType.TEXT));
 
-        assertThatThrownBy(() -> voicePresenceService.updatePresence(channelId, userId, false, false, false, false))
+        assertThatThrownBy(() -> voicePresenceService.updatePresence(channelId, userId, false, false, false, false, false))
                 .isInstanceOf(BadRequestException.class);
     }
 
@@ -103,7 +103,7 @@ class VoicePresenceServiceTest {
         when(channelService.getChannel(channelId, userId))
                 .thenThrow(new ResourceNotFoundException("Channel not found: " + channelId));
 
-        assertThatThrownBy(() -> voicePresenceService.updatePresence(channelId, userId, false, false, false, false))
+        assertThatThrownBy(() -> voicePresenceService.updatePresence(channelId, userId, false, false, false, false, false))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
@@ -114,7 +114,7 @@ class VoicePresenceServiceTest {
         when(channelService.getChannel(channelId, userId))
                 .thenThrow(new ForbiddenException("Not a member of this server"));
 
-        assertThatThrownBy(() -> voicePresenceService.updatePresence(channelId, userId, false, false, false, false))
+        assertThatThrownBy(() -> voicePresenceService.updatePresence(channelId, userId, false, false, false, false, false))
                 .isInstanceOf(ForbiddenException.class);
     }
 
@@ -126,7 +126,7 @@ class VoicePresenceServiceTest {
         when(channelService.getChannel(channelId, userId)).thenReturn(channel(channelId, serverId, ChannelType.VOICE));
         when(userRepository.findById(userId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> voicePresenceService.updatePresence(channelId, userId, false, false, false, false))
+        assertThatThrownBy(() -> voicePresenceService.updatePresence(channelId, userId, false, false, false, false, false))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
@@ -141,7 +141,7 @@ class VoicePresenceServiceTest {
         when(serverMemberRepository.findByServerId(serverId)).thenReturn(List.of(
                 member(userId, serverId), member(otherMemberId, serverId)));
 
-        voicePresenceService.updatePresence(channelId, userId, true, false, true, false);
+        voicePresenceService.updatePresence(channelId, userId, true, false, true, false, false);
 
         ArgumentCaptor<WsEvent> eventCaptor = ArgumentCaptor.forClass(WsEvent.class);
         verify(realtimeEventPublisher).broadcast(eq(Set.of(userId, otherMemberId)), eventCaptor.capture());
@@ -156,6 +156,7 @@ class VoicePresenceServiceTest {
         assertThat(payload.cameraOn()).isFalse();
         assertThat(payload.screenSharing()).isTrue();
         assertThat(payload.speaking()).isFalse();
+        assertThat(payload.deafened()).isFalse();
 
         when(serverMemberRepository.existsByServerIdAndUserId(serverId, userId)).thenReturn(true);
         List<VoicePresenceResponse> current = voicePresenceService.getPresence(serverId, userId);
@@ -172,13 +173,34 @@ class VoicePresenceServiceTest {
         when(userRepository.findById(userId)).thenReturn(Optional.of(user(userId, "Felipe")));
         lenient().when(serverMemberRepository.findByServerId(serverId)).thenReturn(List.of(member(userId, serverId)));
 
-        voicePresenceService.updatePresence(channelId, userId, false, false, false, false);
-        voicePresenceService.updatePresence(channelId, userId, true, false, false, false);
+        voicePresenceService.updatePresence(channelId, userId, false, false, false, false, false);
+        voicePresenceService.updatePresence(channelId, userId, true, false, false, false, false);
 
         when(serverMemberRepository.existsByServerIdAndUserId(serverId, userId)).thenReturn(true);
         List<VoicePresenceResponse> current = voicePresenceService.getPresence(serverId, userId);
         assertThat(current).hasSize(1);
         assertThat(current.get(0).muted()).isTrue();
+    }
+
+    @Test
+    void updatePresence_deafened_isIncludedInBroadcastAndSnapshot() {
+        UUID channelId = UUID.randomUUID();
+        UUID serverId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        when(channelService.getChannel(channelId, userId)).thenReturn(channel(channelId, serverId, ChannelType.VOICE));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user(userId, "Felipe")));
+        lenient().when(serverMemberRepository.findByServerId(serverId)).thenReturn(List.of(member(userId, serverId)));
+
+        voicePresenceService.updatePresence(channelId, userId, true, false, false, false, true);
+
+        ArgumentCaptor<WsEvent> eventCaptor = ArgumentCaptor.forClass(WsEvent.class);
+        verify(realtimeEventPublisher).broadcast(eq(Set.of(userId)), eventCaptor.capture());
+        VoicePresenceResponse payload = (VoicePresenceResponse) eventCaptor.getValue().payload();
+        assertThat(payload.deafened()).isTrue();
+
+        when(serverMemberRepository.existsByServerIdAndUserId(serverId, userId)).thenReturn(true);
+        List<VoicePresenceResponse> current = voicePresenceService.getPresence(serverId, userId);
+        assertThat(current.get(0).deafened()).isTrue();
     }
 
     @Test
@@ -198,7 +220,7 @@ class VoicePresenceServiceTest {
         when(userRepository.findById(userId)).thenReturn(Optional.of(user(userId, "Felipe")));
         when(serverMemberRepository.findByServerId(serverId)).thenReturn(List.of(
                 member(userId, serverId), member(otherMemberId, serverId)));
-        voicePresenceService.updatePresence(channelId, userId, false, false, false, false);
+        voicePresenceService.updatePresence(channelId, userId, false, false, false, false, false);
 
         voicePresenceService.removePresence(userId);
 
@@ -242,8 +264,8 @@ class VoicePresenceServiceTest {
         lenient().when(serverMemberRepository.findByServerId(serverId)).thenReturn(List.of(member(userId, serverId)));
         lenient().when(serverMemberRepository.findByServerId(otherServerId))
                 .thenReturn(List.of(member(otherServerUserId, otherServerId)));
-        voicePresenceService.updatePresence(channelId, userId, false, false, false, false);
-        voicePresenceService.updatePresence(otherChannelId, otherServerUserId, false, false, false, false);
+        voicePresenceService.updatePresence(channelId, userId, false, false, false, false, false);
+        voicePresenceService.updatePresence(otherChannelId, otherServerUserId, false, false, false, false, false);
         when(serverMemberRepository.existsByServerIdAndUserId(serverId, userId)).thenReturn(true);
 
         List<VoicePresenceResponse> current = voicePresenceService.getPresence(serverId, userId);

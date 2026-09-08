@@ -56,7 +56,7 @@ public class VoicePresenceService {
     }
 
     public void updatePresence(UUID channelId, UUID userId, boolean muted, boolean cameraOn,
-                                boolean screenSharing, boolean speaking) {
+                                boolean screenSharing, boolean speaking, boolean deafened) {
         Channel channel = channelService.getChannel(channelId, userId);
         if (channel.getType() != ChannelType.VOICE) {
             throw new BadRequestException("Channel is not a voice channel: " + channelId);
@@ -68,7 +68,7 @@ public class VoicePresenceService {
         VoicePresenceResponse response = new VoicePresenceResponse(
                 channel.getServerId(), channelId,
                 new UserSummaryResponse(user.getId(), user.getUsername(), user.getDisplayName(), user.getAvatarUrl()),
-                muted, cameraOn, screenSharing, speaking);
+                muted, cameraOn, screenSharing, speaking, deafened);
 
         byUserId.put(userId, new Entry(channelId, channel.getServerId(), response));
 

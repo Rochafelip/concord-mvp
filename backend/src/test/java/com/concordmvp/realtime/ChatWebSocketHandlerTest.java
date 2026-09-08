@@ -160,7 +160,7 @@ class ChatWebSocketHandlerTest {
                         + "\"channelId\":\"" + channelId + "\","
                         + "\"muted\":true,\"cameraOn\":false,\"screenSharing\":true,\"speaking\":false}}"));
 
-        verify(voicePresenceService).updatePresence(channelId, userId, true, false, true, false);
+        verify(voicePresenceService).updatePresence(channelId, userId, true, false, true, false, false);
         verify(session, never()).sendMessage(any());
     }
 
@@ -171,7 +171,7 @@ class ChatWebSocketHandlerTest {
         WebSocketSession session = sessionWithUserId(userId);
         doThrow(new ForbiddenException("Not a member of this server"))
                 .when(voicePresenceService)
-                .updatePresence(eq(channelId), eq(userId), anyBoolean(), anyBoolean(), anyBoolean(), anyBoolean());
+                .updatePresence(eq(channelId), eq(userId), anyBoolean(), anyBoolean(), anyBoolean(), anyBoolean(), anyBoolean());
 
         handler.handleMessage(session, new TextMessage(
                 "{\"type\":\"VOICE_PRESENCE_UPDATE\",\"payload\":{"
