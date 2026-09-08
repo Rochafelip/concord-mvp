@@ -1,3 +1,4 @@
+import { MonitorUp } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { voiceClient } from '../../services/voiceClient';
 import type { VoiceParticipant } from '../../types/voice';
@@ -14,8 +15,8 @@ interface ScreenShareTileProps {
  * via-ref pattern as ParticipantTile (see its doc comment, and design spec
  * docs/superpowers/specs/2026-09-04-phase4-screenshare-design.md §4.1) for why.
  *
- * Spans the grid's full row width (col-span-2) rather than sharing camera tiles' 1-column size —
- * screen content (text, code, slides) is illegible squeezed into a small square tile.
+ * Spans the grid's full row width (col-span-full) rather than sharing camera tiles' size —
+ * screen content (text, code, slides) is illegible squeezed into a small tile.
  */
 export function ScreenShareTile({ participant }: ScreenShareTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -31,10 +32,10 @@ export function ScreenShareTile({ participant }: ScreenShareTileProps) {
   }, [screenShareTrack]);
 
   return (
-    <div className="group relative col-span-2 flex aspect-video items-center justify-center overflow-hidden rounded bg-gray-900">
+    <div className="group relative col-span-full flex aspect-video items-center justify-center overflow-hidden rounded bg-gray-900">
       <video ref={videoRef} muted autoPlay playsInline className="h-full w-full object-contain" />
       <span className="absolute bottom-1 left-1 flex items-center gap-1 rounded bg-black/50 px-1.5 py-0.5 text-xs text-white">
-        <span aria-hidden="true">🖥️</span>
+        <MonitorUp size={12} aria-hidden="true" />
         {participant.name}
         's screen
         {participant.isLocal ? ' (you)' : ''}
