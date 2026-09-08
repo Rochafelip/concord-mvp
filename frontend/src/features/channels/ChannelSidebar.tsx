@@ -10,7 +10,7 @@ import { CreateChannelModal } from './CreateChannelModal';
 import { useChannels, useDeleteChannel } from './hooks';
 
 function channelLinkClassName(isSelected: boolean) {
-  return `flex items-center gap-1.5 rounded px-2 py-1 text-sm ${
+  return `flex items-center gap-1.5 rounded px-2 py-1 text-body ${
     isSelected ? 'bg-brand/10 text-brand' : 'text-muted hover:bg-border/40'
   }`;
 }

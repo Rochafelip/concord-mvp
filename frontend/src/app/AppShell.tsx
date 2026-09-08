@@ -60,7 +60,7 @@ export function AppShell() {
             {user && (
               <>
                 <Avatar displayName={user.displayName} avatarUrl={user.avatarUrl} />
-                <span className="text-sm text-ink">{user.displayName}</span>
+                <span className="text-body text-ink">{user.displayName}</span>
               </>
             )}
             <Button variant="secondary" onClick={logout}>

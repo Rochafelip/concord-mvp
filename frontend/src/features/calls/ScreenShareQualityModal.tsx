@@ -37,8 +37,8 @@ export function ScreenShareQualityModal({ open, onClose, onConfirm }: ScreenShar
         <h2 className="text-lg font-semibold text-ink">Share your screen</h2>
 
         <fieldset className="space-y-1">
-          <legend className="text-sm font-medium text-muted">Quality</legend>
-          <label className="flex items-center gap-2 text-sm text-muted">
+          <legend className="text-body font-medium text-muted">Quality</legend>
+          <label className="flex items-center gap-2 text-body text-muted">
             <input
               type="radio"
               name="screenShareQuality"
@@ -48,7 +48,7 @@ export function ScreenShareQualityModal({ open, onClose, onConfirm }: ScreenShar
             />
             HD (720p)
           </label>
-          <label className="flex items-center gap-2 text-sm text-muted">
+          <label className="flex items-center gap-2 text-body text-muted">
             <input
               type="radio"
               name="screenShareQuality"
@@ -60,7 +60,7 @@ export function ScreenShareQualityModal({ open, onClose, onConfirm }: ScreenShar
           </label>
         </fieldset>
 
-        <label className="flex items-center gap-2 text-sm text-muted">
+        <label className="flex items-center gap-2 text-body text-muted">
           <input type="checkbox" checked={withAudio} onChange={(event) => setWithAudio(event.target.checked)} />
           Share system/tab audio
         </label>

@@ -13,7 +13,7 @@ export function ParticipantList({ onLeave }: ParticipantListProps) {
 
   if (participants.length === 0) {
     return (
-      <div className="flex flex-1 items-center justify-center gap-2 p-4 text-sm text-muted">
+      <div className="flex flex-1 items-center justify-center gap-2 p-4 text-body text-muted">
         <Spinner />
         Connecting…
       </div>

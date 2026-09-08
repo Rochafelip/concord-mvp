@@ -35,7 +35,7 @@ export function ServerSidebar() {
               aria-label={server.name}
               aria-current={isSelected ? 'page' : undefined}
               title={server.name}
-              className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full text-sm font-semibold transition-colors ${
+              className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full text-body font-semibold transition-colors ${
                 isSelected ? 'bg-brand text-white' : 'bg-sidebar text-muted hover:bg-brand/20'
               }`}
             >

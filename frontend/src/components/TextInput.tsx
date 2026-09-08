@@ -21,12 +21,12 @@ export function TextInput({
 
   return (
     <div className="flex flex-col gap-1">
-      <label htmlFor={inputId} className={hideLabel ? 'sr-only' : 'text-sm font-medium text-muted'}>
+      <label htmlFor={inputId} className={hideLabel ? 'sr-only' : 'text-body font-medium text-muted'}>
         {label}
       </label>
       <input
         id={inputId}
-        className={`h-10 border bg-surface px-3 text-sm text-ink focus:border-brand focus:outline-none ${
+        className={`h-10 border bg-surface px-3 text-body text-ink focus:border-brand focus:outline-none ${
           pill ? 'rounded-full' : 'rounded'
         } ${className}`}
         {...rest}

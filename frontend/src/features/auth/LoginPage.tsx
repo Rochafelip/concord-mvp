@@ -56,7 +56,7 @@ export function LoginPage() {
           </Button>
         </form>
 
-        <p className="text-center text-sm text-muted">
+        <p className="text-center text-body text-muted">
           Don't have an account?{' '}
           <Link to="/register" className="font-medium text-brand hover:text-brand-hover">
             Register

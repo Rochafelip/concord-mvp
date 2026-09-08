@@ -55,8 +55,8 @@ export function CreateChannelModal({ serverId, open, onClose }: CreateChannelMod
         />
 
         <fieldset className="space-y-1">
-          <legend className="text-sm font-medium text-muted">Type</legend>
-          <label className="flex items-center gap-2 text-sm text-muted">
+          <legend className="text-body font-medium text-muted">Type</legend>
+          <label className="flex items-center gap-2 text-body text-muted">
             <input
               type="radio"
               name="type"
@@ -66,7 +66,7 @@ export function CreateChannelModal({ serverId, open, onClose }: CreateChannelMod
             />
             Text
           </label>
-          <label className="flex items-center gap-2 text-sm text-muted">
+          <label className="flex items-center gap-2 text-body text-muted">
             <input
               type="radio"
               name="type"

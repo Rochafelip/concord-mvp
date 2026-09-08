@@ -41,7 +41,7 @@ export function VoiceConnectionBar() {
         to={`/app/servers/${channel?.serverId}/channels/${channelId}`}
         className="flex min-w-0 flex-col gap-0.5 hover:opacity-80"
       >
-        <span className="flex items-center gap-1.5 truncate text-sm font-medium text-ink">
+        <span className="flex items-center gap-1.5 truncate text-body font-medium text-ink">
           <Volume2 size={16} aria-hidden="true" />
           {status === 'connecting' ? 'Connecting…' : (channel?.name ?? '…')}
           {quality && localParticipant && (

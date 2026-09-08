@@ -16,7 +16,7 @@ export function Button({ variant = 'primary', className = '', disabled, ...rest 
     <button
       type="button"
       disabled={disabled}
-      className={`h-10 rounded px-4 text-sm font-medium transition-colors disabled:cursor-not-allowed ${VARIANT_CLASSES[variant]} ${className}`}
+      className={`h-10 rounded px-4 text-body font-medium transition-colors disabled:cursor-not-allowed ${VARIANT_CLASSES[variant]} ${className}`}
       {...rest}
     />
   );

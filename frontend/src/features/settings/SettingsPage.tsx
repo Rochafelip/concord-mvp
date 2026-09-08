@@ -69,7 +69,7 @@ export function SettingsPage() {
       <form onSubmit={handleProfileSubmit} className="space-y-4" noValidate>
         <h2 className="text-lg font-medium text-ink">Profile</h2>
         <ErrorBanner message={errorMessage(updateProfileMutation.error)} />
-        {profileSaved && <p className="text-sm text-brand">Profile updated successfully</p>}
+        {profileSaved && <p className="text-body text-brand">Profile updated successfully</p>}
 
         <TextInput
           label="Username"
@@ -101,7 +101,7 @@ export function SettingsPage() {
               : errorMessage(changePasswordMutation.error)
           }
         />
-        {passwordSaved && <p className="text-sm text-brand">Password changed successfully</p>}
+        {passwordSaved && <p className="text-body text-brand">Password changed successfully</p>}
 
         <TextInput
           label="Current password"

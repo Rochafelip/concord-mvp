@@ -77,7 +77,7 @@ export function RegisterPage() {
           </Button>
         </form>
 
-        <p className="text-center text-sm text-muted">
+        <p className="text-center text-body text-muted">
           Already have an account?{' '}
           <Link to="/login" className="font-medium text-brand hover:text-brand-hover">
             Log in
