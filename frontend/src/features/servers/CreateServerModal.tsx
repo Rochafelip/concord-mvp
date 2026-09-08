@@ -38,7 +38,7 @@ export function CreateServerModal({ open, onClose }: CreateServerModalProps) {
   return (
     <Modal open={open} onClose={onClose}>
       <form onSubmit={handleSubmit} className="w-72 space-y-4">
-        <h2 className="text-lg font-semibold text-gray-900">Create a server</h2>
+        <h2 className="text-lg font-semibold text-ink">Create a server</h2>
 
         <ErrorBanner message={errorMessage} />
 
