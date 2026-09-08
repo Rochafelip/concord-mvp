@@ -24,6 +24,12 @@ export default {
       borderColor: {
         DEFAULT: 'rgb(var(--color-border) / <alpha-value>)',
       },
+      fontSize: {
+        caption: ['0.75rem', { lineHeight: '1rem' }],
+        body: ['1rem', { lineHeight: '1.5rem' }],
+        heading: ['1.125rem', { lineHeight: '1.75rem' }],
+        title: ['1.5rem', { lineHeight: '2rem' }],
+      },
     },
   },
   plugins: [],
