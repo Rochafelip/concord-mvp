@@ -35,7 +35,7 @@ export function AppShell() {
   return (
     <div className="flex h-screen flex-col bg-app">
       <header className="flex flex-shrink-0 items-center justify-between border-b bg-surface px-4 py-2">
-        <span className="font-semibold text-ink">Concord</span>
+        <span className="text-heading font-semibold text-ink">Concord</span>
 
         {/* Gated on `token`, not `user`: if the backend is briefly unreachable during boot
             rehydration (network error, not a 401), `token` stays set but `user` never

@@ -16,7 +16,7 @@ export function ChatWindow() {
   return (
     <div className="flex h-full flex-col">
       <div className="flex-shrink-0 border-b bg-surface px-4 py-3">
-        <span className="font-semibold text-ink">
+        <span className="text-heading font-semibold text-ink">
           {channel ? `# ${channel.name}` : 'Loading…'}
         </span>
       </div>

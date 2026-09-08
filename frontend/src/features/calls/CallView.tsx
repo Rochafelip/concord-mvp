@@ -43,7 +43,7 @@ export function CallView({ channel }: CallViewProps) {
     <div className="flex h-full flex-col">
       <div className="flex flex-shrink-0 items-center gap-1.5 border-b bg-surface px-4 py-3">
         <Volume2 size={16} className="text-muted" aria-hidden="true" />
-        <span className="font-semibold text-ink">{channel.name}</span>
+        <span className="text-heading font-semibold text-ink">{channel.name}</span>
       </div>
       <ParticipantList onLeave={handleLeave} />
     </div>
