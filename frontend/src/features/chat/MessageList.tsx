@@ -78,7 +78,7 @@ export function MessageList({ channelId }: MessageListProps) {
             type="button"
             onClick={handleLoadOlder}
             disabled={isFetchingNextPage}
-            className="text-sm text-brand hover:underline disabled:text-muted"
+            className="text-body text-brand hover:underline disabled:text-muted"
           >
             {isFetchingNextPage ? 'Loading…' : 'Load older messages'}
           </button>
@@ -87,17 +87,21 @@ export function MessageList({ channelId }: MessageListProps) {
 
       {messages.map((message) => (
         <div key={message.id} data-testid="message" className="flex items-start gap-3">
-          <Avatar displayName={message.author.displayName} avatarUrl={message.author.avatarUrl} />
+          <Avatar
+            displayName={message.author.displayName}
+            avatarUrl={message.author.avatarUrl}
+            size="md"
+          />
           <div className="min-w-0">
             <div className="flex items-baseline gap-2">
-              <span className="text-sm font-semibold text-ink">
+              <span className="text-body font-semibold text-ink">
                 {message.author.displayName}
               </span>
-              <span className="text-xs text-muted">
+              <span className="text-caption text-muted">
                 {new Date(message.createdAt).toLocaleTimeString()}
               </span>
             </div>
-            <p data-testid="message-content" className="whitespace-pre-wrap text-sm text-ink">
+            <p data-testid="message-content" className="whitespace-pre-wrap text-body text-ink">
               {message.content}
             </p>
           </div>
