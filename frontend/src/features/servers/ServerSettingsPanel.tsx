@@ -88,17 +88,17 @@ export function ServerSettingsPanel({ serverId, open, onClose }: ServerSettingsP
   return (
     <Modal open={open} onClose={onClose}>
       <div className="w-80 space-y-4">
-        <h2 className="text-lg font-semibold text-gray-900">{server?.name ?? 'Server'} settings</h2>
+        <h2 className="text-lg font-semibold text-ink">{server?.name ?? 'Server'} settings</h2>
 
         {isOwner && (
           <section className="space-y-2">
-            <h3 className="text-sm font-medium text-gray-700">Invite code</h3>
+            <h3 className="text-sm font-medium text-muted">Invite code</h3>
             <ErrorBanner
               message={inviteQuery.error instanceof ApiError ? inviteQuery.error.message : null}
             />
             {inviteQuery.data && (
               <div className="flex items-center gap-2">
-                <code className="flex-1 truncate rounded bg-gray-100 px-2 py-1 text-sm">
+                <code className="flex-1 truncate rounded bg-sidebar px-2 py-1 text-sm text-ink">
                   {inviteQuery.data.code}
                 </code>
                 <Button type="button" variant="secondary" onClick={handleCopy}>
@@ -118,10 +118,10 @@ export function ServerSettingsPanel({ serverId, open, onClose }: ServerSettingsP
         )}
 
         <section className="space-y-2">
-          <h3 className="text-sm font-medium text-gray-700">Members</h3>
+          <h3 className="text-sm font-medium text-muted">Members</h3>
           <ul className="max-h-48 space-y-1 overflow-y-auto">
             {(members ?? []).map((member) => (
-              <li key={member.user.id} className="flex items-center justify-between gap-2 text-sm">
+              <li key={member.user.id} className="flex items-center justify-between gap-2 text-sm text-ink">
                 <span className="flex items-center gap-2">
                   <Avatar
                     displayName={member.user.displayName}
@@ -130,13 +130,13 @@ export function ServerSettingsPanel({ serverId, open, onClose }: ServerSettingsP
                   />
                   {member.user.displayName}
                   {server?.ownerId === member.user.id && (
-                    <span className="text-xs uppercase text-gray-400">Owner</span>
+                    <span className="text-xs uppercase text-muted">Owner</span>
                   )}
                 </span>
                 {isOwner && member.user.id !== currentUserId && (
                   <button
                     type="button"
-                    className="text-xs text-indigo-600 hover:underline"
+                    className="text-xs text-brand hover:underline"
                     onClick={() => handleTransfer(member.user.id, member.user.displayName)}
                   >
                     Make owner
@@ -147,10 +147,10 @@ export function ServerSettingsPanel({ serverId, open, onClose }: ServerSettingsP
           </ul>
         </section>
 
-        <section className="space-y-2 border-t border-gray-200 pt-4">
+        <section className="space-y-2 border-t pt-4">
           {isOwner ? (
             <>
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-muted">
                 You're the owner, so you can't leave directly — transfer ownership or delete
                 the server instead.
               </p>
@@ -166,7 +166,7 @@ export function ServerSettingsPanel({ serverId, open, onClose }: ServerSettingsP
               <Button
                 type="button"
                 variant="secondary"
-                className="w-full border border-red-300 text-red-700 hover:bg-red-50"
+                className="w-full border border-danger/40 text-danger hover:bg-danger/10"
                 onClick={handleDelete}
                 disabled={deleteServerMutation.isPending}
               >
