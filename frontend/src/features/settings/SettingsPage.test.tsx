@@ -25,6 +25,7 @@ describe('SettingsPage', () => {
       user: { id: 'u1', username: 'jdoe', displayName: 'John Doe', email: 'j@doe.com', avatarUrl: null },
     });
     vi.mocked(api.updateProfile).mockReset();
+    vi.mocked(api.changePassword).mockReset();
   });
 
   it('pre-fills the profile form with the current user', () => {
@@ -65,5 +66,49 @@ describe('SettingsPage', () => {
     await user.click(screen.getByRole('button', { name: 'Save profile' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('username: size must be between 0 and 50');
+  });
+
+  it('blocks submission and shows an inline message when new password and confirmation differ', async () => {
+    const user = userEvent.setup();
+    renderSettingsPage();
+
+    await user.type(screen.getByLabelText('Current password'), 'oldpassword');
+    await user.type(screen.getByLabelText('New password'), 'newpassword1');
+    await user.type(screen.getByLabelText('Confirm new password'), 'newpassword2');
+    await user.click(screen.getByRole('button', { name: 'Change password' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('New password and confirmation do not match');
+    expect(api.changePassword).not.toHaveBeenCalled();
+  });
+
+  it('clears the password fields and shows a success message on save', async () => {
+    vi.mocked(api.changePassword).mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    renderSettingsPage();
+
+    await user.type(screen.getByLabelText('Current password'), 'oldpassword');
+    await user.type(screen.getByLabelText('New password'), 'newpassword1');
+    await user.type(screen.getByLabelText('Confirm new password'), 'newpassword1');
+    await user.click(screen.getByRole('button', { name: 'Change password' }));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Current password')).toHaveValue('');
+    });
+    expect(screen.getByLabelText('New password')).toHaveValue('');
+    expect(screen.getByLabelText('Confirm new password')).toHaveValue('');
+    expect(await screen.findByText('Password changed successfully')).toBeInTheDocument();
+  });
+
+  it('shows the backend error message when the current password is wrong', async () => {
+    vi.mocked(api.changePassword).mockRejectedValue(new ApiError('Current password is incorrect', 400));
+    const user = userEvent.setup();
+    renderSettingsPage();
+
+    await user.type(screen.getByLabelText('Current password'), 'wrongpassword');
+    await user.type(screen.getByLabelText('New password'), 'newpassword1');
+    await user.type(screen.getByLabelText('Confirm new password'), 'newpassword1');
+    await user.click(screen.getByRole('button', { name: 'Change password' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Current password is incorrect');
   });
 });

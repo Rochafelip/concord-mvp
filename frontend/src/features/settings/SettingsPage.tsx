@@ -4,7 +4,7 @@ import { ErrorBanner } from '../../components/ErrorBanner';
 import { TextInput } from '../../components/TextInput';
 import { ApiError } from '../../services/apiClient';
 import { useAuthStore } from '../auth/authStore';
-import { useUpdateProfile } from './hooks';
+import { useChangePassword, useUpdateProfile } from './hooks';
 
 function errorMessage(error: unknown): string | null {
   if (error instanceof ApiError) return error.message;
@@ -28,6 +28,35 @@ export function SettingsPage() {
         onSuccess: () => {
           setProfileSaved(true);
           setTimeout(() => setProfileSaved(false), 2000);
+        },
+      },
+    );
+  }
+
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [passwordMismatch, setPasswordMismatch] = useState(false);
+  const [passwordSaved, setPasswordSaved] = useState(false);
+  const changePasswordMutation = useChangePassword();
+
+  function handlePasswordSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setPasswordSaved(false);
+    if (newPassword !== confirmNewPassword) {
+      setPasswordMismatch(true);
+      return;
+    }
+    setPasswordMismatch(false);
+    changePasswordMutation.mutate(
+      { currentPassword, newPassword },
+      {
+        onSuccess: () => {
+          setCurrentPassword('');
+          setNewPassword('');
+          setConfirmNewPassword('');
+          setPasswordSaved(true);
+          setTimeout(() => setPasswordSaved(false), 2000);
         },
       },
     );
@@ -60,6 +89,51 @@ export function SettingsPage() {
         />
         <Button type="submit" disabled={updateProfileMutation.isPending}>
           {updateProfileMutation.isPending ? 'Saving…' : 'Save profile'}
+        </Button>
+      </form>
+
+      <form onSubmit={handlePasswordSubmit} className="space-y-4" noValidate>
+        <h2 className="text-lg font-medium text-ink">Password</h2>
+        <ErrorBanner
+          message={
+            passwordMismatch
+              ? 'New password and confirmation do not match'
+              : errorMessage(changePasswordMutation.error)
+          }
+        />
+        {passwordSaved && <p className="text-sm text-brand">Password changed successfully</p>}
+
+        <TextInput
+          label="Current password"
+          type="password"
+          name="currentPassword"
+          autoComplete="current-password"
+          required
+          value={currentPassword}
+          onChange={(event) => setCurrentPassword(event.target.value)}
+        />
+        <TextInput
+          label="New password"
+          type="password"
+          name="newPassword"
+          autoComplete="new-password"
+          required
+          minLength={8}
+          value={newPassword}
+          onChange={(event) => setNewPassword(event.target.value)}
+        />
+        <TextInput
+          label="Confirm new password"
+          type="password"
+          name="confirmNewPassword"
+          autoComplete="new-password"
+          required
+          minLength={8}
+          value={confirmNewPassword}
+          onChange={(event) => setConfirmNewPassword(event.target.value)}
+        />
+        <Button type="submit" disabled={changePasswordMutation.isPending}>
+          {changePasswordMutation.isPending ? 'Saving…' : 'Change password'}
         </Button>
       </form>
     </div>
