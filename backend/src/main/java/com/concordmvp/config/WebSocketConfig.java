@@ -31,8 +31,9 @@ public class WebSocketConfig implements WebSocketConfigurer {
         // matches when running behind a reverse proxy (nginx here), regardless of proxy header
         // configuration, since the backend container has no way to know what public host/port
         // it's reached through. Safe to allow any origin here specifically because /ws
-        // authenticates via a JWT bearer token in the query string (JwtHandshakeInterceptor),
-        // not cookies — there's no cross-site credential to ride along with a forged request.
+        // authenticates via a single-use ticket in the query string (JwtHandshakeInterceptor,
+        // WsTicketService), not cookies — there's no cross-site credential to ride along with
+        // a forged request.
         registry.addHandler(chatWebSocketHandler, "/ws")
                 .addInterceptors(jwtHandshakeInterceptor)
                 .setAllowedOrigins("*");

@@ -1,7 +1,5 @@
 package com.concordmvp.realtime;
 
-import com.concordmvp.auth.JwtService;
-import com.concordmvp.common.exception.UnauthorizedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -14,12 +12,16 @@ import org.springframework.web.socket.server.HandshakeInterceptor;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
  * Authenticates the WebSocket handshake. Browsers cannot set custom headers on a WebSocket
- * handshake request, so the JWT travels as a query parameter instead:
- * {@code wss://.../ws?token=<jwt>}.
+ * handshake request, so a short-lived, single-use ticket travels as a query parameter instead:
+ * {@code wss://.../ws?token=<ticket>}. The ticket is minted by {@link RealtimeController} from
+ * the caller's regular (long-lived) JWT and spent here via {@link WsTicketService} — the JWT
+ * itself never appears in the WS URL, so it can't leak through DevTools, browser history, or
+ * proxy logs the way a raw token in a URL would.
  *
  * <p>This is the ONLY place that authenticates {@code /ws} — the header-based
  * {@link com.concordmvp.auth.JwtAuthFilter} does not apply here (see
@@ -33,10 +35,10 @@ public class JwtHandshakeInterceptor implements HandshakeInterceptor {
 
     public static final String USER_ID_ATTRIBUTE = "userId";
 
-    private final JwtService jwtService;
+    private final WsTicketService wsTicketService;
 
-    public JwtHandshakeInterceptor(JwtService jwtService) {
-        this.jwtService = jwtService;
+    public JwtHandshakeInterceptor(WsTicketService wsTicketService) {
+        this.wsTicketService = wsTicketService;
     }
 
     @Override
@@ -46,26 +48,26 @@ public class JwtHandshakeInterceptor implements HandshakeInterceptor {
             WebSocketHandler wsHandler,
             Map<String, Object> attributes
     ) {
-        String token = UriComponentsBuilder.fromUri(request.getURI())
+        String ticket = UriComponentsBuilder.fromUri(request.getURI())
                 .build()
                 .getQueryParams()
                 .getFirst("token");
 
-        if (token == null || token.isBlank()) {
+        if (ticket == null || ticket.isBlank()) {
             log.warn("Rejecting WebSocket handshake: missing token query parameter");
             reject(response);
             return false;
         }
 
-        try {
-            UUID userId = jwtService.parseUserId(token);
-            attributes.put(USER_ID_ATTRIBUTE, userId);
-            return true;
-        } catch (UnauthorizedException e) {
-            log.warn("Rejecting WebSocket handshake: invalid token");
+        Optional<UUID> userId = wsTicketService.consume(ticket);
+        if (userId.isEmpty()) {
+            log.warn("Rejecting WebSocket handshake: invalid or expired ticket");
             reject(response);
             return false;
         }
+
+        attributes.put(USER_ID_ATTRIBUTE, userId.get());
+        return true;
     }
 
     @Override

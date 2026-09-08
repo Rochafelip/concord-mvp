@@ -1,7 +1,5 @@
 package com.concordmvp.realtime;
 
-import com.concordmvp.auth.JwtService;
-import com.concordmvp.common.exception.UnauthorizedException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -18,6 +16,7 @@ import org.springframework.web.socket.WebSocketHandler;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -27,7 +26,7 @@ import static org.mockito.Mockito.when;
 class JwtHandshakeInterceptorTest {
 
     @Mock
-    private JwtService jwtService;
+    private WsTicketService wsTicketService;
 
     @Mock
     private WebSocketHandler webSocketHandler;
@@ -36,15 +35,15 @@ class JwtHandshakeInterceptorTest {
 
     @BeforeEach
     void setUp() {
-        interceptor = new JwtHandshakeInterceptor(jwtService);
+        interceptor = new JwtHandshakeInterceptor(wsTicketService);
     }
 
     @Test
-    void beforeHandshake_validToken_proceedsAndStoresUserId() {
+    void beforeHandshake_validTicket_proceedsAndStoresUserId() {
         UUID userId = UUID.randomUUID();
-        when(jwtService.parseUserId("valid-token")).thenReturn(userId);
+        when(wsTicketService.consume("valid-ticket")).thenReturn(Optional.of(userId));
 
-        ServerHttpRequest request = requestWithQuery("/ws?token=valid-token");
+        ServerHttpRequest request = requestWithQuery("/ws?token=valid-ticket");
         ServerHttpResponse response = response();
         Map<String, Object> attributes = new HashMap<>();
 
@@ -55,7 +54,7 @@ class JwtHandshakeInterceptorTest {
     }
 
     @Test
-    void beforeHandshake_missingToken_rejectsHandshake() {
+    void beforeHandshake_missingTicket_rejectsHandshake() {
         ServerHttpRequest request = requestWithQuery("/ws");
         ServletServerHttpResponse response = response();
         Map<String, Object> attributes = new HashMap<>();
@@ -68,10 +67,10 @@ class JwtHandshakeInterceptorTest {
     }
 
     @Test
-    void beforeHandshake_invalidToken_rejectsHandshake() {
-        when(jwtService.parseUserId("bad-token")).thenThrow(new UnauthorizedException("Invalid or expired token"));
+    void beforeHandshake_invalidOrExpiredTicket_rejectsHandshake() {
+        when(wsTicketService.consume("bad-ticket")).thenReturn(Optional.empty());
 
-        ServerHttpRequest request = requestWithQuery("/ws?token=bad-token");
+        ServerHttpRequest request = requestWithQuery("/ws?token=bad-ticket");
         ServletServerHttpResponse response = response();
         Map<String, Object> attributes = new HashMap<>();
 
