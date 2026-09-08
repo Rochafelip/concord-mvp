@@ -79,4 +79,19 @@ describe('Modal', () => {
 
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it('stacks above other fixed-position overlays, such as fullscreen screen share (z-50)', () => {
+    const { container } = render(
+      <Modal open onClose={vi.fn()}>
+        content
+      </Modal>,
+    );
+
+    const backdrop = container.firstElementChild as HTMLElement;
+    const zIndexClass = Array.from(backdrop.classList).find((className) => /^z-/.test(className));
+
+    expect(zIndexClass).toBeDefined();
+    const zIndexValue = Number(zIndexClass?.match(/\[?(\d+)\]?$/)?.[1]);
+    expect(zIndexValue).toBeGreaterThan(50);
+  });
 });

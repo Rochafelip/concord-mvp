@@ -11,6 +11,10 @@ interface ModalProps {
  * Minimal shared modal shell — backdrop + centered panel, closes on backdrop click, the
  * close button, or Escape. Used by the create-server, join-server, create-channel, and
  * server-settings dialogs.
+ *
+ * z-[100] must stay above every other fixed-position overlay in the app (currently
+ * ScreenShareTile's fullscreen mode at z-50), or a modal opened while that overlay is
+ * mounted gets visually and interactively buried under it.
  */
 export function Modal({ open, onClose, children }: ModalProps) {
   useEffect(() => {
@@ -27,7 +31,10 @@ export function Modal({ open, onClose, children }: ModalProps) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-black/50" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50"
+      onClick={onClose}
+    >
       <div
         className="relative rounded bg-surface p-6 shadow-lg"
         onClick={(event) => event.stopPropagation()}
