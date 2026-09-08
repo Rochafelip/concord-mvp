@@ -288,6 +288,46 @@ The exact commands may evolve as the project is implemented.
 
 ---
 
+## Docker Commands
+
+The full stack (frontend, backend, PostgreSQL, LiveKit, Nginx) runs via Docker Compose from the `infrastructure/` directory. For the complete deployment runbooks (router port-forwarding, TLS certificates, `.env` setup), see [`infrastructure/HOME_DEPLOY.md`](infrastructure/HOME_DEPLOY.md) (self-hosted, no domain) or [`infrastructure/DEPLOY.md`](infrastructure/DEPLOY.md) (VPS with a domain and Let's Encrypt).
+
+Start the stack:
+
+```bash
+cd infrastructure
+docker compose up -d
+```
+
+Deploy a new version (pull the latest code, rebuild the changed images, and recreate only the containers that changed):
+
+```bash
+git pull
+cd infrastructure
+docker compose up -d --build
+```
+
+Check status:
+
+```bash
+docker compose ps
+```
+
+View logs (all services, or a single one):
+
+```bash
+docker compose logs -f
+docker compose logs -f frontend
+```
+
+Stop the stack:
+
+```bash
+docker compose down
+```
+
+---
+
 ## Documentation
 
 Project documentation is maintained under `/docs`.
