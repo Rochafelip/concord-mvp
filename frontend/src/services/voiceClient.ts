@@ -207,6 +207,19 @@ class VoiceClient {
       .catch(() => useVoiceStore.getState().setError('Failed to change screen sharing state'));
   }
 
+  // Mutes/unmutes the local screen-share-audio publication in place, rather than restarting the
+  // whole share (which would require going through the capture picker again) — LiveKit's
+  // TrackMuted/TrackUnmuted events fire for local tracks too, and registerListeners already
+  // resyncs on those, so no new event wiring is needed here.
+  toggleScreenShareAudio(): void {
+    const publication = this.room?.localParticipant.getTrackPublication(Track.Source.ScreenShareAudio);
+    if (!publication) return;
+    const promise = publication.isMuted ? publication.unmute() : publication.mute();
+    promise
+      .then(() => this.syncParticipants())
+      .catch(() => useVoiceStore.getState().setError('Failed to change screen share audio state'));
+  }
+
   setParticipantVolume(identity: string, volume: number): void {
     const element = this.audioElements.get(audioKey(identity, Track.Source.Microphone));
     if (element) element.volume = volume;
@@ -364,6 +377,7 @@ function abandonRoom(room: Room): void {
 }
 
 function toVoiceParticipant(participant: Participant | LocalParticipant, isLocal: boolean): VoiceParticipant {
+  const screenShareAudioPublication = participant.getTrackPublication(Track.Source.ScreenShareAudio);
   return {
     identity: participant.identity,
     name: participant.name ?? participant.identity,
@@ -373,7 +387,8 @@ function toVoiceParticipant(participant: Participant | LocalParticipant, isLocal
     videoTrack: participant.getTrackPublication(Track.Source.Camera)?.videoTrack ?? null,
     screenShareEnabled: participant.isScreenShareEnabled,
     screenShareTrack: participant.getTrackPublication(Track.Source.ScreenShare)?.videoTrack ?? null,
-    screenShareHasAudio: participant.getTrackPublication(Track.Source.ScreenShareAudio) != null,
+    screenShareHasAudio: screenShareAudioPublication != null,
+    screenShareAudioEnabled: screenShareAudioPublication != null && !screenShareAudioPublication.isMuted,
     connectionQuality: participant.connectionQuality,
   };
 }

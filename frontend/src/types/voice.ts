@@ -23,6 +23,7 @@ export interface VoiceParticipant {
   screenShareEnabled: boolean;
   screenShareTrack: LocalVideoTrack | RemoteVideoTrack | null;
   screenShareHasAudio: boolean;
+  screenShareAudioEnabled: boolean;
   connectionQuality: ConnectionQuality;
 }
 

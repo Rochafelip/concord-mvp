@@ -68,7 +68,9 @@ const {
         this.localParticipant.isScreenShareEnabled = enabled;
         return Promise.resolve(undefined);
       }),
-      getTrackPublication: vi.fn(() => undefined),
+      getTrackPublication: vi.fn(
+        (): { isMuted: boolean; mute: () => unknown; unmute: () => unknown } | undefined => undefined,
+      ),
     };
 
     constructor() {
@@ -205,6 +207,7 @@ describe('voiceClient', () => {
     expect(local?.screenShareEnabled).toBe(false);
     expect(local?.screenShareTrack).toBeNull();
     expect(local?.screenShareHasAudio).toBe(false);
+    expect(local?.screenShareAudioEnabled).toBe(false);
   });
 
   it('disconnects the previous room before connecting to a different voice channel', async () => {
@@ -359,6 +362,82 @@ describe('voiceClient', () => {
     expect(useVoiceStore.getState().error).toBe('Failed to change screen sharing state');
     expect(room.localParticipant.isScreenShareEnabled).toBe(false);
     expect(room.disconnect).not.toHaveBeenCalled();
+  });
+
+  it('marks local screenShareAudioEnabled true when the screen-share-audio publication is unmuted', async () => {
+    const publication = { isMuted: false, mute: vi.fn(), unmute: vi.fn() };
+    const promise = voiceClient.connect('channel-1', 'token', 'wss://example.test/livekit');
+    const room = roomInstances[roomInstances.length - 1];
+    room.localParticipant.getTrackPublication = vi.fn((source?: string) =>
+      source === 'screen_share_audio' ? publication : undefined,
+    );
+    connectResolvers[connectResolvers.length - 1]();
+    await promise;
+
+    const local = useVoiceStore.getState().participants.find((p) => p.isLocal);
+    expect(local?.screenShareAudioEnabled).toBe(true);
+  });
+
+  it('marks local screenShareAudioEnabled false when the screen-share-audio publication is muted', async () => {
+    const publication = { isMuted: true, mute: vi.fn(), unmute: vi.fn() };
+    const promise = voiceClient.connect('channel-1', 'token', 'wss://example.test/livekit');
+    const room = roomInstances[roomInstances.length - 1];
+    room.localParticipant.getTrackPublication = vi.fn((source?: string) =>
+      source === 'screen_share_audio' ? publication : undefined,
+    );
+    connectResolvers[connectResolvers.length - 1]();
+    await promise;
+
+    const local = useVoiceStore.getState().participants.find((p) => p.isLocal);
+    expect(local?.screenShareAudioEnabled).toBe(false);
+  });
+
+  it('toggles local screen-share audio off then on without restarting the share', async () => {
+    await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+    const room = roomInstances[0];
+    const publication = {
+      isMuted: false,
+      mute: vi.fn(() => {
+        publication.isMuted = true;
+        return Promise.resolve(undefined);
+      }),
+      unmute: vi.fn(() => {
+        publication.isMuted = false;
+        return Promise.resolve(undefined);
+      }),
+    };
+    room.localParticipant.getTrackPublication = vi.fn((source?: string) =>
+      source === 'screen_share_audio' ? publication : undefined,
+    );
+
+    voiceClient.toggleScreenShareAudio();
+    expect(publication.mute).toHaveBeenCalledTimes(1);
+    expect(publication.unmute).not.toHaveBeenCalled();
+
+    voiceClient.toggleScreenShareAudio();
+    expect(publication.unmute).toHaveBeenCalledTimes(1);
+    expect(room.localParticipant.setScreenShareEnabled).not.toHaveBeenCalled();
+  });
+
+  it('does nothing when toggling screen-share audio with no published audio track', async () => {
+    await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+
+    expect(() => voiceClient.toggleScreenShareAudio()).not.toThrow();
+  });
+
+  it('records an error but keeps the publication when toggling screen-share audio fails', async () => {
+    await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+    const room = roomInstances[0];
+    const publication = { isMuted: false, mute: vi.fn(() => Promise.reject(new Error('failed'))), unmute: vi.fn() };
+    room.localParticipant.getTrackPublication = vi.fn((source?: string) =>
+      source === 'screen_share_audio' ? publication : undefined,
+    );
+
+    voiceClient.toggleScreenShareAudio();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(useVoiceStore.getState().error).toBe('Failed to change screen share audio state');
   });
 
   it('resyncs participants when a local track is unpublished outside an explicit toggle call', async () => {

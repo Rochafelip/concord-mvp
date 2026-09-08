@@ -23,6 +23,7 @@ function sharingParticipant(overrides: Partial<VoiceParticipant> = {}): VoicePar
     screenShareEnabled: true,
     screenShareTrack: track,
     screenShareHasAudio: false,
+    screenShareAudioEnabled: true,
     connectionQuality: ConnectionQuality.Unknown,
     ...overrides,
   };
@@ -81,6 +82,20 @@ describe('ScreenShareTile', () => {
 
     it('does not render a volume control when the share has no audio', () => {
       render(<ScreenShareTile participant={sharingParticipant({ isLocal: false, screenShareHasAudio: false })} />);
+
+      expect(screen.queryByRole('slider')).not.toBeInTheDocument();
+    });
+
+    it('does not render a volume control when the presenter has muted the shared audio', () => {
+      render(
+        <ScreenShareTile
+          participant={sharingParticipant({
+            isLocal: false,
+            screenShareHasAudio: true,
+            screenShareAudioEnabled: false,
+          })}
+        />,
+      );
 
       expect(screen.queryByRole('slider')).not.toBeInTheDocument();
     });

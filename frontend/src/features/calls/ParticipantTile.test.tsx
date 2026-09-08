@@ -11,6 +11,7 @@ vi.mock('../../services/voiceClient', () => ({
     toggleMute: vi.fn(),
     toggleCamera: vi.fn(),
     toggleScreenShare: vi.fn(),
+    toggleScreenShareAudio: vi.fn(),
     setParticipantVolume: vi.fn(),
   },
 }));
@@ -26,6 +27,7 @@ function participant(overrides: Partial<VoiceParticipant> = {}): VoiceParticipan
     screenShareEnabled: false,
     screenShareTrack: null,
     screenShareHasAudio: false,
+    screenShareAudioEnabled: false,
     connectionQuality: ConnectionQuality.Unknown,
     ...overrides,
   };
@@ -179,6 +181,69 @@ describe('ParticipantTile', () => {
 
       expect(voiceClient.toggleScreenShare).not.toHaveBeenCalled();
       expect(screen.queryByText('Share your screen')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('screen-share audio control', () => {
+    beforeEach(() => {
+      vi.mocked(voiceClient.toggleScreenShareAudio).mockClear();
+    });
+
+    it('does not render when not sharing the screen', () => {
+      render(
+        <ParticipantTile
+          participant={participant({ isLocal: true, screenShareEnabled: false, screenShareHasAudio: false })}
+          onLeave={vi.fn()}
+        />,
+      );
+
+      expect(screen.queryByRole('button', { name: /shared screen audio/ })).not.toBeInTheDocument();
+    });
+
+    it('does not render when sharing without a published audio track', () => {
+      render(
+        <ParticipantTile
+          participant={participant({ isLocal: true, screenShareEnabled: true, screenShareHasAudio: false })}
+          onLeave={vi.fn()}
+        />,
+      );
+
+      expect(screen.queryByRole('button', { name: /shared screen audio/ })).not.toBeInTheDocument();
+    });
+
+    it('renders a mute button and toggles it on click while sharing audio', async () => {
+      const user = userEvent.setup();
+      render(
+        <ParticipantTile
+          participant={participant({
+            isLocal: true,
+            screenShareEnabled: true,
+            screenShareHasAudio: true,
+            screenShareAudioEnabled: true,
+          })}
+          onLeave={vi.fn()}
+        />,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Mute shared screen audio' }));
+
+      expect(voiceClient.toggleScreenShareAudio).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows an unmute label when the shared screen audio is off', () => {
+      render(
+        <ParticipantTile
+          participant={participant({
+            isLocal: true,
+            screenShareEnabled: true,
+            screenShareHasAudio: true,
+            screenShareAudioEnabled: false,
+          })}
+          onLeave={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByRole('button', { name: 'Unmute shared screen audio' })).toBeInTheDocument();
     });
   });
 

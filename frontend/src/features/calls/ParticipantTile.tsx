@@ -1,4 +1,4 @@
-import { Mic, MicOff, MonitorUp, MonitorX, PhoneOff, Video, VideoOff } from 'lucide-react';
+import { Mic, MicOff, MonitorUp, MonitorX, PhoneOff, Video, VideoOff, Volume2, VolumeX } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { voiceClient } from '../../services/voiceClient';
 import type { VoiceParticipant } from '../../types/voice';
@@ -111,6 +111,20 @@ export function ParticipantTile({ participant, onLeave }: ParticipantTileProps) 
                 <MonitorUp size={16} aria-hidden="true" />
               )}
             </button>
+            {participant.screenShareEnabled && participant.screenShareHasAudio && (
+              <button
+                type="button"
+                aria-label={participant.screenShareAudioEnabled ? 'Mute shared screen audio' : 'Unmute shared screen audio'}
+                onClick={() => voiceClient.toggleScreenShareAudio()}
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
+              >
+                {participant.screenShareAudioEnabled ? (
+                  <Volume2 size={16} aria-hidden="true" />
+                ) : (
+                  <VolumeX size={16} aria-hidden="true" />
+                )}
+              </button>
+            )}
             <button
               type="button"
               aria-label="Leave call"

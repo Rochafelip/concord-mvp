@@ -40,7 +40,7 @@ export function ScreenShareTile({ participant }: ScreenShareTileProps) {
         's screen
         {participant.isLocal ? ' (you)' : ''}
       </span>
-      {!participant.isLocal && participant.screenShareHasAudio && (
+      {!participant.isLocal && participant.screenShareHasAudio && participant.screenShareAudioEnabled && (
         <div className="absolute right-1 top-1 opacity-0 transition-opacity group-hover:opacity-100">
           <VolumeControl
             label={`${participant.name}'s screen`}
