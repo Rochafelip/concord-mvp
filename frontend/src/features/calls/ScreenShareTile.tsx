@@ -1,4 +1,4 @@
-import { Maximize2, MonitorUp } from 'lucide-react';
+import { Maximize2, Minimize2, MonitorUp } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { voiceClient } from '../../services/voiceClient';
 import type { VoiceParticipant } from '../../types/voice';
@@ -50,6 +50,14 @@ export function ScreenShareTile({ participant }: ScreenShareTileProps) {
     await containerRef.current?.requestFullscreen();
   }
 
+  async function handleExitFullscreen() {
+    if (document.fullscreenElement === containerRef.current) {
+      await document.exitFullscreen();
+    } else {
+      setIsFullscreen(false);
+    }
+  }
+
   return (
     <div
       ref={containerRef}
@@ -85,6 +93,18 @@ export function ScreenShareTile({ participant }: ScreenShareTileProps) {
             </div>
           )}
         </>
+      )}
+      {isFullscreen && (
+        <div className="absolute right-2 top-2 flex items-center gap-1.5 rounded bg-black/60 px-2 py-1.5">
+          <button
+            type="button"
+            aria-label="Exit fullscreen"
+            onClick={handleExitFullscreen}
+            className="flex h-9 w-9 items-center justify-center rounded-full text-white hover:bg-white/10"
+          >
+            <Minimize2 size={18} aria-hidden="true" />
+          </button>
+        </div>
       )}
     </div>
   );

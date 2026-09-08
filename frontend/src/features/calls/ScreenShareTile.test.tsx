@@ -169,5 +169,26 @@ describe('ScreenShareTile', () => {
       expect(screen.queryByText(/Felipe's screen/)).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Enter fullscreen' })).not.toBeInTheDocument();
     });
+
+    it('shows an exit-fullscreen button once fullscreen is entered, and none of the normal-mode controls', async () => {
+      const user = userEvent.setup();
+      render(<ScreenShareTile participant={sharingParticipant()} />);
+
+      await user.click(screen.getByRole('button', { name: 'Enter fullscreen' }));
+
+      expect(screen.getByRole('button', { name: 'Exit fullscreen' })).toBeInTheDocument();
+    });
+
+    it('calls document.exitFullscreen when the exit button is clicked, and reverts the layout', async () => {
+      const user = userEvent.setup();
+      const { container } = render(<ScreenShareTile participant={sharingParticipant()} />);
+
+      await user.click(screen.getByRole('button', { name: 'Enter fullscreen' }));
+      await user.click(screen.getByRole('button', { name: 'Exit fullscreen' }));
+
+      expect(document.exitFullscreen).toHaveBeenCalledTimes(1);
+      expect(container.firstChild).not.toHaveClass('fixed', 'inset-0');
+      expect(screen.getByRole('button', { name: 'Enter fullscreen' })).toBeInTheDocument();
+    });
   });
 });
