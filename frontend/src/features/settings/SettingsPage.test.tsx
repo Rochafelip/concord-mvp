@@ -54,7 +54,7 @@ describe('SettingsPage', () => {
     await waitFor(() => {
       expect(useAuthStore.getState().user?.username).toBe('jdoe2');
     });
-    expect(await screen.findByText('Alterações salvas com sucesso')).toBeInTheDocument();
+    expect(await screen.findByText('Profile updated successfully')).toBeInTheDocument();
   });
 
   it('shows the backend error message when the profile update fails', async () => {

@@ -40,7 +40,7 @@ export function SettingsPage() {
       <form onSubmit={handleProfileSubmit} className="space-y-4" noValidate>
         <h2 className="text-lg font-medium text-ink">Profile</h2>
         <ErrorBanner message={errorMessage(updateProfileMutation.error)} />
-        {profileSaved && <p className="text-sm text-brand">Alterações salvas com sucesso</p>}
+        {profileSaved && <p className="text-sm text-brand">Profile updated successfully</p>}
 
         <TextInput
           label="Username"
