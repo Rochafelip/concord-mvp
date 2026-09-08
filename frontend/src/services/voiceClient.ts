@@ -51,7 +51,13 @@ class VoiceClient {
   // since they didn't just join, they were already there when we connected.
   private hasSeededRemoteIds = false;
 
-  async connect(channelId: string, token: string, url: string): Promise<void> {
+  // Synchronous half of connect(): bumps the generation guard and flips the store to
+  // "connecting" immediately, before any async work happens. Split out from connect() itself so
+  // a caller that first fetches something async (a voice token) can capture the generation
+  // *before* that fetch starts — otherwise a disconnect() that happens mid-fetch would bump
+  // connectGeneration too late to be seen by the connect() call that follows once the fetch
+  // resolves, and the user would be silently reconnected to the channel they just left.
+  beginConnect(channelId: string): number {
     if (this.room) {
       // disconnect() also bumps connectGeneration, invalidating any older in-flight connect()
       // still running — this call's own generation is captured AFTER that, below. silent: true
@@ -59,11 +65,26 @@ class VoiceClient {
       // — playSelfLeave() must not fire for it (only the explicit-disconnect path plays that).
       this.disconnect({ silent: true });
     }
-    const generation = ++this.connectGeneration;
+    this.connectGeneration++;
     this.currentChannelId = channelId;
 
     useVoiceStore.getState().setError(null);
     useVoiceStore.getState().setStatus('connecting', channelId);
+
+    return this.connectGeneration;
+  }
+
+  // `generation` defaults to a freshly-begun one so direct callers (existing call sites, tests)
+  // that don't have an async gap between deciding to connect and calling this keep working
+  // unchanged. A caller with an async gap (useJoinVoiceChannel, fetching a token first) must call
+  // beginConnect() itself beforehand and pass the result here — see beginConnect's comment.
+  async connect(
+    channelId: string,
+    token: string,
+    url: string,
+    generation: number = this.beginConnect(channelId),
+  ): Promise<void> {
+    if (generation !== this.connectGeneration) return;
 
     const room = new Room();
     this.registerListeners(room);

@@ -640,6 +640,21 @@ describe('voiceClient', () => {
     expect(room1.disconnect).toHaveBeenCalledTimes(1);
   });
 
+  it('does not reconnect when disconnect() runs between beginConnect() and connect() — the race a slow token fetch can hit', async () => {
+    // Mirrors useJoinVoiceChannel: capture the generation synchronously, then (in this test)
+    // simulate an explicit leave happening while the token fetch that would follow is still
+    // in flight, before connect() itself is ever called.
+    const generation = voiceClient.beginConnect('channel-1');
+
+    voiceClient.disconnect();
+
+    await voiceClient.connect('channel-1', 'token-a', 'wss://example.test/livekit', generation);
+
+    expect(roomInstances).toHaveLength(0);
+    expect(useVoiceStore.getState().status).toBe('disconnected');
+    expect(useVoiceStore.getState().channelId).toBeNull();
+  });
+
   it('updates a participant\'s connectionQuality when ConnectionQualityChanged fires', async () => {
     await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
     const room = roomInstances[0];
