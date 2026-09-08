@@ -341,6 +341,31 @@ describe('useRealtimeSync', () => {
     ]);
   });
 
+  it('VOICE_PRESENCE_UPDATE keeps an existing participant at its original position in the list', () => {
+    const queryClient = newQueryClient();
+    const existing: VoicePresenceEntry[] = [
+      { channelId: 'c1', userId: 'u1', displayName: 'Ana', avatarUrl: null,
+        muted: false, cameraOn: false, screenSharing: false, speaking: false },
+      { channelId: 'c1', userId: 'u2', displayName: 'Bob', avatarUrl: null,
+        muted: false, cameraOn: false, screenSharing: false, speaking: false },
+      { channelId: 'c1', userId: 'u3', displayName: 'Cid', avatarUrl: null,
+        muted: false, cameraOn: false, screenSharing: false, speaking: false },
+    ];
+    queryClient.setQueryData(['servers', 's1', 'voice-presence'], existing);
+    renderHarness(queryClient, '/app');
+
+    // Toggling speaking on the FIRST entry must not move it to the end of the list.
+    emit('VOICE_PRESENCE_UPDATE', {
+      serverId: 's1', channelId: 'c1',
+      user: { id: 'u1', username: 'a', displayName: 'Ana', avatarUrl: null },
+      muted: false, cameraOn: false, screenSharing: false, speaking: true,
+    });
+
+    const cached = queryClient.getQueryData<VoicePresenceEntry[]>(['servers', 's1', 'voice-presence']);
+    expect(cached?.map((entry) => entry.userId)).toEqual(['u1', 'u2', 'u3']);
+    expect(cached?.[0].speaking).toBe(true);
+  });
+
   it('VOICE_PRESENCE_UPDATE does nothing when there is no cached voice presence for that server', () => {
     const queryClient = newQueryClient();
     renderHarness(queryClient, '/app');

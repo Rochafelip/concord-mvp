@@ -141,7 +141,14 @@ export function useRealtimeSync(): void {
           // Same guard as MESSAGE_CREATE above: don't force-create a cache entry for a server's
           // sidebar nobody has opened yet.
           if (!old) return old;
-          return [...old.filter((existing) => existing.userId !== entry.userId), entry];
+          // Update in place rather than filter-then-append: this event fires on every presence
+          // change (mic/camera/screen-share/speaking), and re-appending would shuffle a user to
+          // the end of the list every time they spoke.
+          const index = old.findIndex((existing) => existing.userId === entry.userId);
+          if (index === -1) return [...old, entry];
+          const next = [...old];
+          next[index] = entry;
+          return next;
         });
       }),
 
