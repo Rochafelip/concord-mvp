@@ -24,9 +24,9 @@ export function LoginPage() {
         : null;
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-sm space-y-4">
-        <h1 className="text-center text-2xl font-semibold text-gray-900">Log in</h1>
+    <div className="flex min-h-screen items-center justify-center bg-app px-4">
+      <div className="w-full max-w-sm space-y-4 rounded-lg border bg-surface p-8 shadow-sm">
+        <h1 className="text-center text-2xl font-semibold text-ink">Log in</h1>
 
         <form onSubmit={handleSubmit} className="space-y-4" noValidate>
           <ErrorBanner message={errorMessage} />
@@ -56,9 +56,9 @@ export function LoginPage() {
           </Button>
         </form>
 
-        <p className="text-center text-sm text-gray-600">
+        <p className="text-center text-sm text-muted">
           Don't have an account?{' '}
-          <Link to="/register" className="font-medium text-indigo-600 hover:text-indigo-500">
+          <Link to="/register" className="font-medium text-brand hover:text-brand-hover">
             Register
           </Link>
         </p>
