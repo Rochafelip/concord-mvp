@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppShell } from '../app/AppShell';
 import { ChannelRoute } from '../app/ChannelRoute';
+import { ServerIndexRoute } from '../app/ServerIndexRoute';
 import { ServerLayout } from '../app/ServerLayout';
 import { LoginPage } from '../features/auth/LoginPage';
 import { RegisterPage } from '../features/auth/RegisterPage';
@@ -10,11 +11,6 @@ import { ProtectedRoute } from './ProtectedRoute';
 // Placeholder for /app (no server selected yet).
 function NoServerSelected() {
   return <div className="p-4 text-muted">Select a server</div>;
-}
-
-// Placeholder for /app/servers/:serverId (no channel selected yet).
-function NoChannelSelected() {
-  return <div className="p-4 text-muted">Select a channel</div>;
 }
 
 // Catch-all target: send authenticated users back into the app, everyone else to /login.
@@ -39,7 +35,7 @@ export function AppRouter() {
       >
         <Route index element={<NoServerSelected />} />
         <Route path="servers/:serverId" element={<ServerLayout />}>
-          <Route index element={<NoChannelSelected />} />
+          <Route index element={<ServerIndexRoute />} />
           <Route path="channels/:channelId" element={<ChannelRoute />} />
         </Route>
       </Route>
