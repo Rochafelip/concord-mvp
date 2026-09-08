@@ -53,7 +53,7 @@ export function MessageInput({ channelId }: MessageInputProps) {
         </Button>
       </div>
       {!isConnected && (
-        <p className="text-xs text-warning">
+        <p className="text-caption text-warning">
           Not connected — reconnecting… messages can&apos;t be sent right now.
         </p>
       )}

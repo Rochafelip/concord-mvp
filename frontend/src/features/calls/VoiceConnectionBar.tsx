@@ -53,7 +53,7 @@ export function VoiceConnectionBar() {
             </span>
           )}
         </span>
-        {server && <span className="truncate text-xs text-muted">{server.name}</span>}
+        {server && <span className="truncate text-caption text-muted">{server.name}</span>}
       </Link>
 
       {localParticipant && (

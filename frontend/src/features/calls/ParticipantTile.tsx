@@ -54,7 +54,7 @@ export function ParticipantTile({ participant, onLeave }: ParticipantTileProps) 
       {/* Name/mic label: bottom-left for everyone else, top-left for the local tile so it
           doesn't collide with the control bar docked at the bottom below. */}
       <span
-        className={`absolute left-1 flex items-center gap-1 rounded bg-black/50 px-1.5 py-0.5 text-xs text-white ${isLocal ? 'top-1' : 'bottom-1'}`}
+        className={`absolute left-1 flex items-center gap-1 rounded bg-black/50 px-1.5 py-0.5 text-caption text-white ${isLocal ? 'top-1' : 'bottom-1'}`}
       >
         {participant.micEnabled ? (
           <Mic data-testid="mic-status-on" size={12} aria-hidden="true" />

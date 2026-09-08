@@ -60,7 +60,7 @@ export function ChannelSidebar() {
 
       <div className="flex-1 space-y-4 overflow-y-auto px-2 py-3">
         <div>
-          <h3 className="px-1 text-xs font-semibold uppercase text-muted">Onboarding</h3>
+          <h3 className="px-1 text-caption font-semibold uppercase text-muted">Onboarding</h3>
           <ul className="mt-1 space-y-0.5">
             {onboardingChannels.map((channel) => (
               <li key={channel.id}>
@@ -79,7 +79,7 @@ export function ChannelSidebar() {
 
         <div>
           <div className="flex items-center justify-between px-1">
-            <h3 className="text-xs font-semibold uppercase text-muted">Text channels</h3>
+            <h3 className="text-caption font-semibold uppercase text-muted">Text channels</h3>
             {isOwner && (
               <button
                 type="button"
@@ -118,7 +118,7 @@ export function ChannelSidebar() {
         </div>
 
         <div>
-          <h3 className="px-1 text-xs font-semibold uppercase text-muted">Voice channels</h3>
+          <h3 className="px-1 text-caption font-semibold uppercase text-muted">Voice channels</h3>
           <ul className="mt-1 space-y-0.5">
             {voiceChannels.map((channel) => {
               const participants = (voicePresence ?? []).filter((entry) => entry.channelId === channel.id);
@@ -151,9 +151,9 @@ export function ChannelSidebar() {
                           <Avatar
                             displayName={participant.displayName}
                             avatarUrl={participant.avatarUrl}
-                            className={`h-5 w-5 flex-shrink-0 text-xs ${participant.speaking ? 'ring-2 ring-success' : ''}`}
+                            className={`h-5 w-5 flex-shrink-0 text-caption ${participant.speaking ? 'ring-2 ring-success' : ''}`}
                           />
-                          <span className="truncate text-xs text-muted">{participant.displayName}</span>
+                          <span className="truncate text-caption text-muted">{participant.displayName}</span>
                           <span className="ml-auto flex flex-shrink-0 items-center gap-1 text-muted">
                             {participant.muted && <MicOff aria-label="Muted" size={14} />}
                             {participant.cameraOn && <Video aria-label="Camera on" size={14} />}

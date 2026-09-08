@@ -130,13 +130,13 @@ export function ServerSettingsPanel({ serverId, open, onClose }: ServerSettingsP
                   />
                   {member.user.displayName}
                   {server?.ownerId === member.user.id && (
-                    <span className="text-xs uppercase text-muted">Owner</span>
+                    <span className="text-caption uppercase text-muted">Owner</span>
                   )}
                 </span>
                 {isOwner && member.user.id !== currentUserId && (
                   <button
                     type="button"
-                    className="text-xs text-brand hover:underline"
+                    className="text-caption text-brand hover:underline"
                     onClick={() => handleTransfer(member.user.id, member.user.displayName)}
                   >
                     Make owner
@@ -150,7 +150,7 @@ export function ServerSettingsPanel({ serverId, open, onClose }: ServerSettingsP
         <section className="space-y-2 border-t pt-4">
           {isOwner ? (
             <>
-              <p className="text-xs text-muted">
+              <p className="text-caption text-muted">
                 You're the owner, so you can't leave directly — transfer ownership or delete
                 the server instead.
               </p>

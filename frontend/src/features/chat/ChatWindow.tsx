@@ -26,7 +26,7 @@ export function ChatWindow() {
           draft text would otherwise carry over into the newly selected channel. */}
       <MessageList key={channelId} channelId={channelId} />
       {channel?.type === 'ONBOARDING' ? (
-        <p className="border-t p-3 text-center text-xs text-muted">
+        <p className="border-t p-3 text-center text-caption text-muted">
           This channel is read-only.
         </p>
       ) : (

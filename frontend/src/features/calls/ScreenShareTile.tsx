@@ -85,7 +85,7 @@ export function ScreenShareTile({ participant }: ScreenShareTileProps) {
       <video ref={videoRef} muted autoPlay playsInline className="h-full w-full object-contain" />
       {!isFullscreen && (
         <>
-          <span className="absolute bottom-1 left-1 flex items-center gap-1 rounded bg-black/50 px-1.5 py-0.5 text-xs text-white">
+          <span className="absolute bottom-1 left-1 flex items-center gap-1 rounded bg-black/50 px-1.5 py-0.5 text-caption text-white">
             <MonitorUp size={12} aria-hidden="true" />
             {participant.name}
             's screen

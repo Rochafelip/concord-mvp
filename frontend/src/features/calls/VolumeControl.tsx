@@ -36,7 +36,7 @@ export function VolumeControl({ label, onVolumeChange }: VolumeControlProps) {
         type="button"
         aria-label={muted ? `Unmute ${label} for you` : `Mute ${label} for you`}
         onClick={handleMuteToggle}
-        className="text-xs leading-none text-white"
+        className="text-caption leading-none text-white"
       >
         {muted ? '🔇' : '🔊'}
       </button>
