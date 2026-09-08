@@ -1,7 +1,8 @@
-import { Maximize2, Minimize2, MonitorUp } from 'lucide-react';
+import { Maximize2, Mic, MicOff, Minimize2, MonitorUp, PhoneOff } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { voiceClient } from '../../services/voiceClient';
 import type { VoiceParticipant } from '../../types/voice';
+import { useVoiceParticipants } from './hooks';
 import { VolumeControl } from './VolumeControl';
 
 interface ScreenShareTileProps {
@@ -28,6 +29,7 @@ export function ScreenShareTile({ participant }: ScreenShareTileProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const { screenShareTrack } = participant;
+  const localParticipant = useVoiceParticipants().find((candidate) => candidate.isLocal);
 
   useEffect(() => {
     const element = videoRef.current;
@@ -116,6 +118,28 @@ export function ScreenShareTile({ participant }: ScreenShareTileProps) {
             className="flex h-9 w-9 items-center justify-center rounded-full text-white hover:bg-white/10"
           >
             <Minimize2 size={18} aria-hidden="true" />
+          </button>
+          {localParticipant && (
+            <button
+              type="button"
+              aria-label={localParticipant.micEnabled ? 'Mute' : 'Unmute'}
+              onClick={() => voiceClient.toggleMute()}
+              className="flex h-9 w-9 items-center justify-center rounded-full text-white hover:bg-white/10"
+            >
+              {localParticipant.micEnabled ? (
+                <Mic size={18} aria-hidden="true" />
+              ) : (
+                <MicOff size={18} aria-hidden="true" />
+              )}
+            </button>
+          )}
+          <button
+            type="button"
+            aria-label="Leave call"
+            onClick={() => voiceClient.disconnect()}
+            className="flex h-9 w-9 items-center justify-center rounded-full text-white hover:bg-danger/80"
+          >
+            <PhoneOff size={18} aria-hidden="true" />
           </button>
         </div>
       )}

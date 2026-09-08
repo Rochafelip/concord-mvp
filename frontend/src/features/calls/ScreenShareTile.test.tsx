@@ -3,12 +3,15 @@ import userEvent from '@testing-library/user-event';
 import { ConnectionQuality } from 'livekit-client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { voiceClient } from '../../services/voiceClient';
+import { useVoiceStore } from '../../stores/voiceStore';
 import type { VoiceParticipant } from '../../types/voice';
 import { ScreenShareTile } from './ScreenShareTile';
 
 vi.mock('../../services/voiceClient', () => ({
   voiceClient: {
     setScreenShareVolume: vi.fn(),
+    toggleMute: vi.fn(),
+    disconnect: vi.fn(),
   },
 }));
 
@@ -222,6 +225,60 @@ describe('ScreenShareTile', () => {
 
       expect(document.exitFullscreen).not.toHaveBeenCalled();
       expect(container.firstChild).not.toHaveClass('fixed', 'inset-0');
+    });
+
+    describe('controls bar', () => {
+      beforeEach(() => {
+        useVoiceStore.setState({ participants: [] });
+      });
+
+      it('does not show a mute button when there is no local participant in the call', async () => {
+        const user = userEvent.setup();
+        render(<ScreenShareTile participant={sharingParticipant()} />);
+
+        await user.click(screen.getByRole('button', { name: 'Enter fullscreen' }));
+
+        expect(screen.queryByRole('button', { name: /mute/i })).not.toBeInTheDocument();
+      });
+
+      it('shows a Mute button reflecting the local participant, and toggles it via voiceClient', async () => {
+        useVoiceStore.setState({
+          participants: [
+            { ...sharingParticipant({ isLocal: false }), identity: 'me', isLocal: true, micEnabled: true },
+          ],
+        });
+        const user = userEvent.setup();
+        render(<ScreenShareTile participant={sharingParticipant()} />);
+
+        await user.click(screen.getByRole('button', { name: 'Enter fullscreen' }));
+        await user.click(screen.getByRole('button', { name: 'Mute' }));
+
+        expect(voiceClient.toggleMute).toHaveBeenCalledTimes(1);
+      });
+
+      it('shows an Unmute button when the local participant is already muted', async () => {
+        useVoiceStore.setState({
+          participants: [
+            { ...sharingParticipant({ isLocal: false }), identity: 'me', isLocal: true, micEnabled: false },
+          ],
+        });
+        const user = userEvent.setup();
+        render(<ScreenShareTile participant={sharingParticipant()} />);
+
+        await user.click(screen.getByRole('button', { name: 'Enter fullscreen' }));
+
+        expect(screen.getByRole('button', { name: 'Unmute' })).toBeInTheDocument();
+      });
+
+      it('calls voiceClient.disconnect when the leave-call button is clicked', async () => {
+        const user = userEvent.setup();
+        render(<ScreenShareTile participant={sharingParticipant()} />);
+
+        await user.click(screen.getByRole('button', { name: 'Enter fullscreen' }));
+        await user.click(screen.getByRole('button', { name: 'Leave call' }));
+
+        expect(voiceClient.disconnect).toHaveBeenCalledTimes(1);
+      });
     });
   });
 });
