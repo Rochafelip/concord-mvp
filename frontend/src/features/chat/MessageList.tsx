@@ -17,6 +17,23 @@ function toChronologicalOrder(pages: Message[][] | undefined): Message[] {
   return [...pages].reverse().flat();
 }
 
+function isSameCalendarDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
+function formatDateDivider(date: Date): string {
+  return date.toLocaleDateString(undefined, {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+}
+
 export function MessageList({ channelId }: MessageListProps) {
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isPending } =
     useMessageHistory(channelId);
@@ -85,28 +102,48 @@ export function MessageList({ channelId }: MessageListProps) {
         </div>
       )}
 
-      {messages.map((message) => (
-        <div key={message.id} data-testid="message" className="flex items-start gap-3">
-          <Avatar
-            displayName={message.author.displayName}
-            avatarUrl={message.author.avatarUrl}
-            size="md"
-          />
-          <div className="min-w-0">
-            <div className="flex items-baseline gap-2">
-              <span className="text-body font-semibold text-ink">
-                {message.author.displayName}
-              </span>
-              <span className="text-caption text-muted">
-                {new Date(message.createdAt).toLocaleTimeString()}
-              </span>
+      {messages.map((message, index) => {
+        const createdAt = new Date(message.createdAt);
+        const previousCreatedAt =
+          index > 0 ? new Date(messages[index - 1].createdAt) : undefined;
+        const showDateDivider =
+          previousCreatedAt === undefined || !isSameCalendarDay(createdAt, previousCreatedAt);
+
+        return (
+          <div key={message.id}>
+            {showDateDivider && (
+              <div
+                data-testid="date-divider"
+                className="flex items-center gap-3 py-2 text-caption text-muted"
+              >
+                <div className="flex-1 border-t" />
+                {formatDateDivider(createdAt)}
+                <div className="flex-1 border-t" />
+              </div>
+            )}
+            <div data-testid="message" className="flex items-start gap-3">
+              <Avatar
+                displayName={message.author.displayName}
+                avatarUrl={message.author.avatarUrl}
+                size="md"
+              />
+              <div className="min-w-0">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-body font-semibold text-ink">
+                    {message.author.displayName}
+                  </span>
+                  <span className="text-caption text-muted">
+                    {createdAt.toLocaleTimeString()}
+                  </span>
+                </div>
+                <p data-testid="message-content" className="whitespace-pre-wrap text-body text-ink">
+                  {message.content}
+                </p>
+              </div>
             </div>
-            <p data-testid="message-content" className="whitespace-pre-wrap text-body text-ink">
-              {message.content}
-            </p>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

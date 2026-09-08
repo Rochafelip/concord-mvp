@@ -98,4 +98,40 @@ describe('MessageList', () => {
 
     expect(fetchNextPage).toHaveBeenCalledTimes(1);
   });
+
+  it('shows a date divider between messages sent on different calendar days', () => {
+    mockHistory({
+      data: {
+        pages: [
+          [
+            makeMessage('m1', 'Msg1', '2026-01-01T12:00:00Z'),
+            makeMessage('m2', 'Msg2', '2026-01-05T12:00:00Z'),
+          ],
+        ],
+        pageParams: [undefined],
+      },
+    });
+
+    render(<MessageList channelId="c1" />);
+
+    expect(screen.getAllByTestId('date-divider')).toHaveLength(2);
+  });
+
+  it('does not show a date divider between messages sent on the same calendar day', () => {
+    mockHistory({
+      data: {
+        pages: [
+          [
+            makeMessage('m1', 'Msg1', '2026-01-01T12:00:00Z'),
+            makeMessage('m2', 'Msg2', '2026-01-01T13:00:00Z'),
+          ],
+        ],
+        pageParams: [undefined],
+      },
+    });
+
+    render(<MessageList channelId="c1" />);
+
+    expect(screen.getAllByTestId('date-divider')).toHaveLength(1);
+  });
 });
