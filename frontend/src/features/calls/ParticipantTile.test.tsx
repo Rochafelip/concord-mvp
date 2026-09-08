@@ -10,7 +10,6 @@ vi.mock('../../services/voiceClient', () => ({
   voiceClient: {
     toggleMute: vi.fn(),
     toggleCamera: vi.fn(),
-    toggleScreenShare: vi.fn(),
     toggleScreenShareAudio: vi.fn(),
     setParticipantVolume: vi.fn(),
   },
@@ -81,7 +80,6 @@ describe('ParticipantTile', () => {
       localStorage.clear();
       vi.mocked(voiceClient.toggleMute).mockClear();
       vi.mocked(voiceClient.toggleCamera).mockClear();
-      vi.mocked(voiceClient.toggleScreenShare).mockClear();
     });
 
     it('does not render the local control bar for a remote participant, even with onLeave passed', () => {
@@ -122,17 +120,6 @@ describe('ParticipantTile', () => {
       expect(screen.queryByRole('button', { name: 'Camera off' })).not.toBeInTheDocument();
     });
 
-    it('toggles screen share on click and reflects the current sharing state', async () => {
-      const user = userEvent.setup();
-      render(
-        <ParticipantTile participant={participant({ isLocal: true, screenShareEnabled: true })} onLeave={vi.fn()} />,
-      );
-
-      await user.click(screen.getByRole('button', { name: 'Stop sharing' }));
-
-      expect(voiceClient.toggleScreenShare).toHaveBeenCalledTimes(1);
-    });
-
     it('calls onLeave on click', async () => {
       const user = userEvent.setup();
       const onLeave = vi.fn();
@@ -143,45 +130,6 @@ describe('ParticipantTile', () => {
       expect(onLeave).toHaveBeenCalledTimes(1);
     });
 
-    it('opens the quality modal instead of toggling immediately when starting to share', async () => {
-      const user = userEvent.setup();
-      render(
-        <ParticipantTile participant={participant({ isLocal: true, screenShareEnabled: false })} onLeave={vi.fn()} />,
-      );
-
-      await user.click(screen.getByRole('button', { name: 'Share screen' }));
-
-      expect(voiceClient.toggleScreenShare).not.toHaveBeenCalled();
-      expect(screen.getByText('Share your screen')).toBeInTheDocument();
-    });
-
-    it('starts sharing with the chosen quality and audio preference after confirming the modal', async () => {
-      const user = userEvent.setup();
-      render(
-        <ParticipantTile participant={participant({ isLocal: true, screenShareEnabled: false })} onLeave={vi.fn()} />,
-      );
-
-      await user.click(screen.getByRole('button', { name: 'Share screen' }));
-      await user.click(screen.getByLabelText('HD (720p)'));
-      await user.click(screen.getByLabelText('Share system/tab audio'));
-      await user.click(screen.getByRole('button', { name: 'Share' }));
-
-      expect(voiceClient.toggleScreenShare).toHaveBeenCalledWith({ quality: 'hd', withAudio: true });
-      expect(screen.queryByText('Share your screen')).not.toBeInTheDocument();
-    });
-
-    it('closes the quality modal without toggling when canceled', async () => {
-      const user = userEvent.setup();
-      render(
-        <ParticipantTile participant={participant({ isLocal: true, screenShareEnabled: false })} onLeave={vi.fn()} />,
-      );
-
-      await user.click(screen.getByRole('button', { name: 'Share screen' }));
-      await user.click(screen.getByRole('button', { name: 'Cancel' }));
-
-      expect(voiceClient.toggleScreenShare).not.toHaveBeenCalled();
-      expect(screen.queryByText('Share your screen')).not.toBeInTheDocument();
-    });
   });
 
   describe('screen-share audio control', () => {

@@ -1,8 +1,7 @@
-import { Mic, MicOff, MonitorUp, MonitorX, PhoneOff, Video, VideoOff, Volume2, VolumeX } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { Mic, MicOff, PhoneOff, Video, VideoOff, Volume2, VolumeX } from 'lucide-react';
+import { useEffect, useRef } from 'react';
 import { voiceClient } from '../../services/voiceClient';
 import type { VoiceParticipant } from '../../types/voice';
-import { ScreenShareQualityModal } from './ScreenShareQualityModal';
 import { VolumeControl } from './VolumeControl';
 
 interface ParticipantTileProps {
@@ -26,7 +25,6 @@ export function ParticipantTile({ participant, onLeave }: ParticipantTileProps) 
   const videoRef = useRef<HTMLVideoElement>(null);
   const { videoTrack } = participant;
   const isLocal = participant.isLocal && onLeave;
-  const [isQualityModalOpen, setQualityModalOpen] = useState(false);
 
   useEffect(() => {
     const element = videoRef.current;
@@ -75,74 +73,50 @@ export function ParticipantTile({ participant, onLeave }: ParticipantTileProps) 
       )}
 
       {isLocal && (
-        <>
-          <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1.5 bg-black/60 px-2 py-1.5">
-            <button
-              type="button"
-              aria-label={participant.micEnabled ? 'Mute' : 'Unmute'}
-              onClick={() => voiceClient.toggleMute()}
-              className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
-            >
-              {participant.micEnabled ? <Mic size={16} aria-hidden="true" /> : <MicOff size={16} aria-hidden="true" />}
-            </button>
-            <button
-              type="button"
-              aria-label={participant.cameraEnabled ? 'Camera off' : 'Camera on'}
-              onClick={() => voiceClient.toggleCamera()}
-              className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
-            >
-              {participant.cameraEnabled ? (
-                <Video size={16} aria-hidden="true" />
-              ) : (
-                <VideoOff size={16} aria-hidden="true" />
-              )}
-            </button>
-            <button
-              type="button"
-              aria-label={participant.screenShareEnabled ? 'Stop sharing' : 'Share screen'}
-              onClick={() =>
-                participant.screenShareEnabled ? voiceClient.toggleScreenShare() : setQualityModalOpen(true)
-              }
-              className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
-            >
-              {participant.screenShareEnabled ? (
-                <MonitorX size={16} aria-hidden="true" />
-              ) : (
-                <MonitorUp size={16} aria-hidden="true" />
-              )}
-            </button>
-            {participant.screenShareEnabled && participant.screenShareHasAudio && (
-              <button
-                type="button"
-                aria-label={participant.screenShareAudioEnabled ? 'Mute shared screen audio' : 'Unmute shared screen audio'}
-                onClick={() => voiceClient.toggleScreenShareAudio()}
-                className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
-              >
-                {participant.screenShareAudioEnabled ? (
-                  <Volume2 size={16} aria-hidden="true" />
-                ) : (
-                  <VolumeX size={16} aria-hidden="true" />
-                )}
-              </button>
+        <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1.5 bg-black/60 px-2 py-1.5">
+          <button
+            type="button"
+            aria-label={participant.micEnabled ? 'Mute' : 'Unmute'}
+            onClick={() => voiceClient.toggleMute()}
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
+          >
+            {participant.micEnabled ? <Mic size={16} aria-hidden="true" /> : <MicOff size={16} aria-hidden="true" />}
+          </button>
+          <button
+            type="button"
+            aria-label={participant.cameraEnabled ? 'Camera off' : 'Camera on'}
+            onClick={() => voiceClient.toggleCamera()}
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
+          >
+            {participant.cameraEnabled ? (
+              <Video size={16} aria-hidden="true" />
+            ) : (
+              <VideoOff size={16} aria-hidden="true" />
             )}
+          </button>
+          {participant.screenShareEnabled && participant.screenShareHasAudio && (
             <button
               type="button"
-              aria-label="Leave call"
-              onClick={onLeave}
-              className="flex h-10 w-10 items-center justify-center rounded-full bg-danger/80 text-white hover:bg-danger"
+              aria-label={participant.screenShareAudioEnabled ? 'Mute shared screen audio' : 'Unmute shared screen audio'}
+              onClick={() => voiceClient.toggleScreenShareAudio()}
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
             >
-              <PhoneOff size={16} aria-hidden="true" />
+              {participant.screenShareAudioEnabled ? (
+                <Volume2 size={16} aria-hidden="true" />
+              ) : (
+                <VolumeX size={16} aria-hidden="true" />
+              )}
             </button>
-          </div>
-          <ScreenShareQualityModal
-            open={isQualityModalOpen}
-            onClose={() => setQualityModalOpen(false)}
-            onConfirm={(options) => {
-              setQualityModalOpen(false);
-              voiceClient.toggleScreenShare(options);
-            }}
-          />
-        </>
+          )}
+          <button
+            type="button"
+            aria-label="Leave call"
+            onClick={onLeave}
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-danger/80 text-white hover:bg-danger"
+          >
+            <PhoneOff size={16} aria-hidden="true" />
+          </button>
+        </div>
       )}
     </div>
   );
