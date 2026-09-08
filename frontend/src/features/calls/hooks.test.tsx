@@ -65,7 +65,7 @@ describe('useDisconnectVoiceOnLogout', () => {
 
 describe('useJoinVoiceChannel', () => {
   it('captures the connection generation via beginConnect before awaiting the voice token', async () => {
-    let resolveToken!: (value: { token: string; url: string }) => void;
+    let resolveToken!: (value: { token: string; url: string; roomName: string }) => void;
     vi.mocked(api.getVoiceToken).mockReturnValue(
       new Promise((resolve) => {
         resolveToken = resolve;
@@ -86,7 +86,7 @@ describe('useJoinVoiceChannel', () => {
     await waitFor(() => expect(voiceClient.beginConnect).toHaveBeenCalledWith('channel-1'));
     expect(voiceClient.connect).not.toHaveBeenCalled();
 
-    resolveToken({ token: 'token-a', url: 'wss://example.test/livekit' });
+    resolveToken({ token: 'token-a', url: 'wss://example.test/livekit', roomName: 'channel-1' });
 
     await waitFor(() =>
       expect(voiceClient.connect).toHaveBeenCalledWith('channel-1', 'token-a', 'wss://example.test/livekit', 42),

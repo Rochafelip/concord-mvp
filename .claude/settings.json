@@ -163,7 +163,18 @@
       "Bash(systemctl --user status cloudflared-concord.service --no-pager)",
       "Bash(curl -s https://character-yesterday-material-friday.trycloudflare.com/actuator/health)",
       "Bash(curl -s -o /dev/null -w \"frontend: %{http_code}\\\\n\" https://character-yesterday-material-friday.trycloudflare.com/)",
-      "Bash(systemctl is-enabled *)"
+      "Bash(systemctl is-enabled *)",
+      "Bash(npx vite *)",
+      "Bash(git diff-tree *)",
+      "Bash(npx prettier *)",
+      "Bash(echo \"Exit code: $?\")",
+      "Bash(grep -v '^$')",
+      "Bash(git show *)",
+      "Bash(echo \"tsc exit: $?\")",
+      "Bash(echo \"eslint exit: $?\")",
+      "Bash(systemctl --user list-units --type=service)",
+      "Bash(systemctl list-units *)",
+      "Bash(curl -sk https://localhost/actuator/health)"
     ],
     "additionalDirectories": [
       "/tmp"

@@ -133,6 +133,12 @@ export function ScreenShareTile({ participant }: ScreenShareTileProps) {
               )}
             </button>
           )}
+          {!participant.isLocal && participant.screenShareHasAudio && participant.screenShareAudioEnabled && (
+            <VolumeControl
+              label={`${participant.name}'s screen`}
+              onVolumeChange={(volume) => voiceClient.setScreenShareVolume(participant.identity, volume)}
+            />
+          )}
           <button
             type="button"
             aria-label="Leave call"

@@ -182,6 +182,19 @@ describe('ScreenShareTile', () => {
       expect(screen.getByRole('button', { name: 'Exit fullscreen' })).toBeInTheDocument();
     });
 
+    it('keeps the volume control available once fullscreen is entered', async () => {
+      const user = userEvent.setup();
+      render(
+        <ScreenShareTile
+          participant={sharingParticipant({ isLocal: false, screenShareHasAudio: true, name: 'Felipe' })}
+        />,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Enter fullscreen' }));
+
+      expect(screen.getByRole('slider', { name: "Volume for Felipe's screen" })).toBeInTheDocument();
+    });
+
     it('calls document.exitFullscreen when the exit button is clicked, and reverts the layout', async () => {
       const user = userEvent.setup();
       const { container } = render(<ScreenShareTile participant={sharingParticipant()} />);

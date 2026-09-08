@@ -163,7 +163,7 @@ High-level architecture:
 * Docker
 * Docker Compose
 * Nginx
-* Linux VM
+* Linux VM or self-hosted PC (router port-forwarding)
 
 ---
 
@@ -290,7 +290,7 @@ The exact commands may evolve as the project is implemented.
 
 ## Docker Commands
 
-The full stack (frontend, backend, PostgreSQL, LiveKit, Nginx) runs via Docker Compose from the `infrastructure/` directory. For the complete deployment runbooks (router port-forwarding, TLS certificates, `.env` setup), see [`infrastructure/HOME_DEPLOY.md`](infrastructure/HOME_DEPLOY.md) (self-hosted, no domain) or [`infrastructure/DEPLOY.md`](infrastructure/DEPLOY.md) (VPS with a domain and Let's Encrypt).
+The full stack (frontend, backend, PostgreSQL, LiveKit, Nginx) runs via Docker Compose from the `infrastructure/` directory. For the complete deployment runbooks (router port-forwarding, TLS certificates, `.env` setup), see [`infrastructure/HOME_DEPLOY.md`](infrastructure/HOME_DEPLOY.md) (self-hosted PC, no domain), [`infrastructure/DEPLOY.md`](infrastructure/DEPLOY.md) (VPS with a domain and Let's Encrypt), or [`infrastructure/VM_REVIEW.md`](infrastructure/VM_REVIEW.md) (quick review deployment behind a Cloudflare Quick Tunnel, no router config needed).
 
 Start the stack:
 
@@ -375,7 +375,7 @@ Some documents may be created progressively as the corresponding parts of the sy
 * Video participants
 * Video layout
 
-### Phase 4 — Screen Sharing
+### Phase 4 — Screen Sharing ✅
 
 * Screen capture
 * Screen publishing
@@ -393,7 +393,7 @@ Some documents may be created progressively as the corresponding parts of the sy
 
 ## Current Status
 
-🚧 Early development — Phases 1–3 complete (text chat, voice, video). Screen sharing (Phase 4) and MVP release hardening (Phase 5) remain.
+🚧 Early development — Phases 1–4 complete (text chat, voice, video, screen sharing). MVP release hardening (Phase 5 — monitoring, database backups) remains; manual deployment runbooks already exist for both home-PC and VPS setups.
 
 The project is currently being established and the architecture is intentionally being built incrementally.
 
