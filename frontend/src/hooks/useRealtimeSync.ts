@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toVoicePresenceEntry } from '../features/calls/api';
 import { useAuthStore } from '../features/auth/authStore';
+import { getWsTicket } from '../features/auth/api';
 import { websocketClient } from '../services/websocketClient';
 import { voiceClient } from '../services/voiceClient';
 import { useNotificationStore } from '../stores/notificationStore';
@@ -50,7 +51,7 @@ export function useRealtimeSync(): void {
 
   useEffect(() => {
     if (!token) return;
-    websocketClient.connect(token);
+    websocketClient.connect(() => getWsTicket().then((response) => response.ticket));
     return () => {
       websocketClient.disconnect();
     };

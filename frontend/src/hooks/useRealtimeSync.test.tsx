@@ -9,6 +9,7 @@ import type { Server } from '../types/server';
 import type { VoicePresenceEntry } from '../types/voice';
 import { useVoiceStore } from '../stores/voiceStore';
 import { voiceClient } from '../services/voiceClient';
+import { getWsTicket } from '../features/auth/api';
 import { useRealtimeSync } from './useRealtimeSync';
 
 const { handlers, mockConnect, mockDisconnect } = vi.hoisted(() => ({
@@ -38,6 +39,10 @@ vi.mock('../services/websocketClient', () => ({
 
 vi.mock('../services/voiceClient', () => ({
   voiceClient: { disconnect: vi.fn() },
+}));
+
+vi.mock('../features/auth/api', () => ({
+  getWsTicket: vi.fn(() => Promise.resolve({ ticket: 'ticket-abc' })),
 }));
 
 function emit(type: string, payload: unknown) {
@@ -76,6 +81,7 @@ describe('useRealtimeSync', () => {
     mockConnect.mockClear();
     mockDisconnect.mockClear();
     vi.mocked(voiceClient.disconnect).mockClear();
+    vi.mocked(getWsTicket).mockClear();
     useVoiceStore.setState({ status: 'disconnected', channelId: null, participants: [], error: null, isDeafened: false });
     useAuthStore.setState({
       token: 'jwt-abc',
@@ -92,11 +98,14 @@ describe('useRealtimeSync', () => {
     return new QueryClient({ defaultOptions: { queries: { retry: false } } });
   }
 
-  it('connects on mount with the current token and disconnects on unmount', () => {
+  it('connects on mount with a ticket-provider function that resolves via getWsTicket, and disconnects on unmount', async () => {
     const queryClient = newQueryClient();
     const { unmount } = renderHarness(queryClient, '/app');
 
-    expect(mockConnect).toHaveBeenCalledWith('jwt-abc');
+    expect(mockConnect).toHaveBeenCalledWith(expect.any(Function));
+    const getTicket = mockConnect.mock.calls[0][0] as () => Promise<string>;
+    await expect(getTicket()).resolves.toBe('ticket-abc');
+    expect(getWsTicket).toHaveBeenCalled();
     expect(mockDisconnect).not.toHaveBeenCalled();
 
     unmount();

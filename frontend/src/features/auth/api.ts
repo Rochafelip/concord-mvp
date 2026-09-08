@@ -24,3 +24,11 @@ export function login(data: LoginPayload): Promise<AuthResult> {
 export function getMe(): Promise<User> {
   return apiClient.get<User>('users/me');
 }
+
+export interface WsTicketResponse {
+  ticket: string;
+}
+
+export function getWsTicket(): Promise<WsTicketResponse> {
+  return apiClient.post<WsTicketResponse>('realtime/ws-ticket');
+}
