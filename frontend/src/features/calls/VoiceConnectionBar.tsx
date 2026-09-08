@@ -3,6 +3,8 @@ import {
   Headphones,
   Mic,
   MicOff,
+  MonitorUp,
+  MonitorX,
   PhoneOff,
   Signal,
   SignalHigh,
@@ -11,10 +13,12 @@ import {
   SignalZero,
   Volume2,
 } from 'lucide-react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { voiceClient } from '../../services/voiceClient';
 import { useChannel } from '../channels/hooks';
 import { useServer } from '../servers/hooks';
+import { ScreenShareQualityModal } from './ScreenShareQualityModal';
 import { useVoiceParticipants, useVoiceStatus } from './hooks';
 
 const QUALITY_ICON: Record<ConnectionQuality, { Icon: typeof Signal; className: string }> = {
@@ -30,6 +34,7 @@ export function VoiceConnectionBar() {
   const { data: channel } = useChannel(channelId ?? undefined);
   const { data: server } = useServer(channel?.serverId);
   const localParticipant = useVoiceParticipants().find((participant) => participant.isLocal);
+  const [isQualityModalOpen, setQualityModalOpen] = useState(false);
 
   if (status === 'disconnected' || !channelId) return null;
 
@@ -82,6 +87,20 @@ export function VoiceConnectionBar() {
           </button>
           <button
             type="button"
+            aria-label={localParticipant.screenShareEnabled ? 'Stop sharing' : 'Share screen'}
+            onClick={() =>
+              localParticipant.screenShareEnabled ? voiceClient.toggleScreenShare() : setQualityModalOpen(true)
+            }
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-sidebar text-ink hover:bg-border"
+          >
+            {localParticipant.screenShareEnabled ? (
+              <MonitorX size={18} aria-hidden="true" />
+            ) : (
+              <MonitorUp size={18} aria-hidden="true" />
+            )}
+          </button>
+          <button
+            type="button"
             aria-label="Leave call"
             onClick={() => voiceClient.disconnect()}
             className="flex h-10 w-10 items-center justify-center rounded-full bg-danger/90 text-white hover:bg-danger"
@@ -90,6 +109,14 @@ export function VoiceConnectionBar() {
           </button>
         </div>
       )}
+      <ScreenShareQualityModal
+        open={isQualityModalOpen}
+        onClose={() => setQualityModalOpen(false)}
+        onConfirm={(options) => {
+          setQualityModalOpen(false);
+          voiceClient.toggleScreenShare(options);
+        }}
+      />
     </div>
   );
 }
