@@ -42,7 +42,7 @@ export function CreateChannelModal({ serverId, open, onClose }: CreateChannelMod
   return (
     <Modal open={open} onClose={onClose}>
       <form onSubmit={handleSubmit} className="w-72 space-y-4">
-        <h2 className="text-lg font-semibold text-gray-900">Create a channel</h2>
+        <h2 className="text-lg font-semibold text-ink">Create a channel</h2>
 
         <ErrorBanner message={errorMessage} />
 
@@ -55,8 +55,8 @@ export function CreateChannelModal({ serverId, open, onClose }: CreateChannelMod
         />
 
         <fieldset className="space-y-1">
-          <legend className="text-sm font-medium text-gray-700">Type</legend>
-          <label className="flex items-center gap-2 text-sm text-gray-700">
+          <legend className="text-sm font-medium text-muted">Type</legend>
+          <label className="flex items-center gap-2 text-sm text-muted">
             <input
               type="radio"
               name="type"
@@ -66,7 +66,7 @@ export function CreateChannelModal({ serverId, open, onClose }: CreateChannelMod
             />
             Text
           </label>
-          <label className="flex items-center gap-2 text-sm text-gray-700">
+          <label className="flex items-center gap-2 text-sm text-muted">
             <input
               type="radio"
               name="type"
