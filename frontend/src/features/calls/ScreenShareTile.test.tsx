@@ -148,6 +148,51 @@ describe('ScreenShareTile', () => {
     });
   });
 
+  describe('audio starts muted', () => {
+    beforeEach(() => {
+      vi.mocked(voiceClient.setScreenShareVolume).mockClear();
+    });
+
+    it('silences screen-share audio for a remote participant while minimized (not watching)', () => {
+      render(
+        <ScreenShareTile
+          participant={sharingParticipant({ isLocal: false, identity: 'bob', screenShareHasAudio: true })}
+        />,
+      );
+
+      expect(voiceClient.setScreenShareVolume).toHaveBeenCalledWith('bob', 0);
+    });
+
+    it('does not touch volume for a share with no audio', () => {
+      render(<ScreenShareTile participant={sharingParticipant({ isLocal: false, screenShareHasAudio: false })} />);
+
+      expect(voiceClient.setScreenShareVolume).not.toHaveBeenCalled();
+    });
+
+    it("does not silence the local participant's own share", () => {
+      render(<ScreenShareTile participant={sharingParticipant({ isLocal: true, screenShareHasAudio: true })} />);
+
+      expect(voiceClient.setScreenShareVolume).not.toHaveBeenCalled();
+    });
+
+    it('re-silences audio when switching from watching back to minimized (Stop watching)', async () => {
+      const { user } = await renderWatching(
+        sharingParticipant({ isLocal: false, identity: 'bob', screenShareHasAudio: true }),
+      );
+      vi.mocked(voiceClient.setScreenShareVolume).mockClear();
+
+      await user.click(screen.getByRole('button', { name: "Stop watching Felipe's screen" }));
+
+      expect(voiceClient.setScreenShareVolume).toHaveBeenCalledWith('bob', 0);
+    });
+
+    it('renders the volume control muted by default once watching', async () => {
+      await renderWatching(sharingParticipant({ isLocal: false, screenShareHasAudio: true, name: 'Felipe' }));
+
+      expect(screen.getByRole('slider', { name: "Volume for Felipe's screen" })).toHaveValue('0');
+    });
+  });
+
   describe('volume control', () => {
     beforeEach(() => {
       vi.mocked(voiceClient.setScreenShareVolume).mockClear();

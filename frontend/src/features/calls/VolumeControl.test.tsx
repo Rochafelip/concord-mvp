@@ -47,6 +47,25 @@ describe('VolumeControl', () => {
     expect(screen.getByRole('slider', { name: 'Volume for Bob' })).toHaveValue('70');
   });
 
+  it('starts muted when defaultMuted is true, without calling onVolumeChange on mount', () => {
+    const onVolumeChange = vi.fn();
+    render(<VolumeControl label="Bob" onVolumeChange={onVolumeChange} defaultMuted />);
+
+    expect(screen.getByRole('slider', { name: 'Volume for Bob' })).toHaveValue('0');
+    expect(screen.getByRole('button', { name: 'Unmute Bob for you' })).toBeInTheDocument();
+    expect(onVolumeChange).not.toHaveBeenCalled();
+  });
+
+  it('un-mutes and reports full volume when the slider is moved while defaultMuted is true', () => {
+    const onVolumeChange = vi.fn();
+    render(<VolumeControl label="Bob" onVolumeChange={onVolumeChange} defaultMuted />);
+
+    fireEvent.change(screen.getByRole('slider', { name: 'Volume for Bob' }), { target: { value: '80' } });
+
+    expect(screen.getByRole('button', { name: 'Mute Bob for you' })).toBeInTheDocument();
+    expect(onVolumeChange).toHaveBeenLastCalledWith(0.8);
+  });
+
   it('un-mutes automatically when the slider is moved while muted', async () => {
     const user = userEvent.setup();
     const onVolumeChange = vi.fn();

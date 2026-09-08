@@ -1,5 +1,5 @@
 import { EyeOff, Maximize2, Mic, MicOff, Minimize2, MonitorUp, PhoneOff } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { voiceClient } from '../../services/voiceClient';
 import type { VoiceParticipant } from '../../types/voice';
 import { useVoiceParticipants } from './hooks';
@@ -20,7 +20,12 @@ interface ScreenShareTileProps {
  * per-viewer choice via the Watch/Stop watching buttons below, so a new share never auto-plays
  * video for everyone in the channel (see
  * docs/superpowers/specs/2026-09-08-screenshare-opt-in-watch-design.md). The local participant's
- * own share starts already watching, since it's their own screen.
+ * own share starts already watching, since it's their own screen. Each tile's isWatching is
+ * independent, so a viewer can watch several simultaneous shares at once — there's no
+ * exclusivity, just an explicit opt-in per share.
+ *
+ * Audio is muted for as long as a remote share stays minimized, and re-muted whenever it's
+ * minimized again — see the setScreenShareVolume effect below.
  *
  * Spans the grid's full row width (col-span-full) rather than sharing camera tiles' size once
  * watched — screen content (text, code, slides) is illegible squeezed into a small tile.
@@ -46,6 +51,18 @@ export function ScreenShareTile({ participant }: ScreenShareTileProps) {
       screenShareTrack.detach(element);
     };
   }, [isWatching, screenShareTrack]);
+
+  // Screen-share audio must start (and stay) muted while minimized — the <video> element's own
+  // `muted` attribute below only silences the never-rendered video-track audio; the actually
+  // audible track is a separate hidden <audio> element voiceClient attaches directly on
+  // subscribe (see voiceClient.ts's handleTrackSubscribed), independent of this tile's watching
+  // state. setScreenShareVolume is the only way to reach it from here. useLayoutEffect (not
+  // useEffect) to close the window between mount/re-mute and the browser actually playing sound
+  // as tightly as possible.
+  useLayoutEffect(() => {
+    if (participant.isLocal || !participant.screenShareHasAudio) return;
+    if (!isWatching) voiceClient.setScreenShareVolume(participant.identity, 0);
+  }, [isWatching, participant.isLocal, participant.identity, participant.screenShareHasAudio]);
 
   useEffect(() => {
     function handleFullscreenChange() {
@@ -138,6 +155,7 @@ export function ScreenShareTile({ participant }: ScreenShareTileProps) {
               <VolumeControl
                 label={`${participant.name}'s screen`}
                 onVolumeChange={(volume) => voiceClient.setScreenShareVolume(participant.identity, volume)}
+                defaultMuted
               />
             </div>
           )}
@@ -171,6 +189,7 @@ export function ScreenShareTile({ participant }: ScreenShareTileProps) {
             <VolumeControl
               label={`${participant.name}'s screen`}
               onVolumeChange={(volume) => voiceClient.setScreenShareVolume(participant.identity, volume)}
+              defaultMuted
             />
           )}
           <button

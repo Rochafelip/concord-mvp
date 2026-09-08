@@ -4,6 +4,11 @@ interface VolumeControlProps {
   /** Display name used only to build distinct aria-labels, e.g. "Bob" or "Bob's screen". */
   label: string;
   onVolumeChange: (volume: number) => void;
+  /** Initial muted state. Defaults to false (matches prior behavior). ScreenShareTile passes
+   * `true` so this control's displayed state matches the muted-by-default screen-share audio
+   * (see docs/superpowers/specs/2026-09-08-screenshare-opt-in-watch-design.md) — mic volume
+   * controls (ParticipantTile) don't pass it and keep defaulting to unmuted. */
+  defaultMuted?: boolean;
 }
 
 /**
@@ -13,9 +18,9 @@ interface VolumeControlProps {
  * the slider's remembered position; moving the slider while muted un-mutes automatically,
  * matching how OS volume mixers behave.
  */
-export function VolumeControl({ label, onVolumeChange }: VolumeControlProps) {
+export function VolumeControl({ label, onVolumeChange, defaultMuted = false }: VolumeControlProps) {
   const [volume, setVolume] = useState(1);
-  const [muted, setMuted] = useState(false);
+  const [muted, setMuted] = useState(defaultMuted);
 
   function handleSliderChange(event: ChangeEvent<HTMLInputElement>) {
     const nextVolume = Number(event.target.value) / 100;
