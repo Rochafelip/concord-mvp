@@ -18,6 +18,7 @@ public record VoicePresenceResponse(
         boolean muted,
         boolean cameraOn,
         boolean screenSharing,
-        boolean speaking
+        boolean speaking,
+        boolean deafened
 ) {
 }
