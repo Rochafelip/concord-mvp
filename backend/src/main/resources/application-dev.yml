@@ -14,4 +14,4 @@ livekit:
 
 app:
   uploads:
-    dir: ${UPLOADS_DIR:./uploads}
+    dir: ${APP_UPLOADS_DIR:./uploads}
