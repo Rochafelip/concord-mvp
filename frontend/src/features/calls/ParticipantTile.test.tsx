@@ -53,6 +53,21 @@ describe('ParticipantTile', () => {
     expect(screen.getByTestId('mic-status-on')).toBeInTheDocument();
   });
 
+  it('shows a deafened icon instead of the mic icon when deafened, even if micEnabled is true', () => {
+    render(<ParticipantTile participant={participant({ micEnabled: true })} deafened />);
+
+    expect(screen.getByTestId('deaf-status-on')).toBeInTheDocument();
+    expect(screen.queryByTestId('mic-status-on')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('mic-status-off')).not.toBeInTheDocument();
+  });
+
+  it('falls back to the normal mic icon when not deafened', () => {
+    render(<ParticipantTile participant={participant({ micEnabled: false })} deafened={false} />);
+
+    expect(screen.getByTestId('mic-status-off')).toBeInTheDocument();
+    expect(screen.queryByTestId('deaf-status-on')).not.toBeInTheDocument();
+  });
+
   it('attaches the video track to the <video> element when present, and detaches it on unmount', () => {
     const attach = vi.fn();
     const detach = vi.fn();

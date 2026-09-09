@@ -1,4 +1,4 @@
-import { Mic, MicOff, PhoneOff, Video, VideoOff, Volume2, VolumeX } from 'lucide-react';
+import { HeadphoneOff, Mic, MicOff, PhoneOff, Video, VideoOff, Volume2, VolumeX } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { voiceClient } from '../../services/voiceClient';
 import type { VoiceParticipant } from '../../types/voice';
@@ -8,6 +8,8 @@ interface ParticipantTileProps {
   participant: VoiceParticipant;
   /** Only passed for the local participant's tile — renders the in-tile control bar. */
   onLeave?: () => void;
+  /** From voice presence, looked up by identity in ParticipantList — defaults to false so tiles render correctly before the first presence fetch resolves. */
+  deafened?: boolean;
 }
 
 /**
@@ -21,7 +23,7 @@ interface ParticipantTileProps {
  * The tile background and control-bar chrome (black/white overlays) stay literal colors
  * rather than tokens — they sit on top of live video and must read the same in both themes.
  */
-export function ParticipantTile({ participant, onLeave }: ParticipantTileProps) {
+export function ParticipantTile({ participant, onLeave, deafened = false }: ParticipantTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const { videoTrack } = participant;
   const isLocal = participant.isLocal && onLeave;
@@ -54,7 +56,9 @@ export function ParticipantTile({ participant, onLeave }: ParticipantTileProps) 
       <span
         className={`absolute left-1 flex items-center gap-1 rounded bg-black/50 px-1.5 py-0.5 text-caption text-white ${isLocal ? 'top-1' : 'bottom-1'}`}
       >
-        {participant.micEnabled ? (
+        {deafened ? (
+          <HeadphoneOff data-testid="deaf-status-on" size={12} aria-hidden="true" />
+        ) : participant.micEnabled ? (
           <Mic data-testid="mic-status-on" size={12} aria-hidden="true" />
         ) : (
           <MicOff data-testid="mic-status-off" size={12} aria-hidden="true" />
