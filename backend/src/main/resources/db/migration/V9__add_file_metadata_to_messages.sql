@@ -1,0 +1,2 @@
+ALTER TABLE messages ADD COLUMN file_name VARCHAR(255);
+ALTER TABLE messages ADD COLUMN file_size BIGINT;

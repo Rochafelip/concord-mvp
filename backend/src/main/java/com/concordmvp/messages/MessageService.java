@@ -45,6 +45,7 @@ public class MessageService {
     private static final int DEFAULT_HISTORY_LIMIT = 50;
     private static final int MAX_HISTORY_LIMIT = 100;
     private static final int MAX_CONTENT_LENGTH = 4000;
+    private static final int MAX_FILE_NAME_LENGTH = 255;
     private static final Pattern IMAGE_URL_PATTERN = Pattern.compile("^/api/v1/uploads/[A-Za-z0-9._-]{1,100}$");
 
     private final MessageRepository messageRepository;
@@ -68,7 +69,7 @@ public class MessageService {
     public static final UUID SYSTEM_USER_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
 
     @Transactional
-    public Message sendMessage(UUID channelId, String content, String imageUrl, UUID authorId) {
+    public Message sendMessage(UUID channelId, String content, String imageUrl, String fileName, Long fileSize, UUID authorId) {
         Channel channel = channelService.getChannel(channelId, authorId);
 
         if (channel.getType() == ChannelType.ONBOARDING) {
@@ -76,17 +77,21 @@ public class MessageService {
         }
 
         String trimmed = content == null ? "" : content.trim();
-        String normalizedImageUrl = normalizeImageUrl(imageUrl);
-        boolean hasImage = normalizedImageUrl != null;
+        String normalizedUrl = normalizeImageUrl(imageUrl);
+        boolean hasAttachment = normalizedUrl != null;
 
-        if (trimmed.isEmpty() && !hasImage) {
-            throw new BadRequestException("Message must contain text or an image");
+        if (trimmed.isEmpty() && !hasAttachment) {
+            throw new BadRequestException("Message must contain text or an attachment");
         }
         if (trimmed.length() > MAX_CONTENT_LENGTH) {
             throw new BadRequestException("Message content is too long");
         }
+        if (fileName != null && fileName.length() > MAX_FILE_NAME_LENGTH) {
+            throw new BadRequestException("File name is too long");
+        }
 
-        return persistAndBroadcast(channelId, channel.getServerId(), authorId, trimmed, normalizedImageUrl);
+        return persistAndBroadcast(channelId, channel.getServerId(), authorId, trimmed, normalizedUrl,
+                hasAttachment ? fileName : null, hasAttachment ? fileSize : null);
     }
 
     private String normalizeImageUrl(String imageUrl) {
@@ -111,15 +116,18 @@ public class MessageService {
      */
     @Transactional
     public Message postSystemMessage(UUID channelId, UUID serverId, String content) {
-        return persistAndBroadcast(channelId, serverId, SYSTEM_USER_ID, content, null);
+        return persistAndBroadcast(channelId, serverId, SYSTEM_USER_ID, content, null, null, null);
     }
 
-    private Message persistAndBroadcast(UUID channelId, UUID serverId, UUID authorId, String content, String imageUrl) {
+    private Message persistAndBroadcast(UUID channelId, UUID serverId, UUID authorId, String content,
+                                         String imageUrl, String fileName, Long fileSize) {
         Message message = new Message();
         message.setChannelId(channelId);
         message.setAuthorId(authorId);
         message.setContent(content);
         message.setImageUrl(imageUrl);
+        message.setFileName(fileName);
+        message.setFileSize(fileSize);
         Message saved = messageRepository.save(message);
 
         User author = userRepository.findById(authorId)
@@ -188,6 +196,7 @@ public class MessageService {
         UserSummaryResponse authorSummary = new UserSummaryResponse(
                 author.getId(), author.getUsername(), author.getDisplayName(), author.getAvatarUrl());
         return new MessageResponse(message.getId(), message.getChannelId(), authorSummary,
-                message.getContent(), message.getImageUrl(), message.getCreatedAt());
+                message.getContent(), message.getImageUrl(), message.getFileName(), message.getFileSize(),
+                message.getCreatedAt());
     }
 }

@@ -16,6 +16,8 @@ public record MessageResponse(
         UserSummaryResponse author,
         String content,
         String imageUrl,
+        String fileName,
+        Long fileSize,
         Instant createdAt
 ) {
 }

@@ -10,6 +10,8 @@ import java.util.UUID;
 public record SendMessageRequest(
         UUID channelId,
         String content,
-        String imageUrl
+        String imageUrl,
+        String fileName,
+        Long fileSize
 ) {
 }
