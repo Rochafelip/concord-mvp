@@ -11,6 +11,7 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -31,6 +32,15 @@ public class AttachmentUploadService {
 
     static final long MAX_IMAGE_SIZE_BYTES = 8L * 1024 * 1024;
     static final long MAX_FILE_SIZE_BYTES = 50L * 1024 * 1024;
+
+    /**
+     * Extensions {@link AttachmentServingController} treats as safe to render inline. A non-image
+     * file (one that failed {@link #detectImageExtension}) must never be stored under one of
+     * these, even if the client's original filename claims one — otherwise a non-image file named
+     * e.g. {@code evil.png} would be served with an image content-type instead of being forced to
+     * download, reopening the MIME-sniffing/stored-XSS risk that distinction exists to prevent.
+     */
+    private static final Set<String> RESERVED_IMAGE_EXTENSIONS = Set.of("jpg", "jpeg", "png", "gif", "webp");
 
     private final ChannelService channelService;
     private final Path uploadsDir;
@@ -106,7 +116,10 @@ public class AttachmentUploadService {
      * Extracts a safe, lowercase extension (letters/digits only, max 10 chars) from the client's
      * original filename, for a non-image file, so the stored file keeps a recognizable type
      * without trusting the original filename for anything beyond this cosmetic suffix. Returns
-     * {@code ""} if there's no usable extension.
+     * {@code ""} if there's no usable extension, or if the candidate collides with one of
+     * {@link #RESERVED_IMAGE_EXTENSIONS} — this method is only ever called for a file that just
+     * failed {@link #detectImageExtension}'s real content check, so it must never let that file
+     * masquerade as an image via a merely claimed extension.
      */
     private String safeExtension(String originalFilename) {
         if (originalFilename == null) {
@@ -118,6 +131,9 @@ public class AttachmentUploadService {
         }
         String candidate = originalFilename.substring(dot + 1).toLowerCase();
         if (candidate.length() > 10 || !candidate.chars().allMatch(Character::isLetterOrDigit)) {
+            return "";
+        }
+        if (RESERVED_IMAGE_EXTENSIONS.contains(candidate)) {
             return "";
         }
         return candidate;

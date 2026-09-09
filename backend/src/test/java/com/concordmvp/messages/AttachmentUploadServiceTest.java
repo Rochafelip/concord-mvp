@@ -132,6 +132,27 @@ class AttachmentUploadServiceTest {
     }
 
     @Test
+    void upload_nonImageContentWithImageLikeFilename_storedWithoutThatExtension() throws IOException {
+        // A non-image file (fails every magic-byte check) whose ORIGINAL filename claims ".png"
+        // must never be stored under a .png (or .jpg/.jpeg/.gif/.webp) extension — the serving
+        // controller decides "safe to render inline" purely from the storage filename's
+        // extension, so letting an attacker-chosen filename grant that extension would defeat the
+        // forced-download protection for non-images.
+        UUID channelId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        when(channelService.getChannel(channelId, requesterId)).thenReturn(channel(channelId, UUID.randomUUID()));
+        byte[] content = nonImageBytes(1024);
+        MockMultipartFile file = new MockMultipartFile("file", "evil.png", "image/png", content);
+
+        UploadedAttachment result = attachmentUploadService.upload(channelId, requesterId, file);
+
+        assertThat(result.url()).doesNotEndWith(".png");
+        assertThat(result.fileName()).isEqualTo("evil.png");
+        String filename = result.url().substring("/api/v1/uploads/".length());
+        assertThat(Files.exists(uploadsDir.resolve(filename))).isTrue();
+    }
+
+    @Test
     void upload_nonImageFile_over8MBButUnder50MB_succeeds() {
         // Proves the higher 50MB limit applies to non-images, not the 8MB image limit: this file
         // is well over 8MB (which would reject an image) but comfortably under 50MB.
