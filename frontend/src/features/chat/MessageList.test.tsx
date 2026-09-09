@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { Message } from '../../types/message';
 import * as hooksModule from './hooks';
@@ -143,5 +144,67 @@ describe('MessageList', () => {
     render(<MessageList channelId="c1" />);
 
     expect(screen.getAllByTestId('date-divider')).toHaveLength(1);
+  });
+
+  it('renders an image inline when the message has an imageUrl pointing to a known image extension', () => {
+    mockHistory({
+      data: {
+        pages: [[makeMessage('m1', '', '2026-01-01T00:00:00Z', '/api/v1/uploads/abc.png')]],
+        pageParams: [undefined],
+      },
+    });
+
+    render(<MessageList channelId="c1" />);
+
+    expect(screen.getByRole('img')).toHaveAttribute('src', '/api/v1/uploads/abc.png');
+  });
+
+  it('opens a full-size lightbox when the image is clicked, and closes it on Escape', async () => {
+    mockHistory({
+      data: {
+        pages: [[makeMessage('m1', '', '2026-01-01T00:00:00Z', '/api/v1/uploads/abc.png')]],
+        pageParams: [undefined],
+      },
+    });
+    const user = userEvent.setup();
+
+    render(<MessageList channelId="c1" />);
+    await user.click(screen.getByRole('img'));
+
+    expect(screen.getAllByRole('img')).toHaveLength(2);
+
+    await user.keyboard('{Escape}');
+    expect(screen.getAllByRole('img')).toHaveLength(1);
+  });
+
+  it('renders a download chip (not an <img>) for a non-image attachment', () => {
+    mockHistory({
+      data: {
+        pages: [[makeMessage('m1', '', '2026-01-01T00:00:00Z', '/api/v1/uploads/abc.pdf', 'report.pdf', 20480)]],
+        pageParams: [undefined],
+      },
+    });
+
+    render(<MessageList channelId="c1" />);
+
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    const link = screen.getByRole('link', { name: /report\.pdf/i });
+    expect(link).toHaveAttribute('href', '/api/v1/uploads/abc.pdf');
+    expect(link).toHaveAttribute('download', 'report.pdf');
+    expect(screen.getByText(/20\.0 KB/i)).toBeInTheDocument();
+  });
+
+  it('does not render an image or a chip for a text-only message', () => {
+    mockHistory({
+      data: {
+        pages: [[makeMessage('m1', 'just text', '2026-01-01T00:00:00Z')]],
+        pageParams: [undefined],
+      },
+    });
+
+    render(<MessageList channelId="c1" />);
+
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
   });
 });

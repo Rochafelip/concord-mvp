@@ -1,11 +1,25 @@
-import { useLayoutEffect, useMemo, useRef } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Avatar } from '../../components/Avatar';
+import { Modal } from '../../components/Modal';
 import type { Message } from '../../types/message';
 import { useMessageHistory } from './hooks';
 import { MessageContent } from './MessageContent';
 
 interface MessageListProps {
   channelId: string;
+}
+
+const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+
+function isImageUrl(url: string): boolean {
+  const extension = url.split('.').pop()?.toLowerCase();
+  return extension != null && IMAGE_EXTENSIONS.includes(extension);
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 /**
@@ -44,6 +58,7 @@ export function MessageList({ channelId }: MessageListProps) {
   const pendingPrependRef = useRef(false);
   const scrollHeightBeforePrependRef = useRef(0);
   const lastMessageIdRef = useRef<string | undefined>(undefined);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   const messages = useMemo(() => toChronologicalOrder(data?.pages), [data]);
 
@@ -137,12 +152,38 @@ export function MessageList({ channelId }: MessageListProps) {
                     {createdAt.toLocaleTimeString()}
                   </span>
                 </div>
-                <MessageContent content={message.content} />
+                {message.content && <MessageContent content={message.content} />}
+                {message.imageUrl && isImageUrl(message.imageUrl) && (
+                  <img
+                    src={message.imageUrl}
+                    alt={message.fileName ?? 'Attached image'}
+                    className="mt-1 max-h-80 cursor-pointer rounded"
+                    onClick={() => setLightboxUrl(message.imageUrl)}
+                  />
+                )}
+                {message.imageUrl && !isImageUrl(message.imageUrl) && (
+                  <a
+                    href={message.imageUrl}
+                    download={message.fileName ?? undefined}
+                    className="mt-1 flex max-w-xs items-center gap-2 rounded border p-2 text-body text-ink hover:bg-sidebar"
+                  >
+                    <span className="min-w-0 flex-1 truncate">{message.fileName ?? 'File'}</span>
+                    {message.fileSize != null && (
+                      <span className="flex-shrink-0 text-caption text-muted">
+                        {formatFileSize(message.fileSize)}
+                      </span>
+                    )}
+                  </a>
+                )}
               </div>
             </div>
           </div>
         );
       })}
+
+      <Modal open={lightboxUrl != null} onClose={() => setLightboxUrl(null)}>
+        {lightboxUrl && <img src={lightboxUrl} alt="Full-size attachment" className="max-h-[80vh] max-w-[80vw]" />}
+      </Modal>
     </div>
   );
 }
