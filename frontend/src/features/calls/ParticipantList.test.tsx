@@ -1,14 +1,17 @@
-import { render, screen } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ConnectionQuality } from 'livekit-client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useVoiceStore } from '../../stores/voiceStore';
 import type { VoiceParticipant } from '../../types/voice';
+import * as callsApi from './api';
 import { ParticipantList } from './ParticipantList';
 
 vi.mock('../../services/voiceClient', () => ({
   voiceClient: { toggleMute: vi.fn(), toggleCamera: vi.fn(), toggleScreenShare: vi.fn() },
 }));
+vi.mock('./api');
 
 function participant(overrides: Partial<VoiceParticipant> = {}): VoiceParticipant {
   return {
@@ -27,13 +30,23 @@ function participant(overrides: Partial<VoiceParticipant> = {}): VoiceParticipan
   };
 }
 
+function renderList(props: Partial<Parameters<typeof ParticipantList>[0]> = {}) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <ParticipantList serverId="s1" {...props} />
+    </QueryClientProvider>,
+  );
+}
+
 describe('ParticipantList', () => {
   beforeEach(() => {
     useVoiceStore.setState({ status: 'connected', channelId: 'c1', participants: [], error: null });
+    vi.mocked(callsApi.getVoicePresence).mockResolvedValue([]);
   });
 
   it('shows a connecting placeholder before the first participant sync', () => {
-    render(<ParticipantList />);
+    renderList();
     expect(screen.getByText(/connecting/i)).toBeInTheDocument();
   });
 
@@ -41,7 +54,7 @@ describe('ParticipantList', () => {
     useVoiceStore.setState({
       participants: [participant({ identity: 'me', name: 'Felipe', isLocal: true })],
     });
-    render(<ParticipantList />);
+    renderList();
 
     expect(screen.getByText(/Felipe/)).toBeInTheDocument();
   });
@@ -53,7 +66,7 @@ describe('ParticipantList', () => {
         participant({ identity: 'u2', name: 'João', isLocal: false, micEnabled: false }),
       ],
     });
-    render(<ParticipantList />);
+    renderList();
 
     const felipeTile = screen.getByText(/Felipe/).closest('div');
     const joaoTile = screen.getByText(/João/).closest('div');
@@ -75,7 +88,7 @@ describe('ParticipantList', () => {
         }),
       ],
     });
-    render(<ParticipantList />);
+    renderList();
 
     expect(screen.getByText(/João's screen/)).toBeInTheDocument();
   });
@@ -84,7 +97,7 @@ describe('ParticipantList', () => {
     useVoiceStore.setState({
       participants: [participant({ identity: 'u1', name: 'Felipe', isLocal: true })],
     });
-    render(<ParticipantList />);
+    renderList();
 
     expect(screen.queryByText(/'s screen/)).not.toBeInTheDocument();
   });
@@ -98,10 +111,30 @@ describe('ParticipantList', () => {
         participant({ identity: 'u2', name: 'João', isLocal: false }),
       ],
     });
-    render(<ParticipantList onLeave={onLeave} />);
+    renderList({ onLeave });
 
     expect(screen.getAllByRole('button', { name: 'Leave call' })).toHaveLength(1);
     await user.click(screen.getByRole('button', { name: 'Leave call' }));
     expect(onLeave).toHaveBeenCalledTimes(1);
+  });
+
+  it('marks a tile deafened based on matching voice presence by identity', async () => {
+    vi.mocked(callsApi.getVoicePresence).mockResolvedValue([
+      { channelId: 'c1', userId: 'u2', displayName: 'João', avatarUrl: null, muted: true, cameraOn: false, screenSharing: false, speaking: false, deafened: true },
+    ]);
+    useVoiceStore.setState({
+      participants: [
+        participant({ identity: 'u1', name: 'Felipe', isLocal: true }),
+        participant({ identity: 'u2', name: 'João', isLocal: false, micEnabled: false }),
+      ],
+    });
+    renderList();
+
+    await waitFor(() => {
+      const joaoTile = screen.getByText(/João/).closest('div');
+      expect(joaoTile?.querySelector('[data-testid="deaf-status-on"]')).toBeInTheDocument();
+    });
+    const felipeTile = screen.getByText(/Felipe/).closest('div');
+    expect(felipeTile?.querySelector('[data-testid="deaf-status-on"]')).not.toBeInTheDocument();
   });
 });

@@ -22,6 +22,7 @@ vi.mock('./hooks', () => ({
   useJoinVoiceChannel: vi.fn(),
   useVoiceStatus: vi.fn(() => ({ status: 'connected', channelId: 'c1', error: null })),
   useVoiceParticipants: vi.fn(() => []),
+  useVoicePresence: vi.fn(() => ({ data: [] })),
 }));
 
 function channel(id: string): Channel {

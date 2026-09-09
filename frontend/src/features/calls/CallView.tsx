@@ -45,7 +45,7 @@ export function CallView({ channel }: CallViewProps) {
         <Volume2 size={16} className="text-muted" aria-hidden="true" />
         <span className="text-heading font-semibold text-ink">{channel.name}</span>
       </div>
-      <ParticipantList onLeave={handleLeave} />
+      <ParticipantList onLeave={handleLeave} serverId={channel.serverId} />
     </div>
   );
 }
