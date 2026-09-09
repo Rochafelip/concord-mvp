@@ -5,16 +5,7 @@ import { ParticipantTile } from './ParticipantTile';
 import { ScreenShareTile } from './ScreenShareTile';
 
 interface ParticipantListProps {
-  /**
-   * Historically wired to the local participant's tile to render its in-tile control bar.
-   * ParticipantTile no longer renders that bar (moved out in a concurrent, unrelated redesign —
-   * see docs/superpowers/plans/2026-09-08-call-view-control-bar-redesign.md), so this prop is
-   * currently unused here. Kept on the interface so CallView's existing call site still
-   * type-checks; that redesign's own remaining tasks are expected to relocate this wiring to a
-   * new CallControlBar rendered by CallView instead.
-   */
-  onLeave?: () => void;
-  /** The current channel's server — used to look up who's deafened via voice presence. */
+  /** The current channel's server — used to look up who's deafened/their avatar via voice presence. */
   serverId?: string;
 }
 
@@ -25,6 +16,12 @@ export function ParticipantList({ serverId }: ParticipantListProps) {
   const deafenedByUserId = useMemo(() => {
     const map = new Map<string, boolean>();
     (presence ?? []).forEach((entry) => map.set(entry.userId, entry.deafened));
+    return map;
+  }, [presence]);
+
+  const avatarUrlByUserId = useMemo(() => {
+    const map = new Map<string, string | null>();
+    (presence ?? []).forEach((entry) => map.set(entry.userId, entry.avatarUrl));
     return map;
   }, [presence]);
 
@@ -48,6 +45,7 @@ export function ParticipantList({ serverId }: ParticipantListProps) {
         <ParticipantTile
           key={participant.identity}
           participant={participant}
+          avatarUrl={avatarUrlByUserId.get(participant.identity)}
           deafened={deafenedByUserId.get(participant.identity) ?? false}
         />
       ))}

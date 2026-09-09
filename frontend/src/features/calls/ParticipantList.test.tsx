@@ -1,6 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { ConnectionQuality } from 'livekit-client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useVoiceStore } from '../../stores/voiceStore';
@@ -102,22 +101,6 @@ describe('ParticipantList', () => {
     expect(screen.queryByText(/'s screen/)).not.toBeInTheDocument();
   });
 
-  it('wires onLeave to the local participant tile only, not remote ones', async () => {
-    const user = userEvent.setup();
-    const onLeave = vi.fn();
-    useVoiceStore.setState({
-      participants: [
-        participant({ identity: 'u1', name: 'Felipe', isLocal: true }),
-        participant({ identity: 'u2', name: 'João', isLocal: false }),
-      ],
-    });
-    renderList({ onLeave });
-
-    expect(screen.getAllByRole('button', { name: 'Leave call' })).toHaveLength(1);
-    await user.click(screen.getByRole('button', { name: 'Leave call' }));
-    expect(onLeave).toHaveBeenCalledTimes(1);
-  });
-
   it('marks a tile deafened based on matching voice presence by identity', async () => {
     vi.mocked(callsApi.getVoicePresence).mockResolvedValue([
       { channelId: 'c1', userId: 'u2', displayName: 'João', avatarUrl: null, muted: true, cameraOn: false, screenSharing: false, speaking: false, deafened: true },
@@ -136,5 +119,31 @@ describe('ParticipantList', () => {
     });
     const felipeTile = screen.getByText(/Felipe/).closest('div');
     expect(felipeTile?.querySelector('[data-testid="deaf-status-on"]')).not.toBeInTheDocument();
+  });
+
+  it('passes the matching avatarUrl from voice presence down to a tile, by identity', async () => {
+    vi.mocked(callsApi.getVoicePresence).mockResolvedValue([
+      {
+        channelId: 'c1',
+        userId: 'u2',
+        displayName: 'João',
+        avatarUrl: 'https://example.test/joao.png',
+        muted: false,
+        cameraOn: false,
+        screenSharing: false,
+        speaking: false,
+        deafened: false,
+      },
+    ]);
+    useVoiceStore.setState({
+      participants: [
+        participant({ identity: 'u1', name: 'Felipe', isLocal: true }),
+        participant({ identity: 'u2', name: 'João', isLocal: false }),
+      ],
+    });
+    renderList();
+
+    expect(await screen.findByRole('img', { name: 'João' })).toHaveAttribute('src', 'https://example.test/joao.png');
+    expect(screen.queryByRole('img', { name: 'Felipe' })).not.toBeInTheDocument();
   });
 });

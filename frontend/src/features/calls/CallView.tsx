@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { voiceClient } from '../../services/voiceClient';
 import { useVoiceStore } from '../../stores/voiceStore';
 import type { Channel } from '../../types/channel';
+import { CallControlBar } from './CallControlBar';
 import { ParticipantList } from './ParticipantList';
 import { useJoinVoiceChannel } from './hooks';
 
@@ -45,7 +46,10 @@ export function CallView({ channel }: CallViewProps) {
         <Volume2 size={16} className="text-muted" aria-hidden="true" />
         <span className="text-heading font-semibold text-ink">{channel.name}</span>
       </div>
-      <ParticipantList onLeave={handleLeave} serverId={channel.serverId} />
+      <div className="relative flex flex-1 flex-col overflow-hidden bg-gray-950">
+        <ParticipantList serverId={channel.serverId} />
+        <CallControlBar onLeave={handleLeave} />
+      </div>
     </div>
   );
 }
