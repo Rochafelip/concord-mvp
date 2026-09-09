@@ -21,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -90,10 +91,16 @@ public class ServerService {
     }
 
     public List<Server> listServersForUser(UUID userId) {
-        List<UUID> serverIds = serverMemberRepository.findByUserId(userId).stream()
+        List<UUID> serverIds = serverMemberRepository.findByUserIdOrderByJoinedAtAsc(userId).stream()
                 .map(ServerMember::getServerId)
                 .toList();
-        return serverRepository.findAllById(serverIds);
+        // findAllById doesn't preserve the order of the given ids, so re-sort its result to
+        // match serverIds (join order) rather than trusting whatever order it comes back in.
+        Map<UUID, Server> serversById = serverRepository.findAllById(serverIds).stream()
+                .collect(Collectors.toMap(Server::getId, server -> server));
+        return serverIds.stream()
+                .map(serversById::get)
+                .toList();
     }
 
     public Server getServer(UUID serverId, UUID requesterId) {

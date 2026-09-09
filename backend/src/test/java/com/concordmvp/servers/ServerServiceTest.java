@@ -167,6 +167,30 @@ class ServerServiceTest {
                 "Alice entrou no servidor");
     }
 
+    // --- listServersForUser ---
+
+    @Test
+    void listServersForUser_returnsServersInJoinOrder_evenWhenRepositoryReturnsThemOutOfOrder() {
+        UUID userId = UUID.randomUUID();
+        UUID firstJoinedServerId = UUID.randomUUID();
+        UUID secondJoinedServerId = UUID.randomUUID();
+        Server firstJoinedServer = server(firstJoinedServerId, UUID.randomUUID());
+        Server secondJoinedServer = server(secondJoinedServerId, UUID.randomUUID());
+
+        // findByUserIdOrderByJoinedAtAsc reflects join order: firstJoinedServerId was joined before secondJoinedServerId.
+        when(serverMemberRepository.findByUserIdOrderByJoinedAtAsc(userId))
+                .thenReturn(List.of(member(firstJoinedServerId, userId), member(secondJoinedServerId, userId)));
+        // findAllById does not preserve input order (a documented Spring Data JPA behavior) -
+        // simulate it returning the servers in the opposite order to prove the service doesn't
+        // just trust it.
+        when(serverRepository.findAllById(List.of(firstJoinedServerId, secondJoinedServerId)))
+                .thenReturn(List.of(secondJoinedServer, firstJoinedServer));
+
+        List<Server> result = serverService.listServersForUser(userId);
+
+        assertThat(result).containsExactly(firstJoinedServer, secondJoinedServer);
+    }
+
     // --- getServer / listMembers access control ---
 
     @Test

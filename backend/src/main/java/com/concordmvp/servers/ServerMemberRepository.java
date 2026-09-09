@@ -8,7 +8,7 @@ import java.util.UUID;
 
 public interface ServerMemberRepository extends JpaRepository<ServerMember, UUID> {
 
-    List<ServerMember> findByUserId(UUID userId);
+    List<ServerMember> findByUserIdOrderByJoinedAtAsc(UUID userId);
 
     List<ServerMember> findByServerId(UUID serverId);
 
