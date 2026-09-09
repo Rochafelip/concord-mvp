@@ -20,17 +20,26 @@ export function ChatWindow() {
           {channel ? `# ${channel.name}` : 'Loading…'}
         </span>
       </div>
-      {/* key={channelId} forces a full remount on channel switch. Without it, client-side
+      {/* Keying by channelId forces a full remount on channel switch. Without it, client-side
           navigation only changes props, not identity — MessageList's scroll-state refs (e.g. a
           load-older-messages fetch still pending from the PREVIOUS channel) and MessageInput's
-          draft text would otherwise carry over into the newly selected channel. */}
-      <MessageList key={channelId} channelId={channelId} />
+          draft text would otherwise carry over into the newly selected channel. The two keys
+          below must not be equal to each other: MessageList and MessageInput (or the read-only
+          notice) are SIBLINGS, and giving siblings the same literal key value is a duplicate-key
+          bug — React warns "children may be duplicated and/or omitted" for exactly that case,
+          which showed up here as stale messages from a previous visit reappearing alongside the
+          current channel's list after switching channels. Prefixing each slot keeps them
+          distinct while still changing (forcing a remount) whenever channelId changes. */}
+      <MessageList key={`messages-${channelId}`} channelId={channelId} />
       {channel?.type === 'ONBOARDING' ? (
-        <p className="border-t p-3 text-center text-caption text-muted">
+        <p
+          key={`input-${channelId}`}
+          className="border-t p-3 text-center text-caption text-muted"
+        >
           This channel is read-only.
         </p>
       ) : (
-        <MessageInput key={channelId} channelId={channelId} />
+        <MessageInput key={`input-${channelId}`} channelId={channelId} />
       )}
     </div>
   );
