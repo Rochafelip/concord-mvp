@@ -4,6 +4,7 @@ import { ErrorBanner } from '../../components/ErrorBanner';
 import { TextInput } from '../../components/TextInput';
 import { ApiError } from '../../services/apiClient';
 import { useAuthStore } from '../auth/authStore';
+import { AudioSettingsSection } from './audio/AudioSettingsSection';
 import { useChangePassword, useUpdateProfile } from './hooks';
 
 function errorMessage(error: unknown): string | null {
@@ -137,6 +138,8 @@ export function SettingsPage() {
             {changePasswordMutation.isPending ? 'Saving…' : 'Change password'}
           </Button>
         </form>
+
+        <AudioSettingsSection />
       </div>
     </div>
   );
