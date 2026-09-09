@@ -1,13 +1,14 @@
 interface AvatarProps {
   displayName: string;
   avatarUrl?: string | null;
-  size?: 'sm' | 'md';
+  size?: 'sm' | 'md' | 'lg';
   className?: string;
 }
 
 const SIZE_CLASSES = {
   sm: 'h-8 w-8 text-body',
   md: 'h-10 w-10 text-heading',
+  lg: 'h-20 w-20 text-3xl',
 } as const;
 
 export function Avatar({ displayName, avatarUrl, size = 'sm', className = '' }: AvatarProps) {
