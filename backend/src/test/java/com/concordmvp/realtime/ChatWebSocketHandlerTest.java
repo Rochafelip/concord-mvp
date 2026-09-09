@@ -24,6 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -127,7 +128,21 @@ class ChatWebSocketHandlerTest {
         handler.handleMessage(session, new TextMessage(
                 "{\"type\":\"MESSAGE_CREATE\",\"payload\":{\"channelId\":\"" + channelId + "\",\"content\":\"hi\"}}"));
 
-        verify(messageService).sendMessage(eq(channelId), eq("hi"), eq(userId));
+        verify(messageService).sendMessage(eq(channelId), eq("hi"), isNull(), eq(userId));
+        verify(session, never()).sendMessage(any());
+    }
+
+    @Test
+    void handleTextMessage_messageCreate_withImageUrl_passesItToMessageService() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID channelId = UUID.randomUUID();
+        WebSocketSession session = sessionWithUserId(userId);
+
+        handler.handleMessage(session, new TextMessage(
+                "{\"type\":\"MESSAGE_CREATE\",\"payload\":{\"channelId\":\"" + channelId
+                        + "\",\"content\":\"\",\"imageUrl\":\"/api/v1/uploads/abc.png\"}}"));
+
+        verify(messageService).sendMessage(eq(channelId), eq(""), eq("/api/v1/uploads/abc.png"), eq(userId));
         verify(session, never()).sendMessage(any());
     }
 
@@ -136,7 +151,7 @@ class ChatWebSocketHandlerTest {
         UUID userId = UUID.randomUUID();
         UUID channelId = UUID.randomUUID();
         WebSocketSession session = sessionWithUserId(userId);
-        when(messageService.sendMessage(eq(channelId), eq("hi"), eq(userId)))
+        when(messageService.sendMessage(eq(channelId), eq("hi"), isNull(), eq(userId)))
                 .thenThrow(new ForbiddenException("Not a member of this server"));
 
         handler.handleMessage(session, new TextMessage(

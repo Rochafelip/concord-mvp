@@ -104,13 +104,27 @@ class MessageServiceTest {
     // --- sendMessage ---
 
     @Test
-    void sendMessage_blankContent_throwsBadRequest_andDoesNotSave() {
+    void sendMessage_blankContentAndNoImage_throwsBadRequest_andDoesNotSave() {
         UUID channelId = UUID.randomUUID();
         UUID serverId = UUID.randomUUID();
         UUID authorId = UUID.randomUUID();
         when(channelService.getChannel(channelId, authorId)).thenReturn(channel(channelId, serverId));
 
-        assertThatThrownBy(() -> messageService.sendMessage(channelId, "   ", authorId))
+        assertThatThrownBy(() -> messageService.sendMessage(channelId, "   ", null, authorId))
+                .isInstanceOf(BadRequestException.class);
+
+        verify(messageRepository, never()).save(any());
+        verifyNoInteractions(realtimeEventPublisher);
+    }
+
+    @Test
+    void sendMessage_blankContentAndBlankImageUrl_throwsBadRequest_andDoesNotSave() {
+        UUID channelId = UUID.randomUUID();
+        UUID serverId = UUID.randomUUID();
+        UUID authorId = UUID.randomUUID();
+        when(channelService.getChannel(channelId, authorId)).thenReturn(channel(channelId, serverId));
+
+        assertThatThrownBy(() -> messageService.sendMessage(channelId, "", "   ", authorId))
                 .isInstanceOf(BadRequestException.class);
 
         verify(messageRepository, never()).save(any());
@@ -125,7 +139,7 @@ class MessageServiceTest {
         when(channelService.getChannel(channelId, authorId)).thenReturn(channel(channelId, serverId));
         String tooLong = "a".repeat(4001);
 
-        assertThatThrownBy(() -> messageService.sendMessage(channelId, tooLong, authorId))
+        assertThatThrownBy(() -> messageService.sendMessage(channelId, tooLong, null, authorId))
                 .isInstanceOf(BadRequestException.class);
 
         verify(messageRepository, never()).save(any());
@@ -139,7 +153,7 @@ class MessageServiceTest {
         when(channelService.getChannel(channelId, authorId))
                 .thenThrow(new ForbiddenException("Not a member of this server"));
 
-        assertThatThrownBy(() -> messageService.sendMessage(channelId, "hello", authorId))
+        assertThatThrownBy(() -> messageService.sendMessage(channelId, "hello", null, authorId))
                 .isInstanceOf(ForbiddenException.class);
 
         verify(messageRepository, never()).save(any());
@@ -155,7 +169,7 @@ class MessageServiceTest {
         onboardingChannel.setType(ChannelType.ONBOARDING);
         when(channelService.getChannel(channelId, authorId)).thenReturn(onboardingChannel);
 
-        assertThatThrownBy(() -> messageService.sendMessage(channelId, "hello", authorId))
+        assertThatThrownBy(() -> messageService.sendMessage(channelId, "hello", null, authorId))
                 .isInstanceOf(ForbiddenException.class);
 
         verify(messageRepository, never()).save(any());
@@ -176,9 +190,10 @@ class MessageServiceTest {
         when(userRepository.findById(authorId)).thenReturn(Optional.of(author));
         stubMessageSaveAssignsId();
 
-        Message result = messageService.sendMessage(channelId, "  hello world  ", authorId);
+        Message result = messageService.sendMessage(channelId, "  hello world  ", null, authorId);
 
         assertThat(result.getContent()).isEqualTo("hello world");
+        assertThat(result.getImageUrl()).isNull();
         assertThat(result.getChannelId()).isEqualTo(channelId);
         assertThat(result.getAuthorId()).isEqualTo(authorId);
 
@@ -195,9 +210,52 @@ class MessageServiceTest {
         assertThat(payload.id()).isEqualTo(result.getId());
         assertThat(payload.channelId()).isEqualTo(channelId);
         assertThat(payload.content()).isEqualTo("hello world");
+        assertThat(payload.imageUrl()).isNull();
         assertThat(payload.author().id()).isEqualTo(authorId);
         assertThat(payload.author().username()).isEqualTo("alice");
         assertThat(payload.author().displayName()).isEqualTo("Alice");
+    }
+
+    @Test
+    void sendMessage_imageOnly_persistsEmptyContentAndImageUrl() {
+        UUID channelId = UUID.randomUUID();
+        UUID serverId = UUID.randomUUID();
+        UUID authorId = UUID.randomUUID();
+        User author = user(authorId, "alice", "Alice");
+
+        when(channelService.getChannel(channelId, authorId)).thenReturn(channel(channelId, serverId));
+        when(serverMemberRepository.findByServerId(serverId)).thenReturn(List.of(member(serverId, authorId)));
+        when(userRepository.findById(authorId)).thenReturn(Optional.of(author));
+        stubMessageSaveAssignsId();
+
+        Message result = messageService.sendMessage(channelId, "", "/api/v1/uploads/abc.png", authorId);
+
+        assertThat(result.getContent()).isEmpty();
+        assertThat(result.getImageUrl()).isEqualTo("/api/v1/uploads/abc.png");
+
+        ArgumentCaptor<WsEvent> eventCaptor = ArgumentCaptor.forClass(WsEvent.class);
+        verify(realtimeEventPublisher).broadcast(eq(Set.of(authorId)), eventCaptor.capture());
+        MessageResponse payload = (MessageResponse) eventCaptor.getValue().payload();
+        assertThat(payload.imageUrl()).isEqualTo("/api/v1/uploads/abc.png");
+        assertThat(payload.content()).isEmpty();
+    }
+
+    @Test
+    void sendMessage_imageWithCaption_persistsBoth() {
+        UUID channelId = UUID.randomUUID();
+        UUID serverId = UUID.randomUUID();
+        UUID authorId = UUID.randomUUID();
+        User author = user(authorId, "alice", "Alice");
+
+        when(channelService.getChannel(channelId, authorId)).thenReturn(channel(channelId, serverId));
+        when(serverMemberRepository.findByServerId(serverId)).thenReturn(List.of(member(serverId, authorId)));
+        when(userRepository.findById(authorId)).thenReturn(Optional.of(author));
+        stubMessageSaveAssignsId();
+
+        Message result = messageService.sendMessage(channelId, "check this out", "/api/v1/uploads/abc.png", authorId);
+
+        assertThat(result.getContent()).isEqualTo("check this out");
+        assertThat(result.getImageUrl()).isEqualTo("/api/v1/uploads/abc.png");
     }
 
     // --- getHistory ---
@@ -377,6 +435,7 @@ class MessageServiceTest {
         assertThat(payload.author().id()).isEqualTo(MessageService.SYSTEM_USER_ID);
         assertThat(payload.author().displayName()).isEqualTo("System");
         assertThat(payload.content()).isEqualTo("Alice entrou no servidor");
+        assertThat(payload.imageUrl()).isNull();
     }
 
     private Message newMessage(UUID channelId, UUID authorId, String content, Instant createdAt) {

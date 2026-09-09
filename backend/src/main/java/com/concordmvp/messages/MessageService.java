@@ -66,7 +66,7 @@ public class MessageService {
     public static final UUID SYSTEM_USER_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
 
     @Transactional
-    public Message sendMessage(UUID channelId, String content, UUID authorId) {
+    public Message sendMessage(UUID channelId, String content, String imageUrl, UUID authorId) {
         Channel channel = channelService.getChannel(channelId, authorId);
 
         if (channel.getType() == ChannelType.ONBOARDING) {
@@ -74,14 +74,16 @@ public class MessageService {
         }
 
         String trimmed = content == null ? "" : content.trim();
-        if (trimmed.isEmpty()) {
-            throw new BadRequestException("Message content must not be empty");
+        boolean hasImage = imageUrl != null && !imageUrl.isBlank();
+
+        if (trimmed.isEmpty() && !hasImage) {
+            throw new BadRequestException("Message must contain text or an image");
         }
         if (trimmed.length() > MAX_CONTENT_LENGTH) {
             throw new BadRequestException("Message content is too long");
         }
 
-        return persistAndBroadcast(channelId, channel.getServerId(), authorId, trimmed);
+        return persistAndBroadcast(channelId, channel.getServerId(), authorId, trimmed, hasImage ? imageUrl : null);
     }
 
     /**
@@ -92,14 +94,15 @@ public class MessageService {
      */
     @Transactional
     public Message postSystemMessage(UUID channelId, UUID serverId, String content) {
-        return persistAndBroadcast(channelId, serverId, SYSTEM_USER_ID, content);
+        return persistAndBroadcast(channelId, serverId, SYSTEM_USER_ID, content, null);
     }
 
-    private Message persistAndBroadcast(UUID channelId, UUID serverId, UUID authorId, String content) {
+    private Message persistAndBroadcast(UUID channelId, UUID serverId, UUID authorId, String content, String imageUrl) {
         Message message = new Message();
         message.setChannelId(channelId);
         message.setAuthorId(authorId);
         message.setContent(content);
+        message.setImageUrl(imageUrl);
         Message saved = messageRepository.save(message);
 
         User author = userRepository.findById(authorId)
@@ -168,6 +171,6 @@ public class MessageService {
         UserSummaryResponse authorSummary = new UserSummaryResponse(
                 author.getId(), author.getUsername(), author.getDisplayName(), author.getAvatarUrl());
         return new MessageResponse(message.getId(), message.getChannelId(), authorSummary,
-                message.getContent(), message.getCreatedAt());
+                message.getContent(), message.getImageUrl(), message.getCreatedAt());
     }
 }
