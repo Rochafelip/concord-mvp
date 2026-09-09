@@ -2,6 +2,7 @@ import { useLayoutEffect, useMemo, useRef } from 'react';
 import { Avatar } from '../../components/Avatar';
 import type { Message } from '../../types/message';
 import { useMessageHistory } from './hooks';
+import { MessageContent } from './MessageContent';
 
 interface MessageListProps {
   channelId: string;
@@ -136,9 +137,7 @@ export function MessageList({ channelId }: MessageListProps) {
                     {createdAt.toLocaleTimeString()}
                   </span>
                 </div>
-                <p data-testid="message-content" className="whitespace-pre-wrap text-body text-ink">
-                  {message.content}
-                </p>
+                <MessageContent content={message.content} />
               </div>
             </div>
           </div>
