@@ -9,3 +9,14 @@ import '@testing-library/jest-dom'
 if (typeof AudioWorkletNode === 'undefined') {
   globalThis.AudioWorkletNode = class AudioWorkletNode {} as unknown as typeof AudioWorkletNode
 }
+
+// jsdom has no ResizeObserver. react-resizable-panels (used by ServerLayout's resizable
+// channel sidebar) observes its Group element's size on mount, so it needs the constructor to
+// exist even though no test asserts on resize callbacks.
+if (typeof ResizeObserver === 'undefined') {
+  globalThis.ResizeObserver = class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver
+}
