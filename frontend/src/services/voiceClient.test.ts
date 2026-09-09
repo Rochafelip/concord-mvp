@@ -1211,5 +1211,52 @@ describe('voiceClient', () => {
       expect(track.stopProcessor).toHaveBeenCalled();
       expect(track.setProcessor).not.toHaveBeenCalled();
     });
+
+    it('does not apply noise suppression on behalf of a connect() attempt superseded while its own mic-enable is still in flight', async () => {
+      // Pins the race the code review flagged: applyNoiseSuppressionPreference() reads
+      // `this.room` (the CURRENT room field), not a value captured at the start of this specific
+      // connect() call. So if a stale connect()'s own setMicrophoneEnabled(true) is still
+      // pending when a newer connect() fully supersedes it — reassigning `this.room` to the new
+      // room in the meantime — the stale call must not touch anything once its mic-enable
+      // finally resolves. `setMicrophoneEnabled` here is given a manually-resolved promise
+      // (instead of the mock's usual auto-resolving one) specifically so this ordering is
+      // controlled directly, rather than relying on incidental microtask-queue timing.
+      const track1 = mockAudioTrack();
+      const track2 = mockAudioTrack();
+      let resolveMic1: () => void = () => {};
+
+      const first = voiceClient.connect('channel-1', 'token-a', 'wss://example.test/livekit');
+      const room1 = roomInstances[roomInstances.length - 1];
+      room1.localParticipant.getTrackPublication = vi.fn((source?: string) =>
+        source === 'microphone' ? { audioTrack: track1 } : undefined,
+      );
+      room1.localParticipant.setMicrophoneEnabled = vi.fn(
+        () => new Promise<undefined>((resolve) => { resolveMic1 = () => resolve(undefined); }),
+      );
+      connectResolvers[connectResolvers.length - 1](); // resolves room1.connect()
+      await Promise.resolve(); // lets first's connect() reach `this.room = room1` and call setMicrophoneEnabled(true), which now hangs on resolveMic1
+
+      // A second connect() fully supersedes and completes — e.g. the user switched channels again
+      // while the first was still stuck waiting on the mic permission prompt — reassigning
+      // `this.room` to room2 well before the first's mic-enable ever resolves.
+      const second = voiceClient.connect('channel-2', 'token-b', 'wss://example.test/livekit');
+      const room2 = roomInstances[roomInstances.length - 1];
+      room2.localParticipant.getTrackPublication = vi.fn((source?: string) =>
+        source === 'microphone' ? { audioTrack: track2 } : undefined,
+      );
+      connectResolvers[connectResolvers.length - 1](); // resolves room2.connect()
+      await second;
+
+      // Only now does the stale first connect()'s long-pending mic-enable resolve.
+      resolveMic1();
+      await first;
+
+      expect(track1.setProcessor).not.toHaveBeenCalled();
+      expect(track1.stopProcessor).not.toHaveBeenCalled();
+      // Exactly once (from the legitimate second connect()) — without the generation guard, the
+      // stale first connect() would read `this.room` (by then reassigned to room2) and apply the
+      // processor to room2's track a second, redundant time.
+      expect(track2.setProcessor).toHaveBeenCalledTimes(1);
+    });
   });
 });

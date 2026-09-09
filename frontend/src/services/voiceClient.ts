@@ -117,7 +117,9 @@ class VoiceClient {
       // channel, just without a mic published (PRODUCT.md §16: surface the error, don't
       // silently fail, don't kill the session).
       await room.localParticipant.setMicrophoneEnabled(true);
-      this.applyNoiseSuppressionPreference();
+      if (generation === this.connectGeneration) {
+        this.applyNoiseSuppressionPreference();
+      }
     } catch {
       if (generation === this.connectGeneration) {
         useVoiceStore.getState().setError('Microphone permission denied');
