@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { AudioPresets } from 'livekit-client';
 import { useVoiceStore } from '../stores/voiceStore';
 
 const {
@@ -119,6 +120,9 @@ vi.mock('livekit-client', () => ({
       ScreenShare: 'screen_share',
       ScreenShareAudio: 'screen_share_audio',
     },
+  },
+  AudioPresets: {
+    musicHighQualityStereo: { maxBitrate: 128_000 },
   },
 }));
 
@@ -351,16 +355,33 @@ describe('voiceClient', () => {
     });
   });
 
-  it('includes audio: true in the capture options when audio is requested', async () => {
+  it('captures unprocessed stereo audio and publishes it at a high-quality preset when audio is requested', async () => {
     await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
     const room = roomInstances[0];
 
     voiceClient.toggleScreenShare({ quality: 'hd', withAudio: true });
 
-    expect(room.localParticipant.setScreenShareEnabled).toHaveBeenLastCalledWith(true, {
-      resolution: { width: 1280, height: 720 },
-      audio: true,
-    });
+    // autoGainControl/echoCancellation/noiseSuppression are mic-oriented processing that muffles
+    // continuous non-speech audio (music, game/video sound) — must be explicitly disabled here
+    // rather than left to the browser's own default for display-capture audio.
+    expect(room.localParticipant.setScreenShareEnabled).toHaveBeenLastCalledWith(
+      true,
+      {
+        resolution: { width: 1280, height: 720 },
+        audio: {
+          autoGainControl: false,
+          echoCancellation: false,
+          noiseSuppression: false,
+          channelCount: 2,
+        },
+      },
+      {
+        audioPreset: AudioPresets.musicHighQualityStereo,
+        dtx: false,
+        red: true,
+        forceStereo: true,
+      },
+    );
   });
 
   it('stops screen sharing with a single boolean argument even when options are passed', async () => {

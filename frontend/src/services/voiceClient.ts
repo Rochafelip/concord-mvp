@@ -1,4 +1,5 @@
 import {
+  AudioPresets,
   Room,
   RoomEvent,
   Track,
@@ -247,16 +248,37 @@ class VoiceClient {
   // screen/window picker only shows its own "Share audio" checkbox when an audio capture option
   // is present at all, so passing `audio: false` would show browser UI that doesn't match what
   // was chosen in our modal.
+  //
+  // When audio is requested, both the capture constraints and the publish options are overridden
+  // rather than left at LiveKit's defaults. Room-wide publishDefaults (48kbps mono + dtx) are
+  // tuned for mic/speech; dtx in particular is a voice-activity-detection silence gate that isn't
+  // meant for continuous non-speech audio (music, game/video sound) and, combined with the low
+  // mono bitrate, was the cause of reported muffled/degraded stream audio. autoGainControl/
+  // echoCancellation/noiseSuppression are similarly mic-oriented processing that must be disabled
+  // on capture, since some browsers apply them to display-capture audio by default otherwise.
   toggleScreenShare(options?: ScreenShareOptions): void {
     const localParticipant = this.room?.localParticipant;
     if (!localParticipant) return;
     const enabling = !localParticipant.isScreenShareEnabled;
     const promise =
       enabling && options
-        ? localParticipant.setScreenShareEnabled(true, {
-            resolution: SCREEN_SHARE_QUALITY_PRESETS[options.quality],
-            ...(options.withAudio ? { audio: true } : {}),
-          })
+        ? options.withAudio
+          ? localParticipant.setScreenShareEnabled(
+              true,
+              {
+                resolution: SCREEN_SHARE_QUALITY_PRESETS[options.quality],
+                audio: {
+                  autoGainControl: false,
+                  echoCancellation: false,
+                  noiseSuppression: false,
+                  channelCount: 2,
+                },
+              },
+              { audioPreset: AudioPresets.musicHighQualityStereo, dtx: false, red: true, forceStereo: true },
+            )
+          : localParticipant.setScreenShareEnabled(true, {
+              resolution: SCREEN_SHARE_QUALITY_PRESETS[options.quality],
+            })
         : localParticipant.setScreenShareEnabled(enabling);
     promise
       .then(() => this.syncParticipants())
