@@ -15,14 +15,24 @@ let wasmBinaryPromise: Promise<ArrayBuffer> | null = null;
 const workletModulePromises = new WeakMap<AudioContext, Promise<void>>();
 
 function getWasmBinary(): Promise<ArrayBuffer> {
-  wasmBinaryPromise ??= loadRnnoise({ url: rnnoiseWasmPath, simdUrl: rnnoiseWasmSimdPath });
+  if (!wasmBinaryPromise) {
+    wasmBinaryPromise = loadRnnoise({ url: rnnoiseWasmPath, simdUrl: rnnoiseWasmSimdPath }).catch((error: unknown) => {
+      // Clear the cache so a transient failure (e.g. a network blip) doesn't permanently poison
+      // every future attempt for the rest of the page session — the next call retries from scratch.
+      wasmBinaryPromise = null;
+      throw error;
+    });
+  }
   return wasmBinaryPromise;
 }
 
 function addWorkletModule(audioContext: AudioContext): Promise<void> {
   let promise = workletModulePromises.get(audioContext);
   if (!promise) {
-    promise = audioContext.audioWorklet.addModule(rnnoiseWorkletPath);
+    promise = audioContext.audioWorklet.addModule(rnnoiseWorkletPath).catch((error: unknown) => {
+      workletModulePromises.delete(audioContext);
+      throw error;
+    });
     workletModulePromises.set(audioContext, promise);
   }
   return promise;

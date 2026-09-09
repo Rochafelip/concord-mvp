@@ -217,14 +217,17 @@ class VoiceClient {
     if (!track) return;
 
     if (!enabled) {
-      await track.stopProcessor().catch(() => {});
+      await track.stopProcessor().catch((error: unknown) => {
+        console.warn('Failed to remove noise suppression processor', error);
+      });
       return;
     }
     if (!isNoiseSuppressionSupported()) return;
     try {
       await track.setProcessor(createNoiseSuppressionProcessor());
-    } catch {
+    } catch (error) {
       // WASM/AudioWorklet failure — the call keeps working on the unprocessed track.
+      console.warn('Failed to enable noise suppression; continuing without it', error);
     }
   }
 

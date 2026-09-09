@@ -1147,6 +1147,7 @@ describe('voiceClient', () => {
     });
 
     it('does not throw when the processor fails to initialize, and the call keeps working', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const track = mockAudioTrack();
       track.setProcessor.mockRejectedValue(new Error('AudioWorklet failed to load'));
       const promise = voiceClient.connect('channel-1', 'token', 'wss://example.test/livekit');
@@ -1158,6 +1159,11 @@ describe('voiceClient', () => {
 
       await expect(promise).resolves.toBeUndefined();
       expect(useVoiceStore.getState().status).toBe('connected');
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Failed to enable noise suppression; continuing without it',
+        expect.any(Error),
+      );
+      warnSpy.mockRestore();
     });
 
     it('does nothing when there is no published microphone track', async () => {
