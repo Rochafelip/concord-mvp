@@ -474,9 +474,19 @@ id
 channel_id
 author_id
 content
+image_url
+file_name
+file_size
 created_at
 updated_at
 ```
+
+`image_url`, `file_name`, and `file_size` are all nullable — set together
+when the message has a file attachment (`image_url` historically named for
+images but may point to any file type; `file_name`/`file_size` describe it),
+and all `NULL` for a plain text message. `image_url` is restricted at the
+application layer (`MessageService`) to match `/api/v1/uploads/...`, the
+backend's own upload-serving path — see `docs/OPEN_QUESTIONS.md` §21.
 
 ---
 
@@ -508,11 +518,13 @@ Messages must contain:
 ```text
 channel_id
 author_id
-content
 created_at
 ```
 
-The database should not allow empty message content.
+`content` is optional (may be an empty string) when the message has a file
+attachment (`image_url` set) — a message must have non-empty `content`, a
+non-null `image_url`, or both. This is enforced in `MessageService`, not by
+a database constraint.
 
 The exact content-length constraint should be aligned with the API contract.
 

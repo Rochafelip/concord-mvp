@@ -713,7 +713,8 @@ Should CI be implemented before the first production deployment?
 
 ## Q21 — Attachments
 
-**Status:** ✅ Resolved — see `AGENTS.md` "Explicitly Out of Scope".
+**Status:** ✅ Resolved — see `AGENTS.md`'s "Text Chat" scope (reverses the
+prior "No" decision below, per the project owner's explicit request).
 
 Discord-like systems commonly support:
 
@@ -726,23 +727,35 @@ Discord-like systems commonly support:
 
 Are file attachments part of this MVP?
 
-* [ ] Yes
-* [x] No
+* [x] Yes
+* [ ] No
 * [ ] Only images
 
 If yes, what is the maximum file size?
 
->
+> 8 MB for images (JPEG/PNG/GIF/WebP, detected by real file content rather
+> than filename/declared Content-Type), 50 MB for any other file type.
 
 Where should files be stored?
 
-* [ ] Local VM storage
+* [x] Local VM storage
 * [ ] S3-compatible storage
 * [ ] Other: __________________
 
 **Decision:**
 
-> No. "File uploads" is explicitly listed as out of scope in AGENTS.md.
+> Yes — both images and generic file attachments, explicitly requested by the
+> project owner, reversing the "No" decision originally recorded here.
+> Stored on local disk (a Docker-managed volume mounted into the backend
+> container — see `infrastructure/docker-compose.yml`'s `backend_uploads`
+> volume), not S3-compatible storage, since the deployment is a single
+> self-hosted instance with no existing object-storage infrastructure.
+> Served back via an unguessable UUID-based URL with no membership check
+> (same trust model as a shareable link). Images render inline with a
+> full-size lightbox; any other file type renders as a downloadable file
+> chip and is served with a forced `Content-Disposition: attachment` so it
+> can never execute in the browser regardless of its actual content (a
+> deliberate stored-XSS mitigation, since these URLs are unauthenticated).
 
 ---
 

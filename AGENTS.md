@@ -69,6 +69,11 @@ Each application must remain independently buildable.
 * Receive messages in real time
 * Persist messages
 * Load message history
+* File attachments on messages: images (JPEG/PNG/GIF/WebP, detected by real
+  file content, 8 MB limit, rendered inline with a full-size lightbox) or any
+  other file type (50 MB limit, no content restriction, rendered as a
+  downloadable file chip — served with a forced download so it can never
+  execute in the browser)
 
 ### Voice
 
@@ -100,7 +105,6 @@ Do NOT implement the following unless explicitly requested:
 * Threads
 * Reactions
 * GIF integration
-* File uploads
 * Advanced roles
 * Advanced permissions
 * Server discovery
