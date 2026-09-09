@@ -4,14 +4,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useWsConnectionStore } from '../../stores/wsConnectionStore';
 import { MessageInput } from './MessageInput';
 import * as hooksModule from './hooks';
+import * as apiModule from './api';
 
 vi.mock('./hooks', () => ({
   sendMessage: vi.fn(),
 }));
 
+vi.mock('./api', () => ({ uploadAttachment: vi.fn() }));
+
 describe('MessageInput', () => {
   beforeEach(() => {
     vi.mocked(hooksModule.sendMessage).mockClear();
+    vi.mocked(apiModule.uploadAttachment).mockReset();
     // Most tests below exercise the empty/whitespace/valid-content guard, not the connection
     // guard, so default to 'connected' here and override per-test where the connection state
     // itself is under test.
@@ -94,5 +98,115 @@ describe('MessageInput', () => {
     });
 
     expect(screen.getByRole('button', { name: /send/i })).toBeEnabled();
+  });
+
+  it('uploads a picked image and sends the message with the returned attachment info', async () => {
+    vi.mocked(apiModule.uploadAttachment).mockResolvedValue({
+      url: '/api/v1/uploads/abc.png',
+      fileName: 'photo.png',
+      fileSize: 2048,
+    });
+    const user = userEvent.setup();
+    render(<MessageInput channelId="c1" />);
+
+    const file = new File(['fake-image-bytes'], 'photo.png', { type: 'image/png' });
+    await user.upload(screen.getByLabelText(/attach file/i, { selector: 'input' }), file);
+
+    expect(apiModule.uploadAttachment).toHaveBeenCalledWith('c1', file);
+    await screen.findByRole('button', { name: /send/i });
+    expect(hooksModule.sendMessage).toHaveBeenCalledWith('c1', '', '/api/v1/uploads/abc.png', 'photo.png', 2048);
+  });
+
+  it('uses the currently typed text as the caption when sending an attachment', async () => {
+    vi.mocked(apiModule.uploadAttachment).mockResolvedValue({
+      url: '/api/v1/uploads/abc.png',
+      fileName: 'photo.png',
+      fileSize: 2048,
+    });
+    const user = userEvent.setup();
+    render(<MessageInput channelId="c1" />);
+
+    await user.type(screen.getByLabelText(/message/i), 'check this out');
+    const file = new File(['fake-image-bytes'], 'photo.png', { type: 'image/png' });
+    await user.upload(screen.getByLabelText(/attach file/i, { selector: 'input' }), file);
+
+    expect(hooksModule.sendMessage).toHaveBeenCalledWith('c1', 'check this out', '/api/v1/uploads/abc.png', 'photo.png', 2048);
+  });
+
+  it('rejects an oversized image client-side without uploading', async () => {
+    const user = userEvent.setup();
+    render(<MessageInput channelId="c1" />);
+
+    const oversizedImage = new File([new Uint8Array(8 * 1024 * 1024 + 1)], 'huge.png', { type: 'image/png' });
+    await user.upload(screen.getByLabelText(/attach file/i, { selector: 'input' }), oversizedImage);
+
+    expect(apiModule.uploadAttachment).not.toHaveBeenCalled();
+    expect(hooksModule.sendMessage).not.toHaveBeenCalled();
+    expect(screen.getByText(/8 mb limit/i)).toBeInTheDocument();
+  });
+
+  it('uploads a non-image file under 50MB successfully', async () => {
+    vi.mocked(apiModule.uploadAttachment).mockResolvedValue({
+      url: '/api/v1/uploads/abc.pdf',
+      fileName: 'report.pdf',
+      fileSize: 20 * 1024 * 1024,
+    });
+    const user = userEvent.setup();
+    render(<MessageInput channelId="c1" />);
+
+    // 20MB — over the 8MB image limit, under the 50MB file limit, proving the higher limit
+    // applies since this file's MIME type isn't one of the recognized image types.
+    const file = new File([new Uint8Array(20 * 1024 * 1024)], 'report.pdf', { type: 'application/pdf' });
+    await user.upload(screen.getByLabelText(/attach file/i, { selector: 'input' }), file);
+
+    expect(apiModule.uploadAttachment).toHaveBeenCalledWith('c1', file);
+    await screen.findByRole('button', { name: /send/i });
+    expect(hooksModule.sendMessage).toHaveBeenCalledWith(
+      'c1', '', '/api/v1/uploads/abc.pdf', 'report.pdf', 20 * 1024 * 1024,
+    );
+  });
+
+  it('rejects a non-image file over 50MB client-side without uploading', async () => {
+    const user = userEvent.setup();
+    render(<MessageInput channelId="c1" />);
+
+    const oversizedFile = new File([new Uint8Array(50 * 1024 * 1024 + 1)], 'huge.zip', { type: 'application/zip' });
+    await user.upload(screen.getByLabelText(/attach file/i, { selector: 'input' }), oversizedFile);
+
+    expect(apiModule.uploadAttachment).not.toHaveBeenCalled();
+    expect(hooksModule.sendMessage).not.toHaveBeenCalled();
+    expect(screen.getByText(/50 mb limit/i)).toBeInTheDocument();
+  });
+
+  it('shows an error and does not send when the upload fails', async () => {
+    vi.mocked(apiModule.uploadAttachment).mockRejectedValue(new Error('Network error'));
+    const user = userEvent.setup();
+    render(<MessageInput channelId="c1" />);
+
+    const file = new File(['fake-bytes'], 'photo.png', { type: 'image/png' });
+    await user.upload(screen.getByLabelText(/attach file/i, { selector: 'input' }), file);
+
+    await screen.findByText(/failed to upload file/i);
+    expect(hooksModule.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it('does not block sending a plain text message while an upload is in flight', async () => {
+    let resolveUpload: (value: { url: string; fileName: string; fileSize: number }) => void = () => {};
+    vi.mocked(apiModule.uploadAttachment).mockReturnValue(
+      new Promise((resolve) => {
+        resolveUpload = resolve;
+      }),
+    );
+    const user = userEvent.setup();
+    render(<MessageInput channelId="c1" />);
+
+    const file = new File(['fake-bytes'], 'photo.png', { type: 'image/png' });
+    await user.upload(screen.getByLabelText(/attach file/i, { selector: 'input' }), file);
+
+    await user.type(screen.getByLabelText(/message/i), 'hello');
+    await user.click(screen.getByRole('button', { name: /send/i }));
+    expect(hooksModule.sendMessage).toHaveBeenCalledWith('c1', 'hello');
+
+    resolveUpload({ url: '/api/v1/uploads/abc.png', fileName: 'photo.png', fileSize: 100 });
   });
 });

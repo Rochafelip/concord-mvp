@@ -1,8 +1,14 @@
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import { Paperclip } from 'lucide-react';
 import { Button } from '../../components/Button';
 import { TextInput } from '../../components/TextInput';
 import { useWsConnectionStore } from '../../stores/wsConnectionStore';
+import { uploadAttachment } from './api';
 import { sendMessage } from './hooks';
+
+const IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+const MAX_IMAGE_SIZE_BYTES = 8 * 1024 * 1024;
+const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
 
 interface MessageInputProps {
   channelId: string;
@@ -10,6 +16,9 @@ interface MessageInputProps {
 
 export function MessageInput({ channelId }: MessageInputProps) {
   const [content, setContent] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const status = useWsConnectionStore((state) => state.status);
   const isConnected = status === 'connected';
 
@@ -33,6 +42,37 @@ export function MessageInput({ channelId }: MessageInputProps) {
     setContent('');
   }
 
+  async function handleFileSelected(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    // Reset the input's value immediately (both success and failure paths) so picking the exact
+    // same file twice in a row still fires this handler again.
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (!file) return;
+
+    setUploadError(null);
+
+    // file.type is just a fast client-side UX hint (browser-reported, spoofable) — the backend
+    // independently validates by actual file content and is the authoritative gate.
+    const isImage = IMAGE_MIME_TYPES.includes(file.type);
+    const maxSize = isImage ? MAX_IMAGE_SIZE_BYTES : MAX_FILE_SIZE_BYTES;
+    if (file.size > maxSize) {
+      setUploadError(isImage ? 'Image exceeds the 8 MB limit' : 'File exceeds the 50 MB limit');
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      const result = await uploadAttachment(channelId, file);
+      // Whatever the user had typed becomes this message's caption.
+      sendMessage(channelId, content.trim(), result.url, result.fileName, result.fileSize);
+      setContent('');
+    } catch {
+      setUploadError('Failed to upload file');
+    } finally {
+      setIsUploading(false);
+    }
+  }
+
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-1 border-t p-3">
       <div className="flex items-end gap-2">
@@ -48,6 +88,17 @@ export function MessageInput({ channelId }: MessageInputProps) {
             onChange={(event) => setContent(event.target.value)}
           />
         </div>
+        <label className="flex h-10 w-10 items-center justify-center rounded text-muted hover:text-ink">
+          <Paperclip size={18} aria-hidden="true" />
+          <input
+            ref={fileInputRef}
+            type="file"
+            aria-label="Attach file"
+            disabled={isUploading}
+            onChange={handleFileSelected}
+            className="sr-only"
+          />
+        </label>
         <Button type="submit" disabled={!isConnected || content.trim().length === 0}>
           Send
         </Button>
@@ -57,6 +108,7 @@ export function MessageInput({ channelId }: MessageInputProps) {
           Not connected — reconnecting… messages can&apos;t be sent right now.
         </p>
       )}
+      {uploadError && <p className="text-caption text-danger">{uploadError}</p>}
     </form>
   );
 }
