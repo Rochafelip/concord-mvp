@@ -14,6 +14,7 @@
     "test": "vitest"
   },
   "dependencies": {
+    "@sapphi-red/web-noise-suppressor": "^0.4.0",
     "@tanstack/react-query": "^5.102.8",
     "livekit-client": "^2.22.2",
     "lucide-react": "^1.41.0",
