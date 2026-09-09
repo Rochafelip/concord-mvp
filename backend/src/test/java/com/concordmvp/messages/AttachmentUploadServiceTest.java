@@ -24,7 +24,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-class ImageUploadServiceTest {
+class AttachmentUploadServiceTest {
 
     @Mock
     private ChannelService channelService;
@@ -32,11 +32,11 @@ class ImageUploadServiceTest {
     @TempDir
     private Path uploadsDir;
 
-    private ImageUploadService imageUploadService;
+    private AttachmentUploadService attachmentUploadService;
 
     @BeforeEach
     void setUp() throws IOException {
-        imageUploadService = new ImageUploadService(channelService, uploadsDir.toString());
+        attachmentUploadService = new AttachmentUploadService(channelService, uploadsDir.toString());
     }
 
     private Channel channel(UUID id, UUID serverId) {
@@ -60,19 +60,19 @@ class ImageUploadServiceTest {
         return new byte[] { (byte) 0xFF, (byte) 0xD8, (byte) 0xFF, 1, 2, 3 };
     }
 
-    private byte[] gifBytes() {
-        return "GIF89a-rest-of-file".getBytes();
-    }
-
-    private byte[] webpBytes() {
-        byte[] bytes = new byte[12];
-        System.arraycopy("RIFF".getBytes(), 0, bytes, 0, 4);
-        bytes[4] = 0;
-        bytes[5] = 0;
-        bytes[6] = 0;
-        bytes[7] = 0;
-        System.arraycopy("WEBP".getBytes(), 0, bytes, 8, 4);
-        return bytes;
+    /**
+     * Plain-ASCII, non-image content of an arbitrary size, built from a repeating text pattern
+     * whose first 12 bytes never match any of the JPEG/PNG/GIF/WebP magic-byte signatures the
+     * service checks for.
+     */
+    private byte[] nonImageBytes(int size) {
+        byte[] pattern = "This is definitely not an image, just plain text content for a fake file. "
+                .getBytes();
+        byte[] result = new byte[size];
+        for (int i = 0; i < size; i++) {
+            result[i] = pattern[i % pattern.length];
+        }
+        return result;
     }
 
     @Test
@@ -82,63 +82,27 @@ class ImageUploadServiceTest {
         when(channelService.getChannel(channelId, requesterId)).thenReturn(channel(channelId, UUID.randomUUID()));
         MockMultipartFile file = new MockMultipartFile("file", "photo.png", "image/png", pngBytes());
 
-        String url = imageUploadService.upload(channelId, requesterId, file);
+        UploadedAttachment result = attachmentUploadService.upload(channelId, requesterId, file);
 
-        assertThat(url).startsWith("/api/v1/uploads/").endsWith(".png");
-        String filename = url.substring("/api/v1/uploads/".length());
+        assertThat(result.url()).startsWith("/api/v1/uploads/").endsWith(".png");
+        String filename = result.url().substring("/api/v1/uploads/".length());
         assertThat(Files.exists(uploadsDir.resolve(filename))).isTrue();
     }
 
     @Test
-    void upload_validJpeg_returnsJpgExtension() throws IOException {
+    void upload_validJpeg_returnsJpgExtension() {
         UUID channelId = UUID.randomUUID();
         UUID requesterId = UUID.randomUUID();
         when(channelService.getChannel(channelId, requesterId)).thenReturn(channel(channelId, UUID.randomUUID()));
         MockMultipartFile file = new MockMultipartFile("file", "photo.jpg", "image/jpeg", jpegBytes());
 
-        String url = imageUploadService.upload(channelId, requesterId, file);
+        UploadedAttachment result = attachmentUploadService.upload(channelId, requesterId, file);
 
-        assertThat(url).endsWith(".jpg");
+        assertThat(result.url()).endsWith(".jpg");
     }
 
     @Test
-    void upload_validGif_returnsGifExtension() throws IOException {
-        UUID channelId = UUID.randomUUID();
-        UUID requesterId = UUID.randomUUID();
-        when(channelService.getChannel(channelId, requesterId)).thenReturn(channel(channelId, UUID.randomUUID()));
-        MockMultipartFile file = new MockMultipartFile("file", "photo.gif", "image/gif", gifBytes());
-
-        String url = imageUploadService.upload(channelId, requesterId, file);
-
-        assertThat(url).endsWith(".gif");
-    }
-
-    @Test
-    void upload_validWebp_returnsWebpExtension() throws IOException {
-        UUID channelId = UUID.randomUUID();
-        UUID requesterId = UUID.randomUUID();
-        when(channelService.getChannel(channelId, requesterId)).thenReturn(channel(channelId, UUID.randomUUID()));
-        MockMultipartFile file = new MockMultipartFile("file", "photo.webp", "image/webp", webpBytes());
-
-        String url = imageUploadService.upload(channelId, requesterId, file);
-
-        assertThat(url).endsWith(".webp");
-    }
-
-    @Test
-    void upload_nonImageContent_rejected_evenWithImageFilenameAndDeclaredContentType() {
-        UUID channelId = UUID.randomUUID();
-        UUID requesterId = UUID.randomUUID();
-        when(channelService.getChannel(channelId, requesterId)).thenReturn(channel(channelId, UUID.randomUUID()));
-        // Plain text bytes, but filename and Content-Type both claim to be a PNG.
-        MockMultipartFile file = new MockMultipartFile("file", "photo.png", "image/png", "not an image".getBytes());
-
-        assertThatThrownBy(() -> imageUploadService.upload(channelId, requesterId, file))
-                .isInstanceOf(BadRequestException.class);
-    }
-
-    @Test
-    void upload_oversizedFile_rejected() {
+    void upload_oversizedImage_rejected() {
         UUID channelId = UUID.randomUUID();
         UUID requesterId = UUID.randomUUID();
         when(channelService.getChannel(channelId, requesterId)).thenReturn(channel(channelId, UUID.randomUUID()));
@@ -146,7 +110,52 @@ class ImageUploadServiceTest {
         System.arraycopy(pngBytes(), 0, oversized, 0, pngBytes().length);
         MockMultipartFile file = new MockMultipartFile("file", "photo.png", "image/png", oversized);
 
-        assertThatThrownBy(() -> imageUploadService.upload(channelId, requesterId, file))
+        assertThatThrownBy(() -> attachmentUploadService.upload(channelId, requesterId, file))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void upload_nonImageFile_underFileLimit_succeeds_andPreservesOriginalFileNameAndSize() throws IOException {
+        UUID channelId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        when(channelService.getChannel(channelId, requesterId)).thenReturn(channel(channelId, UUID.randomUUID()));
+        byte[] content = nonImageBytes(1024);
+        MockMultipartFile file = new MockMultipartFile("file", "report.pdf", "application/pdf", content);
+
+        UploadedAttachment result = attachmentUploadService.upload(channelId, requesterId, file);
+
+        assertThat(result.fileName()).isEqualTo("report.pdf");
+        assertThat(result.fileSize()).isEqualTo(content.length);
+        assertThat(result.url()).startsWith("/api/v1/uploads/").endsWith(".pdf");
+        String filename = result.url().substring("/api/v1/uploads/".length());
+        assertThat(Files.exists(uploadsDir.resolve(filename))).isTrue();
+    }
+
+    @Test
+    void upload_nonImageFile_over8MBButUnder50MB_succeeds() {
+        // Proves the higher 50MB limit applies to non-images, not the 8MB image limit: this file
+        // is well over 8MB (which would reject an image) but comfortably under 50MB.
+        UUID channelId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        when(channelService.getChannel(channelId, requesterId)).thenReturn(channel(channelId, UUID.randomUUID()));
+        byte[] content = nonImageBytes(10 * 1024 * 1024);
+        MockMultipartFile file = new MockMultipartFile("file", "report.pdf", "application/pdf", content);
+
+        UploadedAttachment result = attachmentUploadService.upload(channelId, requesterId, file);
+
+        assertThat(result.fileSize()).isEqualTo(content.length);
+        assertThat(result.fileName()).isEqualTo("report.pdf");
+    }
+
+    @Test
+    void upload_nonImageFile_over50MB_rejected() {
+        UUID channelId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        when(channelService.getChannel(channelId, requesterId)).thenReturn(channel(channelId, UUID.randomUUID()));
+        byte[] content = nonImageBytes(50 * 1024 * 1024 + 1);
+        MockMultipartFile file = new MockMultipartFile("file", "report.pdf", "application/pdf", content);
+
+        assertThatThrownBy(() -> attachmentUploadService.upload(channelId, requesterId, file))
                 .isInstanceOf(BadRequestException.class);
     }
 
@@ -157,7 +166,7 @@ class ImageUploadServiceTest {
         when(channelService.getChannel(channelId, requesterId)).thenReturn(channel(channelId, UUID.randomUUID()));
         MockMultipartFile file = new MockMultipartFile("file", "photo.png", "image/png", new byte[0]);
 
-        assertThatThrownBy(() -> imageUploadService.upload(channelId, requesterId, file))
+        assertThatThrownBy(() -> attachmentUploadService.upload(channelId, requesterId, file))
                 .isInstanceOf(BadRequestException.class);
     }
 
@@ -169,7 +178,7 @@ class ImageUploadServiceTest {
                 .thenThrow(new ForbiddenException("Not a member of this server"));
         MockMultipartFile file = new MockMultipartFile("file", "photo.png", "image/png", pngBytes());
 
-        assertThatThrownBy(() -> imageUploadService.upload(channelId, requesterId, file))
+        assertThatThrownBy(() -> attachmentUploadService.upload(channelId, requesterId, file))
                 .isInstanceOf(ForbiddenException.class);
     }
 
@@ -181,7 +190,21 @@ class ImageUploadServiceTest {
                 .thenThrow(new ResourceNotFoundException("Channel not found: " + channelId));
         MockMultipartFile file = new MockMultipartFile("file", "photo.png", "image/png", pngBytes());
 
-        assertThatThrownBy(() -> imageUploadService.upload(channelId, requesterId, file))
+        assertThatThrownBy(() -> attachmentUploadService.upload(channelId, requesterId, file))
                 .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void upload_nonImageFile_noExtensionInOriginalFilename_succeeds_withNoExtensionOnStorageFilename() {
+        UUID channelId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        when(channelService.getChannel(channelId, requesterId)).thenReturn(channel(channelId, UUID.randomUUID()));
+        MockMultipartFile file = new MockMultipartFile("file", "README", "text/plain", nonImageBytes(1024));
+
+        UploadedAttachment result = attachmentUploadService.upload(channelId, requesterId, file);
+
+        assertThat(result.fileName()).isEqualTo("README");
+        String storageFilename = result.url().substring("/api/v1/uploads/".length());
+        assertThat(storageFilename).doesNotContain(".");
     }
 }
