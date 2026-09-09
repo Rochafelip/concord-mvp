@@ -309,7 +309,7 @@ describe('useRealtimeSync', () => {
     const queryClient = newQueryClient();
     const existing: VoicePresenceEntry[] = [
       { channelId: 'c1', userId: 'u1', displayName: 'Ana', avatarUrl: null,
-        muted: false, cameraOn: false, screenSharing: false, speaking: false },
+        muted: false, cameraOn: false, screenSharing: false, speaking: false, deafened: false },
     ];
     queryClient.setQueryData(['servers', 's1', 'voice-presence'], existing);
     renderHarness(queryClient, '/app');
@@ -317,14 +317,14 @@ describe('useRealtimeSync', () => {
     emit('VOICE_PRESENCE_UPDATE', {
       serverId: 's1', channelId: 'c1',
       user: { id: 'u2', username: 'b', displayName: 'Bob', avatarUrl: null },
-      muted: true, cameraOn: false, screenSharing: false, speaking: false,
+      muted: true, cameraOn: false, screenSharing: false, speaking: false, deafened: false,
     });
 
     const cached = queryClient.getQueryData<VoicePresenceEntry[]>(['servers', 's1', 'voice-presence']);
     expect(cached).toEqual([
       existing[0],
       { channelId: 'c1', userId: 'u2', displayName: 'Bob', avatarUrl: null,
-        muted: true, cameraOn: false, screenSharing: false, speaking: false },
+        muted: true, cameraOn: false, screenSharing: false, speaking: false, deafened: false },
     ]);
   });
 
@@ -332,7 +332,7 @@ describe('useRealtimeSync', () => {
     const queryClient = newQueryClient();
     const existing: VoicePresenceEntry[] = [
       { channelId: 'c1', userId: 'u1', displayName: 'Ana', avatarUrl: null,
-        muted: false, cameraOn: false, screenSharing: false, speaking: false },
+        muted: false, cameraOn: false, screenSharing: false, speaking: false, deafened: false },
     ];
     queryClient.setQueryData(['servers', 's1', 'voice-presence'], existing);
     renderHarness(queryClient, '/app');
@@ -340,13 +340,13 @@ describe('useRealtimeSync', () => {
     emit('VOICE_PRESENCE_UPDATE', {
       serverId: 's1', channelId: 'c1',
       user: { id: 'u1', username: 'a', displayName: 'Ana', avatarUrl: null },
-      muted: true, cameraOn: false, screenSharing: false, speaking: false,
+      muted: true, cameraOn: false, screenSharing: false, speaking: false, deafened: false,
     });
 
     const cached = queryClient.getQueryData<VoicePresenceEntry[]>(['servers', 's1', 'voice-presence']);
     expect(cached).toEqual([
       { channelId: 'c1', userId: 'u1', displayName: 'Ana', avatarUrl: null,
-        muted: true, cameraOn: false, screenSharing: false, speaking: false },
+        muted: true, cameraOn: false, screenSharing: false, speaking: false, deafened: false },
     ]);
   });
 
@@ -354,11 +354,11 @@ describe('useRealtimeSync', () => {
     const queryClient = newQueryClient();
     const existing: VoicePresenceEntry[] = [
       { channelId: 'c1', userId: 'u1', displayName: 'Ana', avatarUrl: null,
-        muted: false, cameraOn: false, screenSharing: false, speaking: false },
+        muted: false, cameraOn: false, screenSharing: false, speaking: false, deafened: false },
       { channelId: 'c1', userId: 'u2', displayName: 'Bob', avatarUrl: null,
-        muted: false, cameraOn: false, screenSharing: false, speaking: false },
+        muted: false, cameraOn: false, screenSharing: false, speaking: false, deafened: false },
       { channelId: 'c1', userId: 'u3', displayName: 'Cid', avatarUrl: null,
-        muted: false, cameraOn: false, screenSharing: false, speaking: false },
+        muted: false, cameraOn: false, screenSharing: false, speaking: false, deafened: false },
     ];
     queryClient.setQueryData(['servers', 's1', 'voice-presence'], existing);
     renderHarness(queryClient, '/app');
@@ -367,7 +367,7 @@ describe('useRealtimeSync', () => {
     emit('VOICE_PRESENCE_UPDATE', {
       serverId: 's1', channelId: 'c1',
       user: { id: 'u1', username: 'a', displayName: 'Ana', avatarUrl: null },
-      muted: false, cameraOn: false, screenSharing: false, speaking: true,
+      muted: false, cameraOn: false, screenSharing: false, speaking: true, deafened: false,
     });
 
     const cached = queryClient.getQueryData<VoicePresenceEntry[]>(['servers', 's1', 'voice-presence']);
@@ -382,7 +382,7 @@ describe('useRealtimeSync', () => {
     emit('VOICE_PRESENCE_UPDATE', {
       serverId: 'never-opened', channelId: 'c1',
       user: { id: 'u1', username: 'a', displayName: 'Ana', avatarUrl: null },
-      muted: false, cameraOn: false, screenSharing: false, speaking: false,
+      muted: false, cameraOn: false, screenSharing: false, speaking: false, deafened: false,
     });
 
     expect(queryClient.getQueryData(['servers', 'never-opened', 'voice-presence'])).toBeUndefined();
@@ -392,9 +392,9 @@ describe('useRealtimeSync', () => {
     const queryClient = newQueryClient();
     const existing: VoicePresenceEntry[] = [
       { channelId: 'c1', userId: 'u1', displayName: 'Ana', avatarUrl: null,
-        muted: false, cameraOn: false, screenSharing: false, speaking: false },
+        muted: false, cameraOn: false, screenSharing: false, speaking: false, deafened: false },
       { channelId: 'c1', userId: 'u2', displayName: 'Bob', avatarUrl: null,
-        muted: false, cameraOn: false, screenSharing: false, speaking: false },
+        muted: false, cameraOn: false, screenSharing: false, speaking: false, deafened: false },
     ];
     queryClient.setQueryData(['servers', 's1', 'voice-presence'], existing);
     renderHarness(queryClient, '/app');
