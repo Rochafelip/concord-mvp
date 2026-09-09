@@ -13,6 +13,9 @@ export function ParticipantList({ serverId }: ParticipantListProps) {
   const participants = useVoiceParticipants();
   const { data: presence } = useVoicePresence(serverId);
 
+  // participant.identity is LiveKit's identifier, but the backend mints LiveKit tokens with the
+  // app's user UUID as the JWT `sub` claim (MediaService), so it's safe to compare directly
+  // against VoicePresenceEntry.userId here — no separate lookup table exists or is needed.
   const deafenedByUserId = useMemo(() => {
     const map = new Map<string, boolean>();
     (presence ?? []).forEach((entry) => map.set(entry.userId, entry.deafened));
