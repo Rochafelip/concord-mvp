@@ -68,6 +68,13 @@ describe('ParticipantTile', () => {
     expect(screen.queryByTestId('deaf-status-on')).not.toBeInTheDocument();
   });
 
+  it('shows the deafened icon (not mic-off) even when the mic is also off', () => {
+    render(<ParticipantTile participant={participant({ micEnabled: false })} deafened />);
+
+    expect(screen.getByTestId('deaf-status-on')).toBeInTheDocument();
+    expect(screen.queryByTestId('mic-status-off')).not.toBeInTheDocument();
+  });
+
   it('attaches the video track to the <video> element when present, and detaches it on unmount', () => {
     const attach = vi.fn();
     const detach = vi.fn();
