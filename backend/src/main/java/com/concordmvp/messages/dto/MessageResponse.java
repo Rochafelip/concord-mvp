@@ -15,6 +15,7 @@ public record MessageResponse(
         UUID channelId,
         UserSummaryResponse author,
         String content,
+        String imageUrl,
         Instant createdAt
 ) {
 }

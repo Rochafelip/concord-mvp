@@ -9,6 +9,7 @@ import java.util.UUID;
  */
 public record SendMessageRequest(
         UUID channelId,
-        String content
+        String content,
+        String imageUrl
 ) {
 }
