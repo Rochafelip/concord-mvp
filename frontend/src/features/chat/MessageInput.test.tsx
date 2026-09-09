@@ -100,6 +100,13 @@ describe('MessageInput', () => {
     expect(screen.getByRole('button', { name: /send/i })).toBeEnabled();
   });
 
+  it('disables the attach-file input when not connected', () => {
+    useWsConnectionStore.setState({ status: 'disconnected' });
+    render(<MessageInput channelId="c1" />);
+
+    expect(screen.getByLabelText(/attach file/i, { selector: 'input' })).toBeDisabled();
+  });
+
   it('uploads a picked image and sends the message with the returned attachment info', async () => {
     vi.mocked(apiModule.uploadAttachment).mockResolvedValue({
       url: '/api/v1/uploads/abc.png',
@@ -208,5 +215,32 @@ describe('MessageInput', () => {
     expect(hooksModule.sendMessage).toHaveBeenCalledWith('c1', 'hello');
 
     resolveUpload({ url: '/api/v1/uploads/abc.png', fileName: 'photo.png', fileSize: 100 });
+  });
+
+  it('does not silently drop the message if the connection drops mid-upload', async () => {
+    let resolveUpload: (value: { url: string; fileName: string; fileSize: number }) => void = () => {};
+    vi.mocked(apiModule.uploadAttachment).mockReturnValue(
+      new Promise((resolve) => {
+        resolveUpload = resolve;
+      }),
+    );
+    const user = userEvent.setup();
+    render(<MessageInput channelId="c1" />);
+
+    const file = new File(['fake-bytes'], 'photo.png', { type: 'image/png' });
+    await user.upload(screen.getByLabelText(/attach file/i, { selector: 'input' }), file);
+
+    // The upload succeeded, but the socket dropped while it was in flight — sendMessage would
+    // silently no-op (see websocketClient.ts), so the user must be told explicitly rather than
+    // seeing nothing happen.
+    act(() => {
+      useWsConnectionStore.setState({ status: 'disconnected' });
+    });
+    await act(async () => {
+      resolveUpload({ url: '/api/v1/uploads/abc.png', fileName: 'photo.png', fileSize: 100 });
+    });
+
+    expect(hooksModule.sendMessage).not.toHaveBeenCalled();
+    expect(await screen.findByText(/could not be sent/i)).toBeInTheDocument();
   });
 });

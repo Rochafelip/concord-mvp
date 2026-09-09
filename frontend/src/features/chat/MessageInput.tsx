@@ -51,6 +51,14 @@ export function MessageInput({ channelId }: MessageInputProps) {
 
     setUploadError(null);
 
+    // Same silent-failure concern as handleSubmit: don't even start the upload if the socket is
+    // already known to be closed — the input's own disabled state below covers most cases, but
+    // guard here too against a race between that disabled state and a change event.
+    if (!isConnected) {
+      setUploadError('Not connected — reconnecting… files can’t be sent right now');
+      return;
+    }
+
     // file.type is just a fast client-side UX hint (browser-reported, spoofable) — the backend
     // independently validates by actual file content and is the authoritative gate.
     const isImage = IMAGE_MIME_TYPES.includes(file.type);
@@ -63,6 +71,18 @@ export function MessageInput({ channelId }: MessageInputProps) {
     setIsUploading(true);
     try {
       const result = await uploadAttachment(channelId, file);
+      // websocketClient.send() fails silently when the socket isn't open (see handleSubmit's
+      // comment above) — the connection can also drop DURING the upload itself, so this is
+      // checked again here rather than only once before starting, otherwise the file would
+      // upload successfully but the message announcing it would silently vanish. Read the store
+      // directly instead of the `isConnected` closed over at the top of this function — that
+      // variable is fixed to whatever render was active when this async function started, so it
+      // would silently miss a disconnect that happened during the `await` above.
+      const stillConnected = useWsConnectionStore.getState().status === 'connected';
+      if (!stillConnected) {
+        setUploadError('Not connected — the file was uploaded but the message could not be sent');
+        return;
+      }
       // Whatever the user had typed becomes this message's caption.
       sendMessage(channelId, content.trim(), result.url, result.fileName, result.fileSize);
       setContent('');
@@ -94,7 +114,7 @@ export function MessageInput({ channelId }: MessageInputProps) {
             ref={fileInputRef}
             type="file"
             aria-label="Attach file"
-            disabled={isUploading}
+            disabled={isUploading || !isConnected}
             onChange={handleFileSelected}
             className="sr-only"
           />
