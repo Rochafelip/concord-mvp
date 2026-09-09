@@ -258,6 +258,36 @@ class MessageServiceTest {
         assertThat(result.getImageUrl()).isEqualTo("/api/v1/uploads/abc.png");
     }
 
+    @Test
+    void sendMessage_imageUrlNotFromUploadsPath_throwsBadRequest() {
+        UUID channelId = UUID.randomUUID();
+        UUID serverId = UUID.randomUUID();
+        UUID authorId = UUID.randomUUID();
+        when(channelService.getChannel(channelId, authorId)).thenReturn(channel(channelId, serverId));
+
+        assertThatThrownBy(() -> messageService.sendMessage(channelId, "", "https://evil.example/tracker.png", authorId))
+                .isInstanceOf(BadRequestException.class);
+
+        verify(messageRepository, never()).save(any());
+        verifyNoInteractions(realtimeEventPublisher);
+    }
+
+    @Test
+    void sendMessage_imageUrlWithSurroundingWhitespace_trimmedBeforePersisting() {
+        UUID channelId = UUID.randomUUID();
+        UUID serverId = UUID.randomUUID();
+        UUID authorId = UUID.randomUUID();
+        User author = user(authorId, "alice", "Alice");
+        when(channelService.getChannel(channelId, authorId)).thenReturn(channel(channelId, serverId));
+        when(serverMemberRepository.findByServerId(serverId)).thenReturn(List.of(member(serverId, authorId)));
+        when(userRepository.findById(authorId)).thenReturn(Optional.of(author));
+        stubMessageSaveAssignsId();
+
+        Message result = messageService.sendMessage(channelId, "", "  /api/v1/uploads/abc.png  ", authorId);
+
+        assertThat(result.getImageUrl()).isEqualTo("/api/v1/uploads/abc.png");
+    }
+
     // --- getHistory ---
 
     @Test

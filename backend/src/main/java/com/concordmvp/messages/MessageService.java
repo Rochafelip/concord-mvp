@@ -26,6 +26,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -44,6 +45,7 @@ public class MessageService {
     private static final int DEFAULT_HISTORY_LIMIT = 50;
     private static final int MAX_HISTORY_LIMIT = 100;
     private static final int MAX_CONTENT_LENGTH = 4000;
+    private static final Pattern IMAGE_URL_PATTERN = Pattern.compile("^/api/v1/uploads/[A-Za-z0-9._-]{1,100}$");
 
     private final MessageRepository messageRepository;
     private final ChannelService channelService;
@@ -74,7 +76,8 @@ public class MessageService {
         }
 
         String trimmed = content == null ? "" : content.trim();
-        boolean hasImage = imageUrl != null && !imageUrl.isBlank();
+        String normalizedImageUrl = normalizeImageUrl(imageUrl);
+        boolean hasImage = normalizedImageUrl != null;
 
         if (trimmed.isEmpty() && !hasImage) {
             throw new BadRequestException("Message must contain text or an image");
@@ -83,7 +86,21 @@ public class MessageService {
             throw new BadRequestException("Message content is too long");
         }
 
-        return persistAndBroadcast(channelId, channel.getServerId(), authorId, trimmed, hasImage ? imageUrl : null);
+        return persistAndBroadcast(channelId, channel.getServerId(), authorId, trimmed, normalizedImageUrl);
+    }
+
+    private String normalizeImageUrl(String imageUrl) {
+        if (imageUrl == null) {
+            return null;
+        }
+        String trimmed = imageUrl.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        if (!IMAGE_URL_PATTERN.matcher(trimmed).matches()) {
+            throw new BadRequestException("Invalid image URL");
+        }
+        return trimmed;
     }
 
     /**
