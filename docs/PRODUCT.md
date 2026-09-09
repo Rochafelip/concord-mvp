@@ -329,6 +329,17 @@ The MVP should support at least a small group of simultaneous participants.
 
 The exact scalability target will be defined separately from the functional MVP.
 
+## 10.5 Noise Suppression
+
+Outgoing microphone audio is processed client-side to reduce background noise
+(e.g. keyboard, traffic, background conversations) before it reaches other
+participants.
+
+* On by default; the user can turn it off in Settings.
+* If suppression can't run (unsupported browser, or the underlying library
+  fails to load), the call continues normally with unprocessed audio — this
+  must never be the reason a voice call fails.
+
 ---
 
 # 11. Video Communication
@@ -575,7 +586,6 @@ The following features are explicitly excluded from the MVP.
 * Video recording
 * Streaming to external platforms
 * Background effects
-* Noise suppression controls beyond browser/platform capabilities
 
 ## Server Management
 
