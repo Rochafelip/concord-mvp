@@ -37,7 +37,7 @@ export function ParticipantList({ serverId }: ParticipantListProps) {
   const sharing = participants.filter((participant) => participant.screenShareTrack);
 
   return (
-    <div className="grid flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-2 overflow-y-auto p-4">
+    <div className="grid flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-2 overflow-y-auto p-4 pb-20">
       {sharing.map((participant) => (
         <ScreenShareTile key={`${participant.identity}-screen`} participant={participant} />
       ))}

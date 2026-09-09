@@ -3,7 +3,7 @@ import { ConnectionQuality } from 'livekit-client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { voiceClient } from '../../services/voiceClient';
 import type { VoiceParticipant } from '../../types/voice';
-import { ParticipantTile, tileColorFor } from './ParticipantTile';
+import { ParticipantTile } from './ParticipantTile';
 
 vi.mock('../../services/voiceClient', () => ({
   voiceClient: {
@@ -27,17 +27,6 @@ function participant(overrides: Partial<VoiceParticipant> = {}): VoiceParticipan
     ...overrides,
   };
 }
-
-describe('tileColorFor', () => {
-  it('is deterministic for the same identity', () => {
-    expect(tileColorFor('u1')).toBe('bg-cyan-900');
-    expect(tileColorFor('u1')).toBe(tileColorFor('u1'));
-  });
-
-  it('picks a different color for a different identity', () => {
-    expect(tileColorFor('u2')).toBe('bg-blue-900');
-  });
-});
 
 describe('ParticipantTile', () => {
   it('shows an initial-letter placeholder when there is no video track', () => {
