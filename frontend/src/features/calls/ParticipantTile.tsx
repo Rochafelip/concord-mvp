@@ -1,15 +1,38 @@
-import { HeadphoneOff, Mic, MicOff, PhoneOff, Video, VideoOff, Volume2, VolumeX } from 'lucide-react';
+import { HeadphoneOff, Mic, MicOff } from 'lucide-react';
 import { useEffect, useRef } from 'react';
+import { Avatar } from '../../components/Avatar';
 import { voiceClient } from '../../services/voiceClient';
 import type { VoiceParticipant } from '../../types/voice';
 import { VolumeControl } from './VolumeControl';
 
 interface ParticipantTileProps {
   participant: VoiceParticipant;
-  /** Only passed for the local participant's tile — renders the in-tile control bar. */
-  onLeave?: () => void;
+  /** Looked up by identity from voice presence data; undefined/null falls back to an initial letter. */
+  avatarUrl?: string | null;
   /** From voice presence, looked up by identity in ParticipantList — defaults to false so tiles render correctly before the first presence fetch resolves. */
   deafened?: boolean;
+}
+
+// Literal colors (not theme tokens), same as the tile's other overlay chrome — must read the
+// same in both themes, and must contrast with the white text/icons drawn on top.
+const TILE_COLORS = [
+  'bg-rose-900',
+  'bg-orange-900',
+  'bg-amber-900',
+  'bg-emerald-900',
+  'bg-cyan-900',
+  'bg-blue-900',
+  'bg-violet-900',
+  'bg-fuchsia-900',
+] as const;
+
+/** Deterministic per-participant tile background: same identity always picks the same color. */
+export function tileColorFor(identity: string): string {
+  let hash = 0;
+  for (let index = 0; index < identity.length; index++) {
+    hash = (hash * 31 + identity.charCodeAt(index)) | 0;
+  }
+  return TILE_COLORS[Math.abs(hash) % TILE_COLORS.length];
 }
 
 /**
@@ -20,13 +43,16 @@ interface ParticipantTileProps {
  * over having voiceClient manage video elements itself, the way it does for hidden audio
  * elements.
  *
+ * The local participant's own controls (mic/camera/screen-share-audio/leave) live in
+ * CallControlBar, rendered once by CallView, not here — see
+ * docs/superpowers/specs/2026-09-08-call-view-control-bar-redesign-design.md.
+ *
  * The tile background and control-bar chrome (black/white overlays) stay literal colors
  * rather than tokens — they sit on top of live video and must read the same in both themes.
  */
-export function ParticipantTile({ participant, onLeave, deafened = false }: ParticipantTileProps) {
+export function ParticipantTile({ participant, avatarUrl, deafened = false }: ParticipantTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const { videoTrack } = participant;
-  const isLocal = participant.isLocal && onLeave;
 
   useEffect(() => {
     const element = videoRef.current;
@@ -39,23 +65,17 @@ export function ParticipantTile({ participant, onLeave, deafened = false }: Part
 
   return (
     <div
-      className={`group relative flex aspect-video items-center justify-center overflow-hidden rounded bg-gray-800 ${
-        participant.isLocal ? 'ring-2 ring-brand' : ''
-      }`}
+      className={`group relative flex aspect-video items-center justify-center overflow-hidden rounded ${
+        videoTrack ? 'bg-gray-800' : tileColorFor(participant.identity)
+      } ${participant.isLocal ? 'ring-2 ring-brand' : ''}`}
     >
       {videoTrack ? (
         <video ref={videoRef} muted autoPlay playsInline className="h-full w-full object-cover" />
       ) : (
-        <span className="text-2xl font-semibold text-gray-100" aria-hidden="true">
-          {participant.name.charAt(0).toUpperCase()}
-        </span>
+        <Avatar displayName={participant.name} avatarUrl={avatarUrl} size="lg" />
       )}
 
-      {/* Name/mic label: bottom-left for everyone else, top-left for the local tile so it
-          doesn't collide with the control bar docked at the bottom below. */}
-      <span
-        className={`absolute left-1 flex items-center gap-1 rounded bg-black/50 px-1.5 py-0.5 text-caption text-white ${isLocal ? 'top-1' : 'bottom-1'}`}
-      >
+      <span className="absolute bottom-1 left-1 flex items-center gap-1 rounded bg-black/50 px-1.5 py-0.5 text-caption text-white">
         {deafened ? (
           <HeadphoneOff data-testid="deaf-status-on" size={12} aria-hidden="true" />
         ) : participant.micEnabled ? (
@@ -73,53 +93,6 @@ export function ParticipantTile({ participant, onLeave, deafened = false }: Part
             label={participant.name}
             onVolumeChange={(volume) => voiceClient.setParticipantVolume(participant.identity, volume)}
           />
-        </div>
-      )}
-
-      {isLocal && (
-        <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1.5 bg-black/60 px-2 py-1.5">
-          <button
-            type="button"
-            aria-label={participant.micEnabled ? 'Mute' : 'Unmute'}
-            onClick={() => voiceClient.toggleMute()}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
-          >
-            {participant.micEnabled ? <Mic size={16} aria-hidden="true" /> : <MicOff size={16} aria-hidden="true" />}
-          </button>
-          <button
-            type="button"
-            aria-label={participant.cameraEnabled ? 'Camera off' : 'Camera on'}
-            onClick={() => voiceClient.toggleCamera()}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
-          >
-            {participant.cameraEnabled ? (
-              <Video size={16} aria-hidden="true" />
-            ) : (
-              <VideoOff size={16} aria-hidden="true" />
-            )}
-          </button>
-          {participant.screenShareEnabled && participant.screenShareHasAudio && (
-            <button
-              type="button"
-              aria-label={participant.screenShareAudioEnabled ? 'Mute shared screen audio' : 'Unmute shared screen audio'}
-              onClick={() => voiceClient.toggleScreenShareAudio()}
-              className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
-            >
-              {participant.screenShareAudioEnabled ? (
-                <Volume2 size={16} aria-hidden="true" />
-              ) : (
-                <VolumeX size={16} aria-hidden="true" />
-              )}
-            </button>
-          )}
-          <button
-            type="button"
-            aria-label="Leave call"
-            onClick={onLeave}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-danger/80 text-white hover:bg-danger"
-          >
-            <PhoneOff size={16} aria-hidden="true" />
-          </button>
         </div>
       )}
     </div>

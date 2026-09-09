@@ -1,16 +1,12 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { ConnectionQuality } from 'livekit-client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { voiceClient } from '../../services/voiceClient';
 import type { VoiceParticipant } from '../../types/voice';
-import { ParticipantTile } from './ParticipantTile';
+import { ParticipantTile, tileColorFor } from './ParticipantTile';
 
 vi.mock('../../services/voiceClient', () => ({
   voiceClient: {
-    toggleMute: vi.fn(),
-    toggleCamera: vi.fn(),
-    toggleScreenShareAudio: vi.fn(),
     setParticipantVolume: vi.fn(),
   },
 }));
@@ -31,6 +27,17 @@ function participant(overrides: Partial<VoiceParticipant> = {}): VoiceParticipan
     ...overrides,
   };
 }
+
+describe('tileColorFor', () => {
+  it('is deterministic for the same identity', () => {
+    expect(tileColorFor('u1')).toBe('bg-cyan-900');
+    expect(tileColorFor('u1')).toBe(tileColorFor('u1'));
+  });
+
+  it('picks a different color for a different identity', () => {
+    expect(tileColorFor('u2')).toBe('bg-blue-900');
+  });
+});
 
 describe('ParticipantTile', () => {
   it('shows an initial-letter placeholder when there is no video track', () => {
@@ -97,123 +104,34 @@ describe('ParticipantTile', () => {
     expect(screen.queryByText('F')).not.toBeInTheDocument();
   });
 
-  describe('local control bar', () => {
-    beforeEach(() => {
-      localStorage.clear();
-      vi.mocked(voiceClient.toggleMute).mockClear();
-      vi.mocked(voiceClient.toggleCamera).mockClear();
-    });
+  it('always shows the name pill bottom-left, for both local and remote tiles', () => {
+    const { container: remoteContainer } = render(<ParticipantTile participant={participant({ isLocal: false })} />);
+    const { container: localContainer } = render(<ParticipantTile participant={participant({ isLocal: true })} />);
 
-    it('does not render the local control bar for a remote participant, even with onLeave passed', () => {
-      render(<ParticipantTile participant={participant({ isLocal: false })} onLeave={vi.fn()} />);
-
-      expect(screen.queryByRole('button', { name: 'Leave call' })).not.toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: 'Mute' })).not.toBeInTheDocument();
-    });
-
-    it('does not render controls for the local participant when onLeave is not passed', () => {
-      render(<ParticipantTile participant={participant({ isLocal: true })} />);
-
-      expect(screen.queryByRole('button')).not.toBeInTheDocument();
-    });
-
-    it('toggles mute on click and reflects the current mic state', async () => {
-      const user = userEvent.setup();
-      render(<ParticipantTile participant={participant({ isLocal: true, micEnabled: true })} onLeave={vi.fn()} />);
-
-      await user.click(screen.getByRole('button', { name: 'Mute' }));
-
-      expect(voiceClient.toggleMute).toHaveBeenCalledTimes(1);
-    });
-
-    it('shows an Unmute label when the local mic is off', () => {
-      render(<ParticipantTile participant={participant({ isLocal: true, micEnabled: false })} onLeave={vi.fn()} />);
-
-      expect(screen.getByRole('button', { name: 'Unmute' })).toBeInTheDocument();
-    });
-
-    it('toggles the camera on click and reflects the current camera state', async () => {
-      const user = userEvent.setup();
-      render(<ParticipantTile participant={participant({ isLocal: true, cameraEnabled: false })} onLeave={vi.fn()} />);
-
-      await user.click(screen.getByRole('button', { name: 'Camera on' }));
-
-      expect(voiceClient.toggleCamera).toHaveBeenCalledTimes(1);
-      expect(screen.queryByRole('button', { name: 'Camera off' })).not.toBeInTheDocument();
-    });
-
-    it('calls onLeave on click', async () => {
-      const user = userEvent.setup();
-      const onLeave = vi.fn();
-      render(<ParticipantTile participant={participant({ isLocal: true })} onLeave={onLeave} />);
-
-      await user.click(screen.getByRole('button', { name: 'Leave call' }));
-
-      expect(onLeave).toHaveBeenCalledTimes(1);
-    });
-
+    expect(remoteContainer.querySelector('.bottom-1')).not.toBeNull();
+    expect(localContainer.querySelector('.bottom-1')).not.toBeNull();
+    expect(localContainer.querySelector('.top-1')).toBeNull();
   });
 
-  describe('screen-share audio control', () => {
-    beforeEach(() => {
-      vi.mocked(voiceClient.toggleScreenShareAudio).mockClear();
+  describe('avatar and tile color', () => {
+    it('renders an avatar image at the given avatarUrl when there is no video track', () => {
+      render(<ParticipantTile participant={participant({ name: 'Felipe' })} avatarUrl="https://example.test/felipe.png" />);
+
+      expect(screen.getByRole('img', { name: 'Felipe' })).toHaveAttribute('src', 'https://example.test/felipe.png');
     });
 
-    it('does not render when not sharing the screen', () => {
-      render(
-        <ParticipantTile
-          participant={participant({ isLocal: true, screenShareEnabled: false, screenShareHasAudio: false })}
-          onLeave={vi.fn()}
-        />,
-      );
+    it('applies a deterministic background color for the identity when there is no video track', () => {
+      const { container } = render(<ParticipantTile participant={participant({ identity: 'u1' })} />);
 
-      expect(screen.queryByRole('button', { name: /shared screen audio/ })).not.toBeInTheDocument();
+      expect(container.firstChild).toHaveClass('bg-cyan-900');
     });
 
-    it('does not render when sharing without a published audio track', () => {
-      render(
-        <ParticipantTile
-          participant={participant({ isLocal: true, screenShareEnabled: true, screenShareHasAudio: false })}
-          onLeave={vi.fn()}
-        />,
-      );
+    it('uses the plain camera background instead of a palette color when a video track is present', () => {
+      const videoTrack = { attach: vi.fn(), detach: vi.fn() } as never;
+      const { container } = render(<ParticipantTile participant={participant({ identity: 'u1', videoTrack })} />);
 
-      expect(screen.queryByRole('button', { name: /shared screen audio/ })).not.toBeInTheDocument();
-    });
-
-    it('renders a mute button and toggles it on click while sharing audio', async () => {
-      const user = userEvent.setup();
-      render(
-        <ParticipantTile
-          participant={participant({
-            isLocal: true,
-            screenShareEnabled: true,
-            screenShareHasAudio: true,
-            screenShareAudioEnabled: true,
-          })}
-          onLeave={vi.fn()}
-        />,
-      );
-
-      await user.click(screen.getByRole('button', { name: 'Mute shared screen audio' }));
-
-      expect(voiceClient.toggleScreenShareAudio).toHaveBeenCalledTimes(1);
-    });
-
-    it('shows an unmute label when the shared screen audio is off', () => {
-      render(
-        <ParticipantTile
-          participant={participant({
-            isLocal: true,
-            screenShareEnabled: true,
-            screenShareHasAudio: true,
-            screenShareAudioEnabled: false,
-          })}
-          onLeave={vi.fn()}
-        />,
-      );
-
-      expect(screen.getByRole('button', { name: 'Unmute shared screen audio' })).toBeInTheDocument();
+      expect(container.firstChild).toHaveClass('bg-gray-800');
+      expect(container.firstChild).not.toHaveClass('bg-cyan-900');
     });
   });
 
@@ -229,7 +147,7 @@ describe('ParticipantTile', () => {
     });
 
     it('does not render a volume control for the local participant', () => {
-      render(<ParticipantTile participant={participant({ isLocal: true })} onLeave={vi.fn()} />);
+      render(<ParticipantTile participant={participant({ isLocal: true })} />);
 
       expect(screen.queryByRole('slider')).not.toBeInTheDocument();
     });
