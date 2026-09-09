@@ -8,6 +8,10 @@ export default {
           DEFAULT: 'rgb(var(--color-brand) / <alpha-value>)',
           hover: 'rgb(var(--color-brand-hover) / <alpha-value>)',
         },
+        accent: {
+          DEFAULT: 'rgb(var(--color-accent) / <alpha-value>)',
+          hover: 'rgb(var(--color-accent-hover) / <alpha-value>)',
+        },
         app: 'rgb(var(--color-bg-app) / <alpha-value>)',
         rail: 'rgb(var(--color-bg-rail) / <alpha-value>)',
         sidebar: 'rgb(var(--color-bg-sidebar) / <alpha-value>)',
@@ -29,6 +33,9 @@ export default {
         body: ['1rem', { lineHeight: '1.5rem' }],
         heading: ['1.125rem', { lineHeight: '1.75rem' }],
         title: ['1.5rem', { lineHeight: '2rem' }],
+      },
+      fontFamily: {
+        sans: ['Sora', 'ui-sans-serif', 'system-ui', 'sans-serif'],
       },
     },
   },

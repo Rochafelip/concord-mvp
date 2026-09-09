@@ -3,8 +3,10 @@
 @tailwind utilities;
 
 :root {
-  --color-brand: 88 101 242;
-  --color-brand-hover: 114 137 218;
+  --color-brand: 109 79 250;
+  --color-brand-hover: 91 62 224;
+  --color-accent: 255 92 74;
+  --color-accent-hover: 224 71 55;
   --color-bg-app: 245 245 250;
   --color-bg-rail: 237 237 245;
   --color-bg-sidebar: 232 233 242;
@@ -19,8 +21,10 @@
 }
 
 :root[data-theme='dark'] {
-  --color-brand: 88 101 242;
-  --color-brand-hover: 71 82 196;
+  --color-brand: 109 79 250;
+  --color-brand-hover: 91 62 224;
+  --color-accent: 255 92 74;
+  --color-accent-hover: 224 71 55;
   --color-bg-app: 49 51 56;
   --color-bg-rail: 30 31 34;
   --color-bg-sidebar: 43 45 49;
