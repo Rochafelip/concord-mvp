@@ -1,5 +1,6 @@
 import type { ConnectionQuality } from 'livekit-client';
 import {
+  HeadphoneOff,
   Headphones,
   Mic,
   MicOff,
@@ -83,7 +84,11 @@ export function VoiceConnectionBar() {
               isDeafened ? 'text-danger' : 'text-ink'
             }`}
           >
-            <Headphones size={18} aria-hidden="true" />
+            {isDeafened ? (
+              <HeadphoneOff data-testid="deafen-icon-off" size={18} aria-hidden="true" />
+            ) : (
+              <Headphones data-testid="deafen-icon-on" size={18} aria-hidden="true" />
+            )}
           </button>
           <button
             type="button"

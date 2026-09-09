@@ -144,6 +144,32 @@ describe('VoiceConnectionBar', () => {
     expect(voiceClient.toggleDeafen).toHaveBeenCalledTimes(1);
   });
 
+  it('shows the HeadphoneOff icon when deafened and the Headphones icon otherwise', async () => {
+    useVoiceStore.setState({
+      status: 'connected',
+      channelId: 'c1',
+      participants: [localParticipant({})],
+      isDeafened: false,
+    });
+    const { rerender } = renderBar();
+
+    await screen.findByText('Alpha');
+    expect(screen.getByTestId('deafen-icon-on')).toBeInTheDocument();
+    expect(screen.queryByTestId('deafen-icon-off')).not.toBeInTheDocument();
+
+    useVoiceStore.setState({ isDeafened: true });
+    rerender(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MemoryRouter>
+          <VoiceConnectionBar />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByTestId('deafen-icon-off')).toBeInTheDocument();
+    expect(screen.queryByTestId('deafen-icon-on')).not.toBeInTheDocument();
+  });
+
   it('disconnects the call when Leave is clicked, without navigating', async () => {
     const user = userEvent.setup();
     useVoiceStore.setState({ status: 'connected', channelId: 'c1', participants: [localParticipant({})] });
