@@ -817,7 +817,7 @@ describe('voiceClient', () => {
 
       expect(mockSend).toHaveBeenCalledWith({
         type: 'VOICE_PRESENCE_UPDATE',
-        payload: { channelId: 'channel-1', muted: false, cameraOn: false, screenSharing: false, speaking: false },
+        payload: { channelId: 'channel-1', muted: false, cameraOn: false, screenSharing: false, speaking: false, deafened: false },
       });
     });
 
@@ -844,7 +844,7 @@ describe('voiceClient', () => {
 
       expect(mockSend).toHaveBeenCalledWith({
         type: 'VOICE_PRESENCE_UPDATE',
-        payload: { channelId: 'channel-1', muted: true, cameraOn: false, screenSharing: false, speaking: false },
+        payload: { channelId: 'channel-1', muted: true, cameraOn: false, screenSharing: false, speaking: false, deafened: false },
       });
     });
 
@@ -858,7 +858,7 @@ describe('voiceClient', () => {
 
       expect(mockSend).toHaveBeenCalledWith({
         type: 'VOICE_PRESENCE_UPDATE',
-        payload: { channelId: 'channel-1', muted: false, cameraOn: true, screenSharing: false, speaking: false },
+        payload: { channelId: 'channel-1', muted: false, cameraOn: true, screenSharing: false, speaking: false, deafened: false },
       });
     });
 
@@ -872,7 +872,7 @@ describe('voiceClient', () => {
 
       expect(mockSend).toHaveBeenCalledWith({
         type: 'VOICE_PRESENCE_UPDATE',
-        payload: { channelId: 'channel-1', muted: false, cameraOn: false, screenSharing: true, speaking: false },
+        payload: { channelId: 'channel-1', muted: false, cameraOn: false, screenSharing: true, speaking: false, deafened: false },
       });
     });
 
@@ -886,7 +886,7 @@ describe('voiceClient', () => {
 
       expect(mockSend).toHaveBeenCalledWith({
         type: 'VOICE_PRESENCE_UPDATE',
-        payload: { channelId: 'channel-1', muted: false, cameraOn: false, screenSharing: false, speaking: true },
+        payload: { channelId: 'channel-1', muted: false, cameraOn: false, screenSharing: false, speaking: true, deafened: false },
       });
     });
 
@@ -901,7 +901,51 @@ describe('voiceClient', () => {
 
       expect(mockSend).toHaveBeenCalledWith({
         type: 'VOICE_PRESENCE_UPDATE',
-        payload: { channelId: 'channel-1', muted: false, cameraOn: false, screenSharing: false, speaking: false },
+        payload: { channelId: 'channel-1', muted: false, cameraOn: false, screenSharing: false, speaking: false, deafened: false },
+      });
+    });
+
+    it('reports deafened: true when deafening (mic already on)', async () => {
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+      mockSend.mockClear();
+
+      voiceClient.toggleDeafen();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(mockSend).toHaveBeenCalledWith({
+        type: 'VOICE_PRESENCE_UPDATE',
+        payload: { channelId: 'channel-1', muted: true, cameraOn: false, screenSharing: false, speaking: false, deafened: true },
+      });
+    });
+
+    it('reports deafened: true when deafening while already muted (regression: previously never reported)', async () => {
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+      voiceClient.toggleMute();
+      await Promise.resolve();
+      await Promise.resolve();
+      mockSend.mockClear();
+
+      voiceClient.toggleDeafen();
+
+      expect(mockSend).toHaveBeenCalledWith({
+        type: 'VOICE_PRESENCE_UPDATE',
+        payload: { channelId: 'channel-1', muted: true, cameraOn: false, screenSharing: false, speaking: false, deafened: true },
+      });
+    });
+
+    it('reports deafened: false after un-deafening', async () => {
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+      voiceClient.toggleDeafen();
+      await Promise.resolve();
+      await Promise.resolve();
+      mockSend.mockClear();
+
+      voiceClient.toggleDeafen();
+
+      expect(mockSend).toHaveBeenCalledWith({
+        type: 'VOICE_PRESENCE_UPDATE',
+        payload: { channelId: 'channel-1', muted: true, cameraOn: false, screenSharing: false, speaking: false, deafened: false },
       });
     });
 
@@ -929,7 +973,7 @@ describe('voiceClient', () => {
       expect(mockSend.mock.calls[0]).toEqual([{ type: 'VOICE_PRESENCE_LEAVE', payload: {} }]);
       expect(mockSend.mock.calls.at(-1)).toEqual([{
         type: 'VOICE_PRESENCE_UPDATE',
-        payload: { channelId: 'channel-2', muted: false, cameraOn: false, screenSharing: false, speaking: false },
+        payload: { channelId: 'channel-2', muted: false, cameraOn: false, screenSharing: false, speaking: false, deafened: false },
       }]);
     });
   });

@@ -23,6 +23,7 @@ interface ReportedPresence {
   cameraOn: boolean;
   screenSharing: boolean;
   speaking: boolean;
+  deafened: boolean;
 }
 
 /**
@@ -175,7 +176,8 @@ class VoiceClient {
    * and, like Discord, also mutes the local mic if it's on — there's no reason to keep
    * broadcasting audio you can't hear a response to. Un-deafening restores remote audio but
    * deliberately does NOT re-enable the mic; toggleMute() above clears isDeafened instead when
-   * the user explicitly unmutes, so audio is never silently turned back on by itself.
+   * the user explicitly unmutes, so audio is never silently turned back on by itself. The
+   * deafened state is also reported to other participants via the voice-presence broadcast below.
    */
   toggleDeafen(): void {
     const deafening = !useVoiceStore.getState().isDeafened;
@@ -185,6 +187,8 @@ class VoiceClient {
         .setMicrophoneEnabled(false)
         .then(() => this.syncParticipants())
         .catch(() => useVoiceStore.getState().setError('Failed to change microphone state'));
+    } else {
+      this.reportPresenceIfChanged();
     }
   }
 
@@ -369,6 +373,7 @@ class VoiceClient {
       cameraOn: room.localParticipant.isCameraEnabled,
       screenSharing: room.localParticipant.isScreenShareEnabled,
       speaking: this.localSpeaking,
+      deafened: useVoiceStore.getState().isDeafened,
     };
 
     if (
@@ -376,7 +381,8 @@ class VoiceClient {
       this.lastReportedPresence.muted === current.muted &&
       this.lastReportedPresence.cameraOn === current.cameraOn &&
       this.lastReportedPresence.screenSharing === current.screenSharing &&
-      this.lastReportedPresence.speaking === current.speaking
+      this.lastReportedPresence.speaking === current.speaking &&
+      this.lastReportedPresence.deafened === current.deafened
     ) {
       return;
     }
