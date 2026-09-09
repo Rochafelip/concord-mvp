@@ -12,6 +12,10 @@ spring:
     open-in-view: false
   flyway:
     enabled: true
+  servlet:
+    multipart:
+      max-file-size: 55MB
+      max-request-size: 55MB
 
 jwt:
   secret: ${JWT_SECRET}
@@ -21,3 +25,7 @@ livekit:
   api-key: ${LIVEKIT_API_KEY}
   api-secret: ${LIVEKIT_API_SECRET}
   public-url: ${LIVEKIT_PUBLIC_URL}
+
+app:
+  uploads:
+    dir: ${UPLOADS_DIR:/app/uploads}

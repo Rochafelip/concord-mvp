@@ -8,6 +8,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+
     # No host port exposed on purpose — the backend reaches Postgres over
     # the internal Docker network by service name only.
     healthcheck:
@@ -16,11 +17,23 @@ services:
       timeout: 5s
       retries: 10
 
+  # Initializes the uploads volume with permissions for the non-root
+  # application user used by the backend container.
+  backend-init:
+    image: alpine:3.20
+    restart: "no"
+    command: >
+      sh -c "mkdir -p /uploads &&
+             chown -R 1000:1000 /uploads"
+    volumes:
+      - backend_uploads:/uploads
+
   backend:
     build:
       context: ../backend
       dockerfile: Dockerfile
     restart: unless-stopped
+
     environment:
       DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
       DATABASE_USERNAME: ${POSTGRES_USER}
@@ -29,15 +42,27 @@ services:
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
       LIVEKIT_PUBLIC_URL: ${LIVEKIT_PUBLIC_URL}
+      APP_UPLOADS_DIR: /app/uploads
+
+    volumes:
+      - backend_uploads:/app/uploads
+
     depends_on:
       postgres:
         condition: service_healthy
+      backend-init:
+        condition: service_completed_successfully
+
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8080/actuator/health"]
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q --spider http://localhost:8080/actuator/health || exit 1"
+        ]
       interval: 10s
       timeout: 5s
       retries: 10
-      start_period: 30s
+      start_period: 60s
 
   frontend:
     build:
@@ -45,24 +70,28 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
 
-  # Self-hosted LiveKit SFU (docs/ARCHITECTURE.md §19, §23; docs/DECISIONS.md D16). Signaling
-  # (port 7880) is reached by nginx over the internal network only, same as backend:8080 — not
-  # published on the host. Media (RTC UDP range, ICE/TCP fallback, embedded TURN) bypasses nginx
-  # entirely and is published directly, since nginx can't proxy that traffic and WebRTC media is
-  # independently encrypted (DTLS-SRTP) regardless of the signaling channel's TLS.
+  # Self-hosted LiveKit SFU (docs/ARCHITECTURE.md §19, §23; docs/DECISIONS.md D16).
+  # Signaling (port 7880) is reached by nginx over the internal network only,
+  # same as backend:8080 — not published on the host.
+  #
+  # Media (RTC UDP range, ICE/TCP fallback, embedded TURN) bypasses nginx
+  # entirely and is published directly, since nginx can't proxy that traffic
+  # and WebRTC media is independently encrypted (DTLS-SRTP) regardless of
+  # the signaling channel's TLS.
   livekit:
     image: livekit/livekit-server:v1.13.6
     restart: unless-stopped
     command: --config /etc/livekit.yaml
+
     environment:
-      # "key: secret" — see infrastructure/livekit/livekit.yaml's comment on why keys are
-      # injected here rather than committed in that file. The TURN/TLS cert (also needed to
-      # start with turn.enabled: true) is a file path, not a secret, so it's set directly in
-      # livekit.yaml's turn.cert_file/key_file instead of another env var here.
+      # "key: secret" — see infrastructure/livekit/livekit.yaml's comment
+      # on why keys are injected here rather than committed in that file.
       LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
+
     volumes:
       - ./livekit/livekit.local.yaml:/etc/livekit.yaml:ro
       - ./nginx/certs:/etc/livekit-certs:ro
+
     ports:
       - "7881:7881/tcp"
       - "3478:3478/udp"
@@ -73,9 +102,11 @@ services:
   nginx:
     image: nginx:alpine
     restart: unless-stopped
+
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - ./nginx/certs:/etc/nginx/certs:ro
+
     depends_on:
       backend:
         condition: service_healthy
@@ -83,23 +114,22 @@ services:
         condition: service_started
       livekit:
         condition: service_started
+
     ports:
       - "80:80"
       - "443:443"
-      # ISPs on some residential connections block inbound 80/443 even when other Port Mapping
-      # rules work fine (confirmed here: infrastructure/HOME_DEPLOY.md's port table). 45678 is
-      # the connectivity-test port validated to actually reach this PC from outside, so it's
-      # reused as the real public HTTPS entry point — 443 stays published too, for LAN-only
-      # access at the standard port.
+
+      # ISPs on some residential connections block inbound 80/443 even when
+      # other Port Mapping rules work fine. 45678 is the connectivity-test
+      # port validated to actually reach this PC from outside, so it is reused
+      # as the real public HTTPS entry point.
       - "45678:443"
 
-  # Keeps DUCKDNS_SUBDOMAIN.duckdns.org pointed at this PC's current public IP — checks and
-  # updates every 5 minutes (the image's default), so a PPPoE reconnect that changes the IP
-  # self-heals within minutes instead of needing a manual .env/cert update (see
-  # infrastructure/DUCKDNS.md).
+  # Keeps DUCKDNS_SUBDOMAIN.duckdns.org pointed at this PC's current public IP.
   duckdns:
     image: linuxserver/duckdns:latest
     restart: unless-stopped
+
     environment:
       SUBDOMAINS: ${DUCKDNS_SUBDOMAIN}
       TOKEN: ${DUCKDNS_TOKEN}
@@ -107,3 +137,4 @@ services:
 
 volumes:
   postgres_data:
+  backend_uploads:
