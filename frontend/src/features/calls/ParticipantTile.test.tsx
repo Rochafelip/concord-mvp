@@ -76,7 +76,9 @@ describe('ParticipantTile', () => {
     const detach = vi.fn();
     const videoTrack = { attach, detach } as never;
 
-    const { unmount, container } = render(<ParticipantTile participant={participant({ videoTrack })} />);
+    const { unmount, container } = render(
+      <ParticipantTile participant={participant({ videoTrack, cameraEnabled: true })} />,
+    );
 
     const videoElement = container.querySelector('video');
     expect(videoElement).not.toBeNull();
@@ -88,9 +90,22 @@ describe('ParticipantTile', () => {
 
   it('does not render an initial placeholder when a video track is present', () => {
     const videoTrack = { attach: vi.fn(), detach: vi.fn() } as never;
-    render(<ParticipantTile participant={participant({ name: 'Felipe', videoTrack })} />);
+    render(<ParticipantTile participant={participant({ name: 'Felipe', videoTrack, cameraEnabled: true })} />);
 
     expect(screen.queryByText('F')).not.toBeInTheDocument();
+  });
+
+  it('shows the avatar instead of the video element when the camera is turned off, even though the muted publication still leaves a stale videoTrack behind', () => {
+    // Mirrors livekit-client's real behavior: disabling the camera mutes the publication rather
+    // than unpublishing it, so `videoTrack` stays non-null after the toggle — only `cameraEnabled`
+    // (isCameraEnabled, which is isMuted-aware) reflects the off state.
+    const videoTrack = { attach: vi.fn(), detach: vi.fn() } as never;
+    const { container } = render(
+      <ParticipantTile participant={participant({ name: 'Felipe', videoTrack, cameraEnabled: false })} />,
+    );
+
+    expect(screen.getByText('F')).toBeInTheDocument();
+    expect(container.querySelector('video')).toBeNull();
   });
 
   it('always shows the name pill bottom-left, for both local and remote tiles', () => {
@@ -117,7 +132,9 @@ describe('ParticipantTile', () => {
 
     it('uses the plain camera background instead of a palette color when a video track is present', () => {
       const videoTrack = { attach: vi.fn(), detach: vi.fn() } as never;
-      const { container } = render(<ParticipantTile participant={participant({ identity: 'u1', videoTrack })} />);
+      const { container } = render(
+        <ParticipantTile participant={participant({ identity: 'u1', videoTrack, cameraEnabled: true })} />,
+      );
 
       expect(container.firstChild).toHaveClass('bg-gray-800');
       expect(container.firstChild).not.toHaveClass('bg-cyan-900');

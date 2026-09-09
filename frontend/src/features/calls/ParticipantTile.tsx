@@ -32,23 +32,27 @@ interface ParticipantTileProps {
 export function ParticipantTile({ participant, avatarUrl, deafened = false }: ParticipantTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const { videoTrack } = participant;
+  // livekit-client mutes the camera publication rather than unpublishing it when the camera is
+  // turned off, so `videoTrack` stays non-null after that — `cameraEnabled` (isMuted-aware) is
+  // what actually reflects on/off state, so it gates the video/avatar switch too.
+  const showVideo = videoTrack && participant.cameraEnabled;
 
   useEffect(() => {
     const element = videoRef.current;
-    if (!videoTrack || !element) return;
+    if (!showVideo || !videoTrack || !element) return;
     videoTrack.attach(element);
     return () => {
       videoTrack.detach(element);
     };
-  }, [videoTrack]);
+  }, [showVideo, videoTrack]);
 
   return (
     <div
       className={`group relative flex aspect-video items-center justify-center overflow-hidden rounded ${
-        videoTrack ? 'bg-gray-800' : tileColorFor(participant.identity)
+        showVideo ? 'bg-gray-800' : tileColorFor(participant.identity)
       } ${participant.isLocal ? 'ring-2 ring-brand' : ''}`}
     >
-      {videoTrack ? (
+      {showVideo ? (
         <video ref={videoRef} muted autoPlay playsInline className="h-full w-full object-cover" />
       ) : (
         <Avatar displayName={participant.name} avatarUrl={avatarUrl} size="lg" />
