@@ -10,7 +10,9 @@ import {
 } from 'livekit-client';
 import { websocketClient } from './websocketClient';
 import * as soundEffects from './soundEffects';
+import { createNoiseSuppressionProcessor, isNoiseSuppressionSupported } from './audio/noiseSuppression';
 import { SCREEN_SHARE_QUALITY_PRESETS } from '../features/calls/screenShareQuality';
+import { getNoiseSuppressionPreference } from '../features/settings/audio/noiseSuppressionPreference';
 import { useVoiceStore } from '../stores/voiceStore';
 import type { ScreenShareOptions, VoiceParticipant } from '../types/voice';
 
@@ -115,6 +117,7 @@ class VoiceClient {
       // channel, just without a mic published (PRODUCT.md §16: surface the error, don't
       // silently fail, don't kill the session).
       await room.localParticipant.setMicrophoneEnabled(true);
+      this.applyNoiseSuppressionPreference();
     } catch {
       if (generation === this.connectGeneration) {
         useVoiceStore.getState().setError('Microphone permission denied');
@@ -165,7 +168,10 @@ class VoiceClient {
       .setMicrophoneEnabled(enabling)
       .then(() => {
         this.syncParticipants();
-        if (enabling) this.setDeafened(false);
+        if (enabling) {
+          this.setDeafened(false);
+          this.applyNoiseSuppressionPreference();
+        }
       })
       .catch(() => useVoiceStore.getState().setError('Failed to change microphone state'));
   }
@@ -202,6 +208,26 @@ class VoiceClient {
       .setCameraEnabled(!localParticipant.isCameraEnabled)
       .then(() => this.syncParticipants())
       .catch(() => useVoiceStore.getState().setError('Failed to change camera state'));
+  }
+
+  async setNoiseSuppressionEnabled(enabled: boolean): Promise<void> {
+    const track = this.room?.localParticipant.getTrackPublication(Track.Source.Microphone)?.audioTrack;
+    if (!track) return;
+
+    if (!enabled) {
+      await track.stopProcessor().catch(() => {});
+      return;
+    }
+    if (!isNoiseSuppressionSupported()) return;
+    try {
+      await track.setProcessor(createNoiseSuppressionProcessor());
+    } catch {
+      // WASM/AudioWorklet failure — the call keeps working on the unprocessed track.
+    }
+  }
+
+  private applyNoiseSuppressionPreference(): void {
+    void this.setNoiseSuppressionEnabled(getNoiseSuppressionPreference());
   }
 
   // Off by default, same reasoning as the camera — starting a share is always an explicit user

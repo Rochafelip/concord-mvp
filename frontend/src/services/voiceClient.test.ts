@@ -69,7 +69,10 @@ const {
         return Promise.resolve(undefined);
       }),
       getTrackPublication: vi.fn(
-        (): { isMuted: boolean; mute: () => unknown; unmute: () => unknown } | undefined => undefined,
+        ():
+          | { isMuted: boolean; mute: () => unknown; unmute: () => unknown }
+          | { audioTrack: { setProcessor: (processor: unknown) => Promise<void>; stopProcessor: () => Promise<void> } }
+          | undefined => undefined,
       ),
     };
 
@@ -130,6 +133,19 @@ vi.mock('./soundEffects', () => ({
   playParticipantLeft: mockPlayParticipantLeft,
 }));
 
+const mockCreateNoiseSuppressionProcessor = vi.hoisted(() => vi.fn(() => ({ name: 'noise-suppression' })));
+const mockIsNoiseSuppressionSupported = vi.hoisted(() => vi.fn(() => true));
+const mockGetNoiseSuppressionPreference = vi.hoisted(() => vi.fn(() => true));
+
+vi.mock('./audio/noiseSuppression', () => ({
+  createNoiseSuppressionProcessor: mockCreateNoiseSuppressionProcessor,
+  isNoiseSuppressionSupported: mockIsNoiseSuppressionSupported,
+}));
+
+vi.mock('../features/settings/audio/noiseSuppressionPreference', () => ({
+  getNoiseSuppressionPreference: mockGetNoiseSuppressionPreference,
+}));
+
 // Imported after the mock so voiceClient's module-level `new Room()` calls use MockRoom.
 const { voiceClient } = await import('./voiceClient');
 
@@ -144,6 +160,13 @@ async function connectVoice(channelId: string, token: string, url: string): Prom
   const promise = voiceClient.connect(channelId, token, url);
   connectResolvers[connectResolvers.length - 1]();
   await promise;
+}
+
+function mockAudioTrack() {
+  return {
+    setProcessor: vi.fn().mockResolvedValue(undefined),
+    stopProcessor: vi.fn().mockResolvedValue(undefined),
+  };
 }
 
 function remoteParticipant(identity: string) {
@@ -1071,6 +1094,122 @@ describe('voiceClient', () => {
       await promise;
 
       expect(mockPlayParticipantJoined).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('noise suppression', () => {
+    beforeEach(() => {
+      mockCreateNoiseSuppressionProcessor.mockClear();
+      mockIsNoiseSuppressionSupported.mockReset().mockReturnValue(true);
+      mockGetNoiseSuppressionPreference.mockReset().mockReturnValue(true);
+    });
+
+    it('applies the noise suppression processor to the mic track after connecting, when the preference is enabled', async () => {
+      const track = mockAudioTrack();
+      const promise = voiceClient.connect('channel-1', 'token', 'wss://example.test/livekit');
+      const room = roomInstances[roomInstances.length - 1];
+      room.localParticipant.getTrackPublication = vi.fn((source?: string) =>
+        source === 'microphone' ? { audioTrack: track } : undefined,
+      );
+      connectResolvers[connectResolvers.length - 1]();
+      await promise;
+
+      expect(track.setProcessor).toHaveBeenCalledWith({ name: 'noise-suppression' });
+    });
+
+    it('does not apply the processor after connecting when the preference is disabled', async () => {
+      mockGetNoiseSuppressionPreference.mockReturnValue(false);
+      const track = mockAudioTrack();
+      const promise = voiceClient.connect('channel-1', 'token', 'wss://example.test/livekit');
+      const room = roomInstances[roomInstances.length - 1];
+      room.localParticipant.getTrackPublication = vi.fn((source?: string) =>
+        source === 'microphone' ? { audioTrack: track } : undefined,
+      );
+      connectResolvers[connectResolvers.length - 1]();
+      await promise;
+
+      expect(track.setProcessor).not.toHaveBeenCalled();
+      expect(track.stopProcessor).toHaveBeenCalled();
+    });
+
+    it('does not apply the processor when the browser does not support it', async () => {
+      mockIsNoiseSuppressionSupported.mockReturnValue(false);
+      const track = mockAudioTrack();
+      const promise = voiceClient.connect('channel-1', 'token', 'wss://example.test/livekit');
+      const room = roomInstances[roomInstances.length - 1];
+      room.localParticipant.getTrackPublication = vi.fn((source?: string) =>
+        source === 'microphone' ? { audioTrack: track } : undefined,
+      );
+      connectResolvers[connectResolvers.length - 1]();
+      await promise;
+
+      expect(track.setProcessor).not.toHaveBeenCalled();
+    });
+
+    it('does not throw when the processor fails to initialize, and the call keeps working', async () => {
+      const track = mockAudioTrack();
+      track.setProcessor.mockRejectedValue(new Error('AudioWorklet failed to load'));
+      const promise = voiceClient.connect('channel-1', 'token', 'wss://example.test/livekit');
+      const room = roomInstances[roomInstances.length - 1];
+      room.localParticipant.getTrackPublication = vi.fn((source?: string) =>
+        source === 'microphone' ? { audioTrack: track } : undefined,
+      );
+      connectResolvers[connectResolvers.length - 1]();
+
+      await expect(promise).resolves.toBeUndefined();
+      expect(useVoiceStore.getState().status).toBe('connected');
+    });
+
+    it('does nothing when there is no published microphone track', async () => {
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+
+      await expect(voiceClient.setNoiseSuppressionEnabled(true)).resolves.toBeUndefined();
+    });
+
+    it('re-applies the processor when the microphone is re-enabled via toggleMute', async () => {
+      const track = mockAudioTrack();
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+      const room = roomInstances[0];
+      room.localParticipant.getTrackPublication = vi.fn((source?: string) =>
+        source === 'microphone' ? { audioTrack: track } : undefined,
+      );
+      track.setProcessor.mockClear();
+
+      voiceClient.toggleMute(); // off
+      await Promise.resolve();
+      await Promise.resolve();
+      voiceClient.toggleMute(); // back on
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(track.setProcessor).toHaveBeenCalledWith({ name: 'noise-suppression' });
+    });
+
+    it('setNoiseSuppressionEnabled(true) applies the processor directly, e.g. from the Settings toggle', async () => {
+      const track = mockAudioTrack();
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+      const room = roomInstances[0];
+      room.localParticipant.getTrackPublication = vi.fn((source?: string) =>
+        source === 'microphone' ? { audioTrack: track } : undefined,
+      );
+
+      await voiceClient.setNoiseSuppressionEnabled(true);
+
+      expect(track.setProcessor).toHaveBeenCalledWith({ name: 'noise-suppression' });
+    });
+
+    it('setNoiseSuppressionEnabled(false) removes the processor directly, e.g. from the Settings toggle', async () => {
+      const track = mockAudioTrack();
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+      const room = roomInstances[0];
+      room.localParticipant.getTrackPublication = vi.fn((source?: string) =>
+        source === 'microphone' ? { audioTrack: track } : undefined,
+      );
+
+      await voiceClient.setNoiseSuppressionEnabled(false);
+
+      expect(track.stopProcessor).toHaveBeenCalled();
+      expect(track.setProcessor).not.toHaveBeenCalled();
     });
   });
 });
