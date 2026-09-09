@@ -42,7 +42,7 @@ export function VoiceConnectionBar() {
   const quality = localParticipant && QUALITY_ICON[localParticipant.connectionQuality];
 
   return (
-    <div className="flex flex-shrink-0 items-center justify-between gap-3 border-t bg-surface px-4 py-2">
+    <div className="flex flex-shrink-0 items-center gap-3 border-t bg-surface px-4 py-2">
       <Link
         to={`/app/servers/${channel?.serverId}/channels/${channelId}`}
         className="flex min-w-0 flex-col gap-0.5 hover:opacity-80"
