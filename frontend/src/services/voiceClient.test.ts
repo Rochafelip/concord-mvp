@@ -731,7 +731,7 @@ describe('voiceClient', () => {
     expect(useVoiceStore.getState().isDeafened).toBe(true);
   });
 
-  it('un-deafening unmutes remote audio but leaves the mic muted', async () => {
+  it('un-deafening unmutes remote audio and re-enables the mic', async () => {
     await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
     const room = roomInstances[0];
     const onTrackSubscribed = handlerFor(room, 'trackSubscribed');
@@ -746,10 +746,12 @@ describe('voiceClient', () => {
     await Promise.resolve();
     await Promise.resolve();
     voiceClient.toggleDeafen();
+    await Promise.resolve();
+    await Promise.resolve();
 
     expect(mockElement.muted).toBe(false);
     expect(useVoiceStore.getState().isDeafened).toBe(false);
-    expect(room.localParticipant.isMicrophoneEnabled).toBe(false);
+    expect(room.localParticipant.isMicrophoneEnabled).toBe(true);
   });
 
   it("sets a remote participant's microphone volume independently of their screen-share audio", async () => {
@@ -978,7 +980,7 @@ describe('voiceClient', () => {
       });
     });
 
-    it('reports deafened: false after un-deafening', async () => {
+    it('reports deafened: false and muted: false after un-deafening', async () => {
       await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
       voiceClient.toggleDeafen();
       await Promise.resolve();
@@ -986,10 +988,12 @@ describe('voiceClient', () => {
       mockSend.mockClear();
 
       voiceClient.toggleDeafen();
+      await Promise.resolve();
+      await Promise.resolve();
 
       expect(mockSend).toHaveBeenCalledWith({
         type: 'VOICE_PRESENCE_UPDATE',
-        payload: { channelId: 'channel-1', muted: true, cameraOn: false, screenSharing: false, speaking: false, deafened: false },
+        payload: { channelId: 'channel-1', muted: false, cameraOn: false, screenSharing: false, speaking: false, deafened: false },
       });
     });
 

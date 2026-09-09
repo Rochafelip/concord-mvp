@@ -183,18 +183,27 @@ class VoiceClient {
    * Deafen is a purely local concept — LiveKit has no server-side notion of it. Deafening mutes
    * every remote participant's <audio> element in this browser only (nobody else is affected)
    * and, like Discord, also mutes the local mic if it's on — there's no reason to keep
-   * broadcasting audio you can't hear a response to. Un-deafening restores remote audio but
-   * deliberately does NOT re-enable the mic; toggleMute() above clears isDeafened instead when
-   * the user explicitly unmutes, so audio is never silently turned back on by itself. The
-   * deafened state is also reported to other participants via the voice-presence broadcast below.
+   * broadcasting audio you can't hear a response to. Un-deafening restores remote audio and also
+   * re-enables the mic unconditionally, so the user always comes out of deafen ready to talk
+   * rather than silently still muted. The deafened state is also reported to other participants
+   * via the voice-presence broadcast below.
    */
   toggleDeafen(): void {
     const deafening = !useVoiceStore.getState().isDeafened;
     this.setDeafened(deafening);
-    if (deafening && this.room?.localParticipant.isMicrophoneEnabled) {
-      this.room.localParticipant
+    const localParticipant = this.room?.localParticipant;
+    if (deafening && localParticipant?.isMicrophoneEnabled) {
+      localParticipant
         .setMicrophoneEnabled(false)
         .then(() => this.syncParticipants())
+        .catch(() => useVoiceStore.getState().setError('Failed to change microphone state'));
+    } else if (!deafening && localParticipant) {
+      localParticipant
+        .setMicrophoneEnabled(true)
+        .then(() => {
+          this.syncParticipants();
+          this.applyNoiseSuppressionPreference();
+        })
         .catch(() => useVoiceStore.getState().setError('Failed to change microphone state'));
     } else {
       this.reportPresenceIfChanged();
