@@ -8,12 +8,22 @@ vi.mock('./hooks', () => ({
   useMessageHistory: vi.fn(),
 }));
 
-function makeMessage(id: string, content: string, createdAt: string): Message {
+function makeMessage(
+  id: string,
+  content: string,
+  createdAt: string,
+  imageUrl: string | null = null,
+  fileName: string | null = null,
+  fileSize: number | null = null,
+): Message {
   return {
     id,
     channelId: 'c1',
     author: { id: 'u1', username: 'alice', displayName: 'Alice', avatarUrl: null },
     content,
+    imageUrl,
+    fileName,
+    fileSize,
     createdAt,
   };
 }

@@ -8,5 +8,8 @@ export interface Message {
     avatarUrl: string | null;
   };
   content: string;
+  imageUrl: string | null;
+  fileName: string | null;
+  fileSize: number | null;
   createdAt: string;
 }

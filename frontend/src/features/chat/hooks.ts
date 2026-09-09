@@ -33,6 +33,12 @@ export function useMessageHistory(channelId: string | undefined) {
  * the sent message reaches the UI later via the MESSAGE_CREATE broadcast (useRealtimeSync),
  * which includes the sender, so no local optimistic copy is rendered here.
  */
-export function sendMessage(channelId: string, content: string): void {
-  websocketClient.send({ type: 'MESSAGE_CREATE', payload: { channelId, content } });
+export function sendMessage(
+  channelId: string,
+  content: string,
+  imageUrl?: string,
+  fileName?: string,
+  fileSize?: number,
+): void {
+  websocketClient.send({ type: 'MESSAGE_CREATE', payload: { channelId, content, imageUrl, fileName, fileSize } });
 }
