@@ -162,6 +162,7 @@ describe('ChannelSidebar', () => {
         cameraOn: false,
         screenSharing: false,
         speaking: false,
+        deafened: false,
         ...overrides,
       };
     }
@@ -207,6 +208,24 @@ describe('ChannelSidebar', () => {
       expect(screen.getByLabelText('Muted')).toBeInTheDocument();
       expect(screen.getByLabelText('Camera on')).toBeInTheDocument();
       expect(screen.getByLabelText('Sharing screen')).toBeInTheDocument();
+    });
+
+    it('shows a distinct deafened icon instead of the muted icon when the participant is deafened', async () => {
+      vi.mocked(callsApi.getVoicePresence).mockResolvedValue([presence({ muted: true, deafened: true })]);
+      renderSidebar();
+
+      await screen.findByText('Ana');
+      expect(screen.getByLabelText('Deafened')).toBeInTheDocument();
+      expect(screen.queryByLabelText('Muted')).not.toBeInTheDocument();
+    });
+
+    it('shows the muted icon, not deafened, for a participant who is only muted', async () => {
+      vi.mocked(callsApi.getVoicePresence).mockResolvedValue([presence({ muted: true, deafened: false })]);
+      renderSidebar();
+
+      await screen.findByText('Ana');
+      expect(screen.getByLabelText('Muted')).toBeInTheDocument();
+      expect(screen.queryByLabelText('Deafened')).not.toBeInTheDocument();
     });
 
     it('only lists a participant under the voice channel they are actually in', async () => {

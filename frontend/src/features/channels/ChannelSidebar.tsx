@@ -1,4 +1,4 @@
-import { MicOff, MonitorUp, Plus, Settings, Trash2, Video, Volume2 } from 'lucide-react';
+import { HeadphoneOff, MicOff, MonitorUp, Plus, Settings, Trash2, Video, Volume2 } from 'lucide-react';
 import { useState, type MouseEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Avatar } from '../../components/Avatar';
@@ -155,7 +155,11 @@ export function ChannelSidebar() {
                           />
                           <span className="truncate text-caption text-muted">{participant.displayName}</span>
                           <span className="ml-auto flex flex-shrink-0 items-center gap-1 text-muted">
-                            {participant.muted && <MicOff aria-label="Muted" size={14} />}
+                            {participant.deafened ? (
+                              <HeadphoneOff aria-label="Deafened" size={14} />
+                            ) : (
+                              participant.muted && <MicOff aria-label="Muted" size={14} />
+                            )}
                             {participant.cameraOn && <Video aria-label="Camera on" size={14} />}
                             {participant.screenSharing && <MonitorUp aria-label="Sharing screen" size={14} />}
                           </span>
