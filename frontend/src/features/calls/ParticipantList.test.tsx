@@ -147,4 +147,60 @@ describe('ParticipantList', () => {
     expect(await screen.findByRole('img', { name: 'João' })).toHaveAttribute('src', 'https://example.test/joao.png');
     expect(screen.queryByRole('img', { name: 'Felipe' })).not.toBeInTheDocument();
   });
+
+  describe('camera-on / off-camera split', () => {
+    it('renders a camera-on participant inside the camera grid, not the off-camera roster', () => {
+      useVoiceStore.setState({
+        participants: [participant({ identity: 'u1', name: 'Felipe', isLocal: true, cameraEnabled: true })],
+      });
+      renderList();
+
+      expect(screen.getByTestId('camera-grid')).toContainElement(screen.getByText(/Felipe/));
+      expect(screen.queryByTestId('off-camera-roster')).not.toBeInTheDocument();
+    });
+
+    it('renders a camera-off, non-sharing participant inside the off-camera roster, not the camera grid', () => {
+      useVoiceStore.setState({
+        participants: [participant({ identity: 'u1', name: 'Felipe', isLocal: true, cameraEnabled: false })],
+      });
+      renderList();
+
+      expect(screen.getByTestId('off-camera-roster')).toContainElement(screen.getByText(/Felipe/));
+      expect(screen.queryByTestId('camera-grid')).not.toBeInTheDocument();
+    });
+
+    it('excludes a camera-off, screen-sharing participant from the off-camera roster', () => {
+      const track = { attach: vi.fn(), detach: vi.fn() } as never;
+      useVoiceStore.setState({
+        participants: [
+          participant({ identity: 'u1', name: 'Felipe', isLocal: true, cameraEnabled: false }),
+          participant({
+            identity: 'u2',
+            name: 'João',
+            isLocal: false,
+            cameraEnabled: false,
+            screenShareEnabled: true,
+            screenShareTrack: track,
+          }),
+        ],
+      });
+      renderList();
+
+      expect(screen.getByText(/João's screen/)).toBeInTheDocument();
+      expect(screen.getByTestId('off-camera-roster')).not.toHaveTextContent('João');
+    });
+
+    it('renders both a camera grid and an off-camera roster when the call has a mix of both', () => {
+      useVoiceStore.setState({
+        participants: [
+          participant({ identity: 'u1', name: 'Felipe', isLocal: true, cameraEnabled: true }),
+          participant({ identity: 'u2', name: 'João', isLocal: false, cameraEnabled: false }),
+        ],
+      });
+      renderList();
+
+      expect(screen.getByTestId('camera-grid')).toContainElement(screen.getByText(/Felipe/));
+      expect(screen.getByTestId('off-camera-roster')).toContainElement(screen.getByText(/João/));
+    });
+  });
 });

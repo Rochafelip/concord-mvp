@@ -382,4 +382,18 @@ describe('ScreenShareTile', () => {
       });
     });
   });
+
+  describe('full-width sizing', () => {
+    it('spans the full width of its wrapping section before being watched', () => {
+      const { container } = render(<ScreenShareTile participant={sharingParticipant({ name: 'Felipe' })} />);
+
+      expect(container.firstChild).toHaveClass('w-full');
+    });
+
+    it('spans the full width of its wrapping section once watched', async () => {
+      const { container } = await renderWatching(sharingParticipant({ name: 'Felipe' }));
+
+      expect(container.firstChild).toHaveClass('w-full');
+    });
+  });
 });

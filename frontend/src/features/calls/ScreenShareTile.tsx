@@ -27,8 +27,12 @@ interface ScreenShareTileProps {
  * Audio is muted for as long as a remote share stays minimized, and re-muted whenever it's
  * minimized again — see the setScreenShareVolume effect below.
  *
- * Spans the grid's full row width (col-span-full) rather than sharing camera tiles' size once
- * watched — screen content (text, code, slides) is illegible squeezed into a small tile.
+ * Fills the full width of its wrapping section (w-full) rather than sharing camera tiles' size
+ * once watched — screen content (text, code, slides) is illegible squeezed into a small tile.
+ * It used to rely on col-span-full inside the grid it shared with camera tiles; now that camera
+ * tiles live in their own nested CameraGrid (see
+ * docs/superpowers/specs/2026-09-09-call-grid-layout-design.md), screen shares get their own
+ * wrapping section from ParticipantList instead, so w-full is what actually fills it.
  *
  * The root element also doubles as the Fullscreen API target (see
  * docs/superpowers/specs/2026-09-08-fullscreen-screenshare-design.md): fullscreening it hides
@@ -99,7 +103,7 @@ export function ScreenShareTile({ participant }: ScreenShareTileProps) {
 
   if (!isWatching) {
     return (
-      <div className="flex aspect-video flex-col items-center justify-center gap-2 rounded bg-gray-800 p-2 text-center">
+      <div className="flex w-full aspect-video flex-col items-center justify-center gap-2 rounded bg-gray-800 p-2 text-center">
         <MonitorUp size={20} className="text-gray-300" aria-hidden="true" />
         <span className="text-caption text-gray-100">{participant.name}'s screen</span>
         <button
@@ -120,7 +124,7 @@ export function ScreenShareTile({ participant }: ScreenShareTileProps) {
       className={
         isFullscreen
           ? 'fixed inset-0 z-50 flex items-center justify-center bg-gray-900'
-          : 'group relative col-span-full flex aspect-video items-center justify-center overflow-hidden rounded bg-gray-900'
+          : 'group relative flex w-full aspect-video items-center justify-center overflow-hidden rounded bg-gray-900'
       }
     >
       <video ref={videoRef} muted autoPlay playsInline className="h-full w-full object-contain" />

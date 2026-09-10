@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
 import { Spinner } from '../../components/Spinner';
+import { CameraGrid } from './CameraGrid';
 import { useVoiceParticipants, useVoicePresence } from './hooks';
-import { ParticipantTile } from './ParticipantTile';
+import { OffCameraRoster } from './OffCameraRoster';
 import { ScreenShareTile } from './ScreenShareTile';
 
 interface ParticipantListProps {
@@ -9,6 +10,13 @@ interface ParticipantListProps {
   serverId?: string;
 }
 
+/**
+ * Splits participants into three groups per
+ * docs/superpowers/specs/2026-09-09-call-grid-layout-design.md: active screen shares (full-width,
+ * rendered first, unchanged from before), camera-on participants (CameraGrid's tiered layout),
+ * and everyone else (OffCameraRoster's horizontal strip) — so off-camera participants no longer
+ * take up main-grid space alongside camera tiles.
+ */
 export function ParticipantList({ serverId }: ParticipantListProps) {
   const participants = useVoiceParticipants();
   const { data: presence } = useVoicePresence(serverId);
@@ -38,20 +46,26 @@ export function ParticipantList({ serverId }: ParticipantListProps) {
   }
 
   const sharing = participants.filter((participant) => participant.screenShareTrack);
+  const onCamera = participants.filter((participant) => participant.cameraEnabled);
+  const offCamera = participants.filter(
+    (participant) => !participant.cameraEnabled && !participant.screenShareTrack,
+  );
 
   return (
-    <div className="grid flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-2 overflow-y-auto p-4 pb-20">
-      {sharing.map((participant) => (
-        <ScreenShareTile key={`${participant.identity}-screen`} participant={participant} />
-      ))}
-      {participants.map((participant) => (
-        <ParticipantTile
-          key={participant.identity}
-          participant={participant}
-          avatarUrl={avatarUrlByUserId.get(participant.identity)}
-          deafened={deafenedByUserId.get(participant.identity) ?? false}
-        />
-      ))}
+    <div className="flex flex-1 flex-col overflow-hidden pb-20">
+      {sharing.length > 0 && (
+        <div className="flex flex-shrink-0 flex-col gap-2 p-4 pb-0">
+          {sharing.map((participant) => (
+            <ScreenShareTile key={`${participant.identity}-screen`} participant={participant} />
+          ))}
+        </div>
+      )}
+      <CameraGrid participants={onCamera} avatarUrlByUserId={avatarUrlByUserId} deafenedByUserId={deafenedByUserId} />
+      <OffCameraRoster
+        participants={offCamera}
+        avatarUrlByUserId={avatarUrlByUserId}
+        deafenedByUserId={deafenedByUserId}
+      />
     </div>
   );
 }
