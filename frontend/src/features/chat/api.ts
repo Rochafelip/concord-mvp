@@ -1,6 +1,5 @@
 import { apiClient, ApiError } from '../../services/apiClient';
 import type { Message } from '../../types/message';
-import { useAuthStore } from '../auth/authStore';
 
 /**
  * Compound pagination cursor (backend/src/main/java/com/concordmvp/messages/MessageController.java):
@@ -40,13 +39,12 @@ export interface UploadedAttachment {
  * body and a browser-generated `Content-Type` boundary that must NOT be set manually.
  */
 export async function uploadAttachment(channelId: string, file: File): Promise<UploadedAttachment> {
-  const { token } = useAuthStore.getState();
   const formData = new FormData();
   formData.append('file', file);
 
   const response = await fetch(`/api/v1/channels/${channelId}/attachments`, {
     method: 'POST',
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    credentials: 'same-origin',
     body: formData,
   });
 
