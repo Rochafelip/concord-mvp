@@ -7,7 +7,6 @@ export interface User {
 }
 
 export interface AuthResult {
-  token: string;
   userId: string;
   username: string;
   displayName: string;

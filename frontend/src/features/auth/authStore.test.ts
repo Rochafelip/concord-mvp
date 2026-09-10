@@ -1,9 +1,8 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AuthResult } from '../../types/user';
 import { useAuthStore } from './authStore';
 
 const authResult: AuthResult = {
-  token: 'jwt-token',
   userId: 'user-1',
   username: 'jdoe',
   displayName: 'John Doe',
@@ -13,14 +12,18 @@ const authResult: AuthResult = {
 describe('authStore', () => {
   beforeEach(() => {
     localStorage.clear();
-    useAuthStore.setState({ token: null, user: null });
+    useAuthStore.setState({ isAuthenticated: false, user: null });
   });
 
-  it('login() sets the token and derives the user from the auth result', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('login() sets isAuthenticated and derives the user from the auth result', () => {
     useAuthStore.getState().login(authResult);
 
     const state = useAuthStore.getState();
-    expect(state.token).toBe('jwt-token');
+    expect(state.isAuthenticated).toBe(true);
     expect(state.user).toEqual({
       id: 'user-1',
       username: 'jdoe',
@@ -30,17 +33,36 @@ describe('authStore', () => {
     });
   });
 
-  it('logout() clears both the token and the user', () => {
+  it('logout() clears isAuthenticated and the user, and clears the session cookie server-side', () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true } as Response);
+    vi.stubGlobal('fetch', fetchMock);
     useAuthStore.getState().login(authResult);
 
     useAuthStore.getState().logout();
 
     const state = useAuthStore.getState();
-    expect(state.token).toBeNull();
+    expect(state.isAuthenticated).toBe(false);
+    expect(state.user).toBeNull();
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/auth/logout', {
+      method: 'POST',
+      credentials: 'same-origin',
+    });
+  });
+
+  it('logout() clears local state even if the network call fails', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')));
+    useAuthStore.getState().login(authResult);
+
+    useAuthStore.getState().logout();
+    // Let the rejected promise's .catch() run before asserting.
+    await Promise.resolve();
+
+    const state = useAuthStore.getState();
+    expect(state.isAuthenticated).toBe(false);
     expect(state.user).toBeNull();
   });
 
-  it('setUser() updates the user without touching the token', () => {
+  it('setUser() updates the user without touching isAuthenticated', () => {
     useAuthStore.getState().login(authResult);
 
     useAuthStore.getState().setUser({
@@ -52,19 +74,19 @@ describe('authStore', () => {
     });
 
     const state = useAuthStore.getState();
-    expect(state.token).toBe('jwt-token');
+    expect(state.isAuthenticated).toBe(true);
     expect(state.user?.displayName).toBe('Johnny');
     expect(state.user?.avatarUrl).toBe('https://example.com/avatar.png');
   });
 
-  it('persists token and user to localStorage via the persist middleware', () => {
+  it('persists isAuthenticated and user to localStorage via the persist middleware', () => {
     useAuthStore.getState().login(authResult);
 
     const raw = localStorage.getItem('concord-auth');
     expect(raw).not.toBeNull();
 
     const persisted = JSON.parse(raw!);
-    expect(persisted.state.token).toBe('jwt-token');
+    expect(persisted.state.isAuthenticated).toBe(true);
     expect(persisted.state.user.username).toBe('jdoe');
   });
 });
