@@ -24,6 +24,7 @@ function participant(overrides: Partial<VoiceParticipant> = {}): VoiceParticipan
     screenShareHasAudio: false,
     screenShareAudioEnabled: false,
     connectionQuality: ConnectionQuality.Unknown,
+    speaking: false,
     ...overrides,
   };
 }
@@ -115,6 +116,35 @@ describe('ParticipantTile', () => {
     expect(remoteContainer.querySelector('.bottom-1')).not.toBeNull();
     expect(localContainer.querySelector('.bottom-1')).not.toBeNull();
     expect(localContainer.querySelector('.top-1')).toBeNull();
+  });
+
+  describe('speaking highlight', () => {
+    it('applies a highlight ring when the participant is speaking', () => {
+      const { container } = render(<ParticipantTile participant={participant({ speaking: true })} />);
+
+      expect(container.firstChild).toHaveClass('ring-2');
+      expect(container.firstChild).toHaveClass('ring-success');
+    });
+
+    it('does not apply a highlight ring when the participant is not speaking', () => {
+      const { container } = render(<ParticipantTile participant={participant({ speaking: false })} />);
+
+      expect(container.firstChild).not.toHaveClass('ring-2');
+    });
+
+    it('does not permanently highlight the local participant when they are not speaking', () => {
+      const { container } = render(<ParticipantTile participant={participant({ isLocal: true, speaking: false })} />);
+
+      expect(container.firstChild).not.toHaveClass('ring-2');
+      expect(container.firstChild).not.toHaveClass('ring-brand');
+    });
+
+    it('highlights the local participant while they are speaking', () => {
+      const { container } = render(<ParticipantTile participant={participant({ isLocal: true, speaking: true })} />);
+
+      expect(container.firstChild).toHaveClass('ring-2');
+      expect(container.firstChild).toHaveClass('ring-success');
+    });
   });
 
   describe('avatar and tile color', () => {

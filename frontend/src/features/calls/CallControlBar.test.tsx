@@ -24,6 +24,7 @@ function localParticipant(overrides: Partial<VoiceParticipant> = {}): VoiceParti
     screenShareHasAudio: false,
     screenShareAudioEnabled: false,
     connectionQuality: ConnectionQuality.Unknown,
+    speaking: false,
     ...overrides,
   };
 }

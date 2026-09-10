@@ -50,7 +50,7 @@ export function ParticipantTile({ participant, avatarUrl, deafened = false }: Pa
     <div
       className={`group relative flex aspect-video items-center justify-center overflow-hidden rounded ${
         showVideo ? 'bg-gray-800' : tileColorFor(participant.identity)
-      } ${participant.isLocal ? 'ring-2 ring-brand' : ''}`}
+      } ${participant.speaking ? 'ring-2 ring-success' : ''}`}
     >
       {showVideo ? (
         <video ref={videoRef} muted autoPlay playsInline className="h-full w-full object-cover" />

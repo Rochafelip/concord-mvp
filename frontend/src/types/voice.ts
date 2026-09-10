@@ -25,6 +25,7 @@ export interface VoiceParticipant {
   screenShareHasAudio: boolean;
   screenShareAudioEnabled: boolean;
   connectionQuality: ConnectionQuality;
+  speaking: boolean;
 }
 
 /**

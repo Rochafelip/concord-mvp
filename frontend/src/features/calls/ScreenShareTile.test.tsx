@@ -43,6 +43,7 @@ function sharingParticipant(overrides: Partial<VoiceParticipant> = {}): VoicePar
     screenShareHasAudio: false,
     screenShareAudioEnabled: true,
     connectionQuality: ConnectionQuality.Unknown,
+    speaking: false,
     ...overrides,
   };
 }

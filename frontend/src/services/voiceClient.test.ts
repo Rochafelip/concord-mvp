@@ -1026,6 +1026,62 @@ describe('voiceClient', () => {
     });
   });
 
+  describe('active speaker highlighting', () => {
+    it("marks the local participant's store entry as speaking once they become an active speaker", async () => {
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+      const room = roomInstances[0];
+
+      const onActiveSpeakersChanged = handlerFor(room, 'activeSpeakersChanged');
+      onActiveSpeakersChanged([room.localParticipant]);
+
+      const local = useVoiceStore.getState().participants.find((p) => p.isLocal);
+      expect(local?.speaking).toBe(true);
+    });
+
+    it("clears the local participant's store entry speaking flag once they stop being an active speaker", async () => {
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+      const room = roomInstances[0];
+      const onActiveSpeakersChanged = handlerFor(room, 'activeSpeakersChanged');
+      onActiveSpeakersChanged([room.localParticipant]);
+
+      onActiveSpeakersChanged([]);
+
+      const local = useVoiceStore.getState().participants.find((p) => p.isLocal);
+      expect(local?.speaking).toBe(false);
+    });
+
+    it("marks a remote participant's store entry as speaking while they are an active speaker, without marking others", async () => {
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+      const room = roomInstances[0];
+      const bob = remoteParticipant('bob');
+      const carol = remoteParticipant('carol');
+      room.remoteParticipants.set('bob', bob);
+      room.remoteParticipants.set('carol', carol);
+
+      const onActiveSpeakersChanged = handlerFor(room, 'activeSpeakersChanged');
+      onActiveSpeakersChanged([bob]);
+
+      const state = useVoiceStore.getState().participants;
+      expect(state.find((p) => p.identity === 'bob')?.speaking).toBe(true);
+      expect(state.find((p) => p.identity === 'carol')?.speaking).toBe(false);
+      expect(state.find((p) => p.isLocal)?.speaking).toBe(false);
+    });
+
+    it('does not rebuild the participant list when ActiveSpeakersChanged repeats the same speaker set (e.g. a level-only reorder)', async () => {
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+      const room = roomInstances[0];
+      const onActiveSpeakersChanged = handlerFor(room, 'activeSpeakersChanged');
+      onActiveSpeakersChanged([room.localParticipant]);
+      const participantsAfterFirstUpdate = useVoiceStore.getState().participants;
+
+      // LiveKit re-emits ActiveSpeakersChanged on every audio-level-driven reorder, not just on
+      // membership changes — the same speaker set arriving again should be a no-op for the store.
+      onActiveSpeakersChanged([room.localParticipant]);
+
+      expect(useVoiceStore.getState().participants).toBe(participantsAfterFirstUpdate);
+    });
+  });
+
   describe('sound notifications', () => {
     it('plays a self-join sound after connecting', async () => {
       await connectVoice('channel-1', 'token', 'wss://example.test/livekit');

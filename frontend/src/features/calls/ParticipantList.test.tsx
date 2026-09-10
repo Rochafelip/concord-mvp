@@ -25,6 +25,7 @@ function participant(overrides: Partial<VoiceParticipant> = {}): VoiceParticipan
     screenShareHasAudio: false,
     screenShareAudioEnabled: false,
     connectionQuality: ConnectionQuality.Unknown,
+    speaking: false,
     ...overrides,
   };
 }

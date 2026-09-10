@@ -21,6 +21,14 @@ function audioKey(identity: string, source: Track.Source): string {
   return `${identity}:${source}`;
 }
 
+function identitySetsEqual(a: Set<string>, b: Set<string>): boolean {
+  if (a.size !== b.size) return false;
+  for (const identity of a) {
+    if (!b.has(identity)) return false;
+  }
+  return true;
+}
+
 interface ReportedPresence {
   muted: boolean;
   cameraOn: boolean;
@@ -47,6 +55,11 @@ class VoiceClient {
   private currentChannelId: string | null = null;
   private lastReportedPresence: ReportedPresence | null = null;
   private localSpeaking = false;
+  // Identities of every participant (local or remote) LiveKit currently considers an active
+  // speaker, from RoomEvent.ActiveSpeakersChanged — feeds VoiceParticipant.speaking so
+  // ParticipantTile's highlight ring tracks live audio the same way ChannelSidebar's does,
+  // instead of being permanently on for the local participant regardless of activity.
+  private speakingIdentities = new Set<string>();
   // Tracks remote participant identities across syncParticipants() calls so join/leave sounds can
   // be diffed against the previous sync rather than played for everyone already in the room.
   private knownRemoteIds = new Set<string>();
@@ -152,6 +165,7 @@ class VoiceClient {
     this.currentChannelId = null;
     this.lastReportedPresence = null;
     this.localSpeaking = false;
+    this.speakingIdentities = new Set();
     this.knownRemoteIds = new Set();
     this.hasSeededRemoteIds = false;
     // Removed proactively rather than left for the room's own TrackUnsubscribed events to clean
@@ -350,8 +364,17 @@ class VoiceClient {
   private handleActiveSpeakersChanged = (speakers: Participant[]): void => {
     const room = this.room;
     if (!room) return;
-    this.localSpeaking = speakers.includes(room.localParticipant);
-    this.reportPresenceIfChanged();
+    const nextSpeakingIdentities = new Set(speakers.map((speaker) => speaker.identity));
+    // LiveKit re-emits this event on every audio-level-driven reorder of `activeSpeakers`, not
+    // just when who's-speaking membership actually changes — skip the resync below when the set
+    // is unchanged so tiles aren't rebuilt/re-rendered on every level tick while someone talks.
+    if (identitySetsEqual(nextSpeakingIdentities, this.speakingIdentities)) return;
+    this.speakingIdentities = nextSpeakingIdentities;
+    this.localSpeaking = this.speakingIdentities.has(room.localParticipant.identity);
+    // Resyncs (not just reportPresenceIfChanged) so every tile's `speaking` flag — local and
+    // remote — picks up the change; reportPresenceIfChanged alone only broadcasts the local
+    // participant's own state for the sidebar and wouldn't touch the grid's store data.
+    this.syncParticipants();
   };
 
   // A subscribed remote audio track is not audible until it is attached to a media element —
@@ -414,8 +437,10 @@ class VoiceClient {
     this.hasSeededRemoteIds = true;
 
     const participants: VoiceParticipant[] = [
-      toVoiceParticipant(room.localParticipant, true),
-      ...Array.from(room.remoteParticipants.values(), (p) => toVoiceParticipant(p, false)),
+      toVoiceParticipant(room.localParticipant, true, this.speakingIdentities.has(room.localParticipant.identity)),
+      ...Array.from(room.remoteParticipants.values(), (p) =>
+        toVoiceParticipant(p, false, this.speakingIdentities.has(p.identity)),
+      ),
     ];
 
     useVoiceStore.getState().setParticipants(participants);
@@ -465,7 +490,11 @@ function abandonRoom(room: Room): void {
   room.disconnect().catch(() => {});
 }
 
-function toVoiceParticipant(participant: Participant | LocalParticipant, isLocal: boolean): VoiceParticipant {
+function toVoiceParticipant(
+  participant: Participant | LocalParticipant,
+  isLocal: boolean,
+  speaking: boolean,
+): VoiceParticipant {
   const screenShareAudioPublication = participant.getTrackPublication(Track.Source.ScreenShareAudio);
   return {
     identity: participant.identity,
@@ -479,6 +508,7 @@ function toVoiceParticipant(participant: Participant | LocalParticipant, isLocal
     screenShareHasAudio: screenShareAudioPublication != null,
     screenShareAudioEnabled: screenShareAudioPublication != null && !screenShareAudioPublication.isMuted,
     connectionQuality: participant.connectionQuality,
+    speaking,
   };
 }
 
