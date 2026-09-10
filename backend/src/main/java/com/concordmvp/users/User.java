@@ -35,6 +35,16 @@ public class User {
     @Column(name = "avatar_url", length = 500)
     private String avatarUrl;
 
+    @Column(name = "email_verified", nullable = false)
+    private boolean emailVerified;
+
+    /**
+     * When the password last changed. Null means never -- JwtAuthFilter treats that as "no
+     * session has been revoked" rather than rejecting everything.
+     */
+    @Column(name = "password_changed_at")
+    private Instant passwordChangedAt;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -54,6 +64,22 @@ public class User {
     @PreUpdate
     protected void onUpdate() {
         this.updatedAt = Instant.now();
+    }
+
+    public boolean isEmailVerified() {
+        return emailVerified;
+    }
+
+    public void setEmailVerified(boolean emailVerified) {
+        this.emailVerified = emailVerified;
+    }
+
+    public Instant getPasswordChangedAt() {
+        return passwordChangedAt;
+    }
+
+    public void setPasswordChangedAt(Instant passwordChangedAt) {
+        this.passwordChangedAt = passwordChangedAt;
     }
 
     public UUID getId() {
