@@ -19,7 +19,7 @@ export function PasswordInput({ label, ...rest }: PasswordInputProps) {
         <button
           type="button"
           onClick={() => setRevealed((current) => !current)}
-          aria-label={revealed ? 'Hide password' : 'Show password'}
+          aria-label={revealed ? 'Ocultar senha' : 'Mostrar senha'}
           className="flex h-8 w-8 items-center justify-center rounded text-muted transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
         >
           <Icon size={16} aria-hidden="true" />

@@ -35,17 +35,17 @@ export function RegisterPage() {
     registerMutation.error instanceof ApiError
       ? registerMutation.error.message
       : registerMutation.error
-        ? 'Something went wrong. Please try again.'
+        ? 'Algo deu errado. Tente novamente.'
         : null;
 
   return (
     <AuthCard
-      title="Create an account"
+      title="Criar sua conta"
       footer={
         <>
-          Already have an account?{' '}
+          Já tem uma conta?{' '}
           <Link to="/login" className="font-medium text-brand hover:text-brand-hover">
-            Log in
+            Entrar
           </Link>
         </>
       }
@@ -54,7 +54,7 @@ export function RegisterPage() {
         <ErrorBanner message={errorMessage} />
 
         <TextInput
-          label="Username"
+          label="Nome de usuário"
           name="username"
           autoComplete="username"
           required
@@ -63,7 +63,7 @@ export function RegisterPage() {
         />
 
         <TextInput
-          label="Display name"
+          label="Nome de exibição"
           name="displayName"
           autoComplete="nickname"
           required
@@ -72,7 +72,7 @@ export function RegisterPage() {
         />
 
         <TextInput
-          label="Email"
+          label="E-mail"
           type="email"
           name="email"
           autoComplete="email"
@@ -84,7 +84,7 @@ export function RegisterPage() {
         <div className="space-y-2">
           <PasswordInput
             ref={passwordRef}
-            label="Password"
+            label="Senha"
             name="password"
             autoComplete="new-password"
             required
@@ -96,7 +96,7 @@ export function RegisterPage() {
         </div>
 
         <Button type="submit" disabled={registerMutation.isPending} className="w-full">
-          {registerMutation.isPending ? 'Creating account…' : 'Register'}
+          {registerMutation.isPending ? 'Criando conta…' : 'Criar conta'}
         </Button>
       </form>
     </AuthCard>

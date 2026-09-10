@@ -50,29 +50,29 @@ describe('LoginPage', () => {
   it('renders the login form', () => {
     renderLoginPage();
 
-    expect(screen.getByLabelText('Email')).toBeInTheDocument();
-    expect(screen.getByLabelText('Password')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Log in' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Register' })).toBeInTheDocument();
+    expect(screen.getByLabelText('E-mail')).toBeInTheDocument();
+    expect(screen.getByLabelText('Senha')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Entrar' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Criar conta' })).toBeInTheDocument();
   });
 
   it('lets the user reveal and re-hide the password', async () => {
     const user = userEvent.setup();
     renderLoginPage();
 
-    expect(screen.getByLabelText('Password')).toHaveAttribute('type', 'password');
+    expect(screen.getByLabelText('Senha')).toHaveAttribute('type', 'password');
 
-    await user.click(screen.getByRole('button', { name: 'Show password' }));
-    expect(screen.getByLabelText('Password')).toHaveAttribute('type', 'text');
+    await user.click(screen.getByRole('button', { name: 'Mostrar senha' }));
+    expect(screen.getByLabelText('Senha')).toHaveAttribute('type', 'text');
 
-    await user.click(screen.getByRole('button', { name: 'Hide password' }));
-    expect(screen.getByLabelText('Password')).toHaveAttribute('type', 'password');
+    await user.click(screen.getByRole('button', { name: 'Ocultar senha' }));
+    expect(screen.getByLabelText('Senha')).toHaveAttribute('type', 'password');
   });
 
   it('offers a route to password recovery', () => {
     renderLoginPage();
 
-    expect(screen.getByRole('link', { name: 'Forgot your password?' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Esqueceu sua senha?' })).toHaveAttribute(
       'href',
       '/forgot-password',
     );
@@ -83,9 +83,9 @@ describe('LoginPage', () => {
     const user = userEvent.setup();
     renderLoginPage();
 
-    await user.type(screen.getByLabelText('Email'), 'a@b.com');
-    await user.type(screen.getByLabelText('Password'), 'wrongpassword');
-    await user.click(screen.getByRole('button', { name: 'Log in' }));
+    await user.type(screen.getByLabelText('E-mail'), 'a@b.com');
+    await user.type(screen.getByLabelText('Senha'), 'wrongpassword');
+    await user.click(screen.getByRole('button', { name: 'Entrar' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Invalid email or password');
   });
@@ -100,11 +100,11 @@ describe('LoginPage', () => {
     const user = userEvent.setup();
     renderLoginPage();
 
-    await user.type(screen.getByLabelText('Email'), 'a@b.com');
-    await user.type(screen.getByLabelText('Password'), 'password123');
-    await user.click(screen.getByRole('button', { name: 'Log in' }));
+    await user.type(screen.getByLabelText('E-mail'), 'a@b.com');
+    await user.type(screen.getByLabelText('Senha'), 'password123');
+    await user.click(screen.getByRole('button', { name: 'Entrar' }));
 
-    expect(screen.getByRole('button', { name: /Logging in/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Entrando/ })).toBeDisabled();
 
     resolveLogin({
       userId: 'u1',
@@ -124,9 +124,9 @@ describe('LoginPage', () => {
     const user = userEvent.setup();
     renderLoginPage();
 
-    await user.type(screen.getByLabelText('Email'), 'a@b.com');
-    await user.type(screen.getByLabelText('Password'), 'password123');
-    await user.click(screen.getByRole('button', { name: 'Log in' }));
+    await user.type(screen.getByLabelText('E-mail'), 'a@b.com');
+    await user.type(screen.getByLabelText('Senha'), 'password123');
+    await user.click(screen.getByRole('button', { name: 'Entrar' }));
 
     await waitFor(() => {
       expect(useAuthStore.getState().isAuthenticated).toBe(true);

@@ -20,7 +20,7 @@ export function PasswordRequirements({ value, id }: PasswordRequirementsProps) {
           >
             <Icon size={14} aria-hidden="true" className="shrink-0" />
             {rule.label}
-            <span className="sr-only">{met ? 'met' : 'missing'}</span>
+            <span className="sr-only">{met ? 'atendido' : 'faltando'}</span>
           </li>
         );
       })}

@@ -5,10 +5,10 @@ import { AuthCard } from './AuthCard';
 export function ForgotPasswordPage() {
   return (
     <AuthCard
-      title="Forgot your password?"
+      title="Esqueceu sua senha?"
       footer={
         <Link to="/login" className="font-medium text-brand hover:text-brand-hover">
-          Back to log in
+          Voltar para o login
         </Link>
       }
     >

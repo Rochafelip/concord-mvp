@@ -38,17 +38,17 @@ export function LoginPage() {
     loginMutation.error instanceof ApiError
       ? loginMutation.error.message
       : loginMutation.error
-        ? 'Something went wrong. Please try again.'
+        ? 'Algo deu errado. Tente novamente.'
         : null;
 
   return (
     <AuthCard
-      title="Log in"
+      title="Entrar"
       footer={
         <>
-          Don't have an account?{' '}
+          Não tem uma conta?{' '}
           <Link to="/register" className="font-medium text-brand hover:text-brand-hover">
-            Register
+            Criar conta
           </Link>
         </>
       }
@@ -69,7 +69,7 @@ export function LoginPage() {
         <ErrorBanner message={errorMessage} />
 
         <TextInput
-          label="Email"
+          label="E-mail"
           type="email"
           name="email"
           autoComplete="email"
@@ -80,7 +80,7 @@ export function LoginPage() {
 
         <div className="space-y-1">
           <PasswordInput
-            label="Password"
+            label="Senha"
             name="password"
             autoComplete="current-password"
             required
@@ -92,13 +92,13 @@ export function LoginPage() {
               to="/forgot-password"
               className="text-caption font-medium text-brand hover:text-brand-hover"
             >
-              Forgot your password?
+              Esqueceu sua senha?
             </Link>
           </div>
         </div>
 
         <Button type="submit" disabled={loginMutation.isPending} className="w-full">
-          {loginMutation.isPending ? 'Logging in…' : 'Log in'}
+          {loginMutation.isPending ? 'Entrando…' : 'Entrar'}
         </Button>
       </form>
     </AuthCard>

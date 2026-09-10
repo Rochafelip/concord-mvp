@@ -85,11 +85,11 @@ describe('SettingsPage', () => {
     const user = userEvent.setup();
     renderSettingsPage();
 
-    expect(screen.getByText('At least 8 characters')).toBeInTheDocument();
+    expect(screen.getByText('Pelo menos 8 caracteres')).toBeInTheDocument();
 
     await user.type(screen.getByLabelText('New password'), 'Abcdefg1');
 
-    const met = screen.getAllByText('met');
+    const met = screen.getAllByText('atendido');
     expect(met).toHaveLength(4);
   });
 

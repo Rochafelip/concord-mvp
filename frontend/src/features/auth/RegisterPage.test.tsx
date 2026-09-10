@@ -31,12 +31,12 @@ describe('RegisterPage', () => {
   it('renders the registration form', () => {
     renderRegisterPage();
 
-    expect(screen.getByLabelText('Username')).toBeInTheDocument();
-    expect(screen.getByLabelText('Display name')).toBeInTheDocument();
-    expect(screen.getByLabelText('Email')).toBeInTheDocument();
-    expect(screen.getByLabelText('Password')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Register' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Log in' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Nome de usuário')).toBeInTheDocument();
+    expect(screen.getByLabelText('Nome de exibição')).toBeInTheDocument();
+    expect(screen.getByLabelText('E-mail')).toBeInTheDocument();
+    expect(screen.getByLabelText('Senha')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Criar conta' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Entrar' })).toBeInTheDocument();
   });
 
   it('shows the backend validation message when the mutation fails', async () => {
@@ -46,11 +46,11 @@ describe('RegisterPage', () => {
     const user = userEvent.setup();
     renderRegisterPage();
 
-    await user.type(screen.getByLabelText('Username'), 'jdoe');
-    await user.type(screen.getByLabelText('Display name'), 'John Doe');
-    await user.type(screen.getByLabelText('Email'), 'not-an-email');
-    await user.type(screen.getByLabelText('Password'), 'Password123');
-    await user.click(screen.getByRole('button', { name: 'Register' }));
+    await user.type(screen.getByLabelText('Nome de usuário'), 'jdoe');
+    await user.type(screen.getByLabelText('Nome de exibição'), 'John Doe');
+    await user.type(screen.getByLabelText('E-mail'), 'not-an-email');
+    await user.type(screen.getByLabelText('Senha'), 'Password123');
+    await user.click(screen.getByRole('button', { name: 'Criar conta' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'email: must be a well-formed email address',
@@ -62,24 +62,24 @@ describe('RegisterPage', () => {
     renderRegisterPage();
 
     const lengthRule = () =>
-      screen.getAllByRole('listitem').find((item) => item.textContent?.includes('At least 8 characters'))!;
+      screen.getAllByRole('listitem').find((item) => item.textContent?.includes('Pelo menos 8 caracteres'))!;
 
-    expect(lengthRule()).toHaveTextContent('missing');
+    expect(lengthRule()).toHaveTextContent('faltando');
 
-    await user.type(screen.getByLabelText('Password'), 'Password123');
+    await user.type(screen.getByLabelText('Senha'), 'Password123');
 
-    expect(lengthRule()).toHaveTextContent('met');
+    expect(lengthRule()).toHaveTextContent('atendido');
   });
 
   it('does not call the API when the password fails the requirements', async () => {
     const user = userEvent.setup();
     renderRegisterPage();
 
-    await user.type(screen.getByLabelText('Username'), 'jdoe');
-    await user.type(screen.getByLabelText('Display name'), 'John Doe');
-    await user.type(screen.getByLabelText('Email'), 'a@b.com');
-    await user.type(screen.getByLabelText('Password'), 'password');
-    await user.click(screen.getByRole('button', { name: 'Register' }));
+    await user.type(screen.getByLabelText('Nome de usuário'), 'jdoe');
+    await user.type(screen.getByLabelText('Nome de exibição'), 'John Doe');
+    await user.type(screen.getByLabelText('E-mail'), 'a@b.com');
+    await user.type(screen.getByLabelText('Senha'), 'password');
+    await user.click(screen.getByRole('button', { name: 'Criar conta' }));
 
     expect(api.register).not.toHaveBeenCalled();
   });
@@ -88,30 +88,30 @@ describe('RegisterPage', () => {
     const user = userEvent.setup();
     renderRegisterPage();
 
-    await user.type(screen.getByLabelText('Username'), 'jdoe');
-    await user.type(screen.getByLabelText('Display name'), 'John Doe');
-    await user.type(screen.getByLabelText('Email'), 'a@b.com');
-    await user.type(screen.getByLabelText('Password'), 'password');
-    await user.click(screen.getByRole('button', { name: 'Register' }));
+    await user.type(screen.getByLabelText('Nome de usuário'), 'jdoe');
+    await user.type(screen.getByLabelText('Nome de exibição'), 'John Doe');
+    await user.type(screen.getByLabelText('E-mail'), 'a@b.com');
+    await user.type(screen.getByLabelText('Senha'), 'password');
+    await user.click(screen.getByRole('button', { name: 'Criar conta' }));
 
-    expect(screen.getByLabelText('Password')).toHaveFocus();
+    expect(screen.getByLabelText('Senha')).toHaveFocus();
   });
 
   it('describes the password field with the requirement list', () => {
     renderRegisterPage();
 
-    const describedBy = screen.getByLabelText('Password').getAttribute('aria-describedby');
+    const describedBy = screen.getByLabelText('Senha').getAttribute('aria-describedby');
     expect(describedBy).toBeTruthy();
-    expect(document.getElementById(describedBy!)).toHaveTextContent('At least 8 characters');
+    expect(document.getElementById(describedBy!)).toHaveTextContent('Pelo menos 8 caracteres');
   });
 
   it('lets the user reveal the password', async () => {
     const user = userEvent.setup();
     renderRegisterPage();
 
-    await user.click(screen.getByRole('button', { name: 'Show password' }));
+    await user.click(screen.getByRole('button', { name: 'Mostrar senha' }));
 
-    expect(screen.getByLabelText('Password')).toHaveAttribute('type', 'text');
+    expect(screen.getByLabelText('Senha')).toHaveAttribute('type', 'text');
   });
 
   it('disables the submit button while the mutation is pending', async () => {
@@ -124,13 +124,13 @@ describe('RegisterPage', () => {
     const user = userEvent.setup();
     renderRegisterPage();
 
-    await user.type(screen.getByLabelText('Username'), 'jdoe');
-    await user.type(screen.getByLabelText('Display name'), 'John Doe');
-    await user.type(screen.getByLabelText('Email'), 'a@b.com');
-    await user.type(screen.getByLabelText('Password'), 'Password123');
-    await user.click(screen.getByRole('button', { name: 'Register' }));
+    await user.type(screen.getByLabelText('Nome de usuário'), 'jdoe');
+    await user.type(screen.getByLabelText('Nome de exibição'), 'John Doe');
+    await user.type(screen.getByLabelText('E-mail'), 'a@b.com');
+    await user.type(screen.getByLabelText('Senha'), 'Password123');
+    await user.click(screen.getByRole('button', { name: 'Criar conta' }));
 
-    expect(screen.getByRole('button', { name: /Creating account/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Criando conta/ })).toBeDisabled();
 
     resolveRegister({
       userId: 'u1',
@@ -150,11 +150,11 @@ describe('RegisterPage', () => {
     const user = userEvent.setup();
     renderRegisterPage();
 
-    await user.type(screen.getByLabelText('Username'), 'jdoe');
-    await user.type(screen.getByLabelText('Display name'), 'John Doe');
-    await user.type(screen.getByLabelText('Email'), 'a@b.com');
-    await user.type(screen.getByLabelText('Password'), 'Password123');
-    await user.click(screen.getByRole('button', { name: 'Register' }));
+    await user.type(screen.getByLabelText('Nome de usuário'), 'jdoe');
+    await user.type(screen.getByLabelText('Nome de exibição'), 'John Doe');
+    await user.type(screen.getByLabelText('E-mail'), 'a@b.com');
+    await user.type(screen.getByLabelText('Senha'), 'Password123');
+    await user.click(screen.getByRole('button', { name: 'Criar conta' }));
 
     await waitFor(() => {
       expect(useAuthStore.getState().isAuthenticated).toBe(true);

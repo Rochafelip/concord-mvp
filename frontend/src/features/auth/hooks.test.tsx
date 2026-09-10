@@ -31,9 +31,9 @@ function renderLoginArrivingFrom(from: string | undefined) {
 
 async function submitLogin() {
   const user = userEvent.setup();
-  await user.type(screen.getByLabelText('Email'), 'a@b.com');
-  await user.type(screen.getByLabelText('Password'), 'Password123');
-  await user.click(screen.getByRole('button', { name: 'Log in' }));
+  await user.type(screen.getByLabelText('E-mail'), 'a@b.com');
+  await user.type(screen.getByLabelText('Senha'), 'Password123');
+  await user.click(screen.getByRole('button', { name: 'Entrar' }));
 }
 
 describe('useLogin redirect target', () => {

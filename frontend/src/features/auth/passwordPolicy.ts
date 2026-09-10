@@ -4,10 +4,10 @@ export interface PasswordRule {
 }
 
 export const PASSWORD_RULES: PasswordRule[] = [
-  { label: 'At least 8 characters', isMet: (value) => value.length >= 8 },
-  { label: 'One uppercase letter', isMet: (value) => /[A-Z]/.test(value) },
-  { label: 'One lowercase letter', isMet: (value) => /[a-z]/.test(value) },
-  { label: 'One number', isMet: (value) => /[0-9]/.test(value) },
+  { label: 'Pelo menos 8 caracteres', isMet: (value) => value.length >= 8 },
+  { label: 'Uma letra maiúscula', isMet: (value) => /[A-Z]/.test(value) },
+  { label: 'Uma letra minúscula', isMet: (value) => /[a-z]/.test(value) },
+  { label: 'Um número', isMet: (value) => /[0-9]/.test(value) },
 ];
 
 export function isPasswordValid(value: string): boolean {

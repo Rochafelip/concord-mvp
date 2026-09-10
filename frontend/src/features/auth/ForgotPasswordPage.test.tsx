@@ -12,7 +12,7 @@ describe('ForgotPasswordPage', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Forgot your password?' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Esqueceu sua senha?' })).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent(/not available yet/i);
   });
 
@@ -23,7 +23,7 @@ describe('ForgotPasswordPage', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('link', { name: 'Back to log in' })).toHaveAttribute('href', '/login');
+    expect(screen.getByRole('link', { name: 'Voltar para o login' })).toHaveAttribute('href', '/login');
   });
 
   it('is reachable at /forgot-password', () => {
@@ -33,6 +33,6 @@ describe('ForgotPasswordPage', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Forgot your password?' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Esqueceu sua senha?' })).toBeInTheDocument();
   });
 });

@@ -13,48 +13,48 @@ describe('PasswordRequirements', () => {
   it('lists every requirement as missing for an empty password', () => {
     render(<PasswordRequirements value="" />);
 
-    expect(ruleFor('At least 8 characters')).toHaveTextContent('missing');
-    expect(ruleFor('One uppercase letter')).toHaveTextContent('missing');
-    expect(ruleFor('One lowercase letter')).toHaveTextContent('missing');
-    expect(ruleFor('One number')).toHaveTextContent('missing');
+    expect(ruleFor('Pelo menos 8 caracteres')).toHaveTextContent('faltando');
+    expect(ruleFor('Uma letra maiúscula')).toHaveTextContent('faltando');
+    expect(ruleFor('Uma letra minúscula')).toHaveTextContent('faltando');
+    expect(ruleFor('Um número')).toHaveTextContent('faltando');
   });
 
   it('marks the length rule met once the password is long enough', () => {
     render(<PasswordRequirements value="abcdefgh" />);
 
-    expect(ruleFor('At least 8 characters')).toHaveTextContent('met');
-    expect(ruleFor('At least 8 characters')).not.toHaveTextContent('missing');
+    expect(ruleFor('Pelo menos 8 caracteres')).toHaveTextContent('atendido');
+    expect(ruleFor('Pelo menos 8 caracteres')).not.toHaveTextContent('faltando');
   });
 
   it('marks the uppercase rule met only when an uppercase letter is present', () => {
     const { rerender } = render(<PasswordRequirements value="abcdefgh" />);
-    expect(ruleFor('One uppercase letter')).toHaveTextContent('missing');
+    expect(ruleFor('Uma letra maiúscula')).toHaveTextContent('faltando');
 
     rerender(<PasswordRequirements value="abcdefgH" />);
-    expect(ruleFor('One uppercase letter')).toHaveTextContent('met');
+    expect(ruleFor('Uma letra maiúscula')).toHaveTextContent('atendido');
   });
 
   it('marks the lowercase rule met only when a lowercase letter is present', () => {
     const { rerender } = render(<PasswordRequirements value="ABCDEFGH" />);
-    expect(ruleFor('One lowercase letter')).toHaveTextContent('missing');
+    expect(ruleFor('Uma letra minúscula')).toHaveTextContent('faltando');
 
     rerender(<PasswordRequirements value="ABCDEFGh" />);
-    expect(ruleFor('One lowercase letter')).toHaveTextContent('met');
+    expect(ruleFor('Uma letra minúscula')).toHaveTextContent('atendido');
   });
 
   it('marks the number rule met only when a digit is present', () => {
     const { rerender } = render(<PasswordRequirements value="abcdefgh" />);
-    expect(ruleFor('One number')).toHaveTextContent('missing');
+    expect(ruleFor('Um número')).toHaveTextContent('faltando');
 
     rerender(<PasswordRequirements value="abcdefg1" />);
-    expect(ruleFor('One number')).toHaveTextContent('met');
+    expect(ruleFor('Um número')).toHaveTextContent('atendido');
   });
 
   it('distinguishes met from missing without relying on color', () => {
     render(<PasswordRequirements value="abcdefgh" />);
 
-    const met = ruleFor('At least 8 characters').querySelector('svg');
-    const missing = ruleFor('One number').querySelector('svg');
+    const met = ruleFor('Pelo menos 8 caracteres').querySelector('svg');
+    const missing = ruleFor('Um número').querySelector('svg');
 
     expect(met).toBeTruthy();
     expect(missing).toBeTruthy();
