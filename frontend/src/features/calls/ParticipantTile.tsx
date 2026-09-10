@@ -31,6 +31,12 @@ interface ParticipantTileProps {
    * range input inside another interactive element. See
    * docs/superpowers/specs/2026-09-09-call-focus-mode-design.md. */
   onFocusClick?: () => void;
+  /** When true, the volume control reveals on hover over an ancestor carrying Tailwind's named
+   * `group/camera-grid` class instead of this tile's own hover — used by CameraGrid so hovering
+   * anywhere in the grid reveals every visible tile's controls at once. Defaults to false, which
+   * preserves the original per-tile hover for FocusedCallView's single focused tile. See
+   * docs/superpowers/specs/2026-09-09-call-grid-controls-hover-design.md. */
+  revealOnGridHover?: boolean;
 }
 
 const CONNECTION_ISSUE_QUALITIES: ConnectionQuality[] = [ConnectionQuality.Poor, ConnectionQuality.Lost];
@@ -57,6 +63,7 @@ export function ParticipantTile({
   className = '',
   showVolumeControl = true,
   onFocusClick,
+  revealOnGridHover = false,
 }: ParticipantTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const { videoTrack } = participant;
@@ -114,7 +121,11 @@ export function ParticipantTile({
       </span>
 
       {!participant.isLocal && showVolumeControl && (
-        <div className="absolute right-1 top-1 opacity-0 transition-opacity group-hover:opacity-100">
+        <div
+          className={`absolute right-1 top-1 opacity-0 transition-opacity focus-within:opacity-100 ${
+            revealOnGridHover ? 'group-hover/camera-grid:opacity-100' : 'group-hover:opacity-100'
+          }`}
+        >
           <VolumeControl
             label={participant.name}
             onVolumeChange={(volume) => voiceClient.setParticipantVolume(participant.identity, volume)}
@@ -127,7 +138,7 @@ export function ParticipantTile({
           type="button"
           aria-label={`Focus on ${participant.name}'s camera`}
           onClick={onFocusClick}
-          className="absolute bottom-1 right-1 flex h-6 w-6 items-center justify-center rounded bg-black/50 text-white opacity-0 transition-opacity hover:bg-black/70 group-hover:opacity-100"
+          className="absolute bottom-1 right-1 flex h-6 w-6 items-center justify-center rounded bg-black/50 text-white opacity-0 transition-opacity hover:bg-black/70 focus-visible:opacity-100 group-hover/camera-grid:opacity-100"
         >
           <Focus size={14} aria-hidden="true" />
         </button>

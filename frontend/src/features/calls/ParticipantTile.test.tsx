@@ -202,6 +202,24 @@ describe('ParticipantTile', () => {
 
       expect(screen.queryByRole('slider')).not.toBeInTheDocument();
     });
+
+    it('reveals on the tile\'s own hover by default, matching Focus Mode\'s unchanged behavior', () => {
+      render(<ParticipantTile participant={participant({ isLocal: false, identity: 'bob' })} />);
+
+      const wrapper = screen.getByRole('slider', { name: 'Volume for Felipe' }).parentElement?.parentElement;
+      expect(wrapper).toHaveClass('group-hover:opacity-100');
+      expect(wrapper).toHaveClass('focus-within:opacity-100');
+      expect(wrapper).not.toHaveClass('group-hover/camera-grid:opacity-100');
+    });
+
+    it('reveals on the grid\'s hover instead of its own when revealOnGridHover is true', () => {
+      render(<ParticipantTile participant={participant({ isLocal: false, identity: 'bob' })} revealOnGridHover />);
+
+      const wrapper = screen.getByRole('slider', { name: 'Volume for Felipe' }).parentElement?.parentElement;
+      expect(wrapper).toHaveClass('group-hover/camera-grid:opacity-100');
+      expect(wrapper).toHaveClass('focus-within:opacity-100');
+      expect(wrapper).not.toHaveClass('group-hover:opacity-100');
+    });
   });
 
   describe('focus button', () => {
@@ -225,6 +243,19 @@ describe('ParticipantTile', () => {
       await user.click(screen.getByRole('button', { name: "Focus on Felipe's camera" }));
 
       expect(onFocusClick).toHaveBeenCalledTimes(1);
+    });
+
+    it('always reveals on the grid\'s hover and on keyboard focus, regardless of revealOnGridHover', () => {
+      render(
+        <ParticipantTile
+          participant={participant({ name: 'Felipe', isLocal: false, identity: 'bob' })}
+          onFocusClick={vi.fn()}
+        />,
+      );
+
+      const focusButton = screen.getByRole('button', { name: "Focus on Felipe's camera" });
+      expect(focusButton).toHaveClass('group-hover/camera-grid:opacity-100');
+      expect(focusButton).toHaveClass('focus-visible:opacity-100');
     });
   });
 
