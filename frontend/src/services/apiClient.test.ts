@@ -14,7 +14,7 @@ function mockFetchResponse(body: unknown, init: { status: number; ok: boolean })
 describe('apiClient', () => {
   beforeEach(() => {
     localStorage.clear();
-    useAuthStore.setState({ isAuthenticated: false, user: null });
+    useAuthStore.setState({ isAuthenticated: false, user: null, sessionEndedReason: null });
   });
 
   afterEach(() => {
@@ -49,6 +49,23 @@ describe('apiClient', () => {
 
     expect(useAuthStore.getState().isAuthenticated).toBe(false);
     expect(useAuthStore.getState().user).toBeNull();
+  });
+
+  it('marks the cleared session as expired on a 401', async () => {
+    useAuthStore.setState({ isAuthenticated: true, user: null, sessionEndedReason: null });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        mockFetchResponse(
+          { timestamp: '', status: 401, error: 'Unauthorized', message: 'x', path: '/api/v1/users/me' },
+          { status: 401, ok: false },
+        ),
+      ),
+    );
+
+    await expect(apiClient.get('users/me')).rejects.toThrow();
+
+    expect(useAuthStore.getState().sessionEndedReason).toBe('expired');
   });
 
   it('throws an ApiError carrying the backend message for a non-2xx response', async () => {

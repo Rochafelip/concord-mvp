@@ -49,10 +49,11 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   });
 
   if (response.status === 401) {
-    // Session cookie missing/invalid/expired — logging out client-side is enough; there's no
-    // server-side revocation to call (docs/DECISIONS.md D2). Route-level logic (ProtectedRoute)
-    // reacts to the store change and redirects.
-    useAuthStore.getState().logout();
+    // Session cookie missing/invalid/expired — clearing client-side is enough; there's no
+    // server-side revocation to call (docs/DECISIONS.md D2). `expireSession` rather than
+    // `logout` because the user didn't ask for this, and LoginPage says so. Route-level logic
+    // (ProtectedRoute) reacts to the store change and redirects.
+    useAuthStore.getState().expireSession();
   }
 
   if (!response.ok) {
