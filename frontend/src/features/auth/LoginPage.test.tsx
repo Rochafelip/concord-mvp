@@ -79,7 +79,7 @@ describe('LoginPage', () => {
   });
 
   it('shows the backend error message when the mutation fails', async () => {
-    vi.mocked(api.login).mockRejectedValue(new ApiError('Invalid email or password', 401));
+    vi.mocked(api.login).mockRejectedValue(new ApiError('E-mail ou senha inválidos', 401));
     const user = userEvent.setup();
     renderLoginPage();
 
@@ -87,7 +87,7 @@ describe('LoginPage', () => {
     await user.type(screen.getByLabelText('Senha'), 'wrongpassword');
     await user.click(screen.getByRole('button', { name: 'Entrar' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Invalid email or password');
+    expect(await screen.findByRole('alert')).toHaveTextContent('E-mail ou senha inválidos');
   });
 
   it('disables the submit button while the mutation is pending', async () => {

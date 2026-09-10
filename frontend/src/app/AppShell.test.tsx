@@ -96,7 +96,7 @@ describe('AppShell', () => {
   it('renders a link to the settings page in the header', () => {
     renderShell('/app');
 
-    expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/app/settings');
+    expect(screen.getByRole('link', { name: 'Configurações' })).toHaveAttribute('href', '/app/settings');
   });
   it('asks for confirmation instead of logging out on the first click', async () => {
     const user = userEvent.setup();

@@ -48,7 +48,7 @@ export function AppShell() {
           <div className="flex items-center gap-3">
             <button
               type="button"
-              aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+              aria-label={theme === 'dark' ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'}
               onClick={toggle}
               className="flex h-10 w-10 items-center justify-center rounded text-muted hover:text-ink"
             >
@@ -56,7 +56,7 @@ export function AppShell() {
             </button>
             <Link
               to="/app/settings"
-              aria-label="Settings"
+              aria-label="Configurações"
               className="flex h-10 w-10 items-center justify-center rounded text-muted hover:text-ink"
             >
               <Settings size={18} aria-hidden="true" />
@@ -72,7 +72,7 @@ export function AppShell() {
               aria-label="Sair do Concord"
               onClick={() => setConfirmingLogout(true)}
             >
-              Log out
+              Sair
             </Button>
           </div>
         )}
@@ -106,7 +106,7 @@ export function AppShell() {
           </div>
           <button
             type="button"
-            aria-label="Dismiss notification"
+            aria-label="Dispensar aviso"
             onClick={clearNotification}
             className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded text-danger hover:text-danger-hover"
           >

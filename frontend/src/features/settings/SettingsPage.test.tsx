@@ -31,8 +31,8 @@ describe('SettingsPage', () => {
   it('pre-fills the profile form with the current user', () => {
     renderSettingsPage();
 
-    expect(screen.getByLabelText('Username')).toHaveValue('jdoe');
-    expect(screen.getByLabelText('Display name')).toHaveValue('John Doe');
+    expect(screen.getByLabelText('Nome de usuário')).toHaveValue('jdoe');
+    expect(screen.getByLabelText('Nome de exibição')).toHaveValue('John Doe');
   });
 
   it('updates the auth store and shows a success message on save', async () => {
@@ -46,16 +46,16 @@ describe('SettingsPage', () => {
     const user = userEvent.setup();
     renderSettingsPage();
 
-    await user.clear(screen.getByLabelText('Username'));
-    await user.type(screen.getByLabelText('Username'), 'jdoe2');
-    await user.clear(screen.getByLabelText('Display name'));
-    await user.type(screen.getByLabelText('Display name'), 'John Doe Two');
-    await user.click(screen.getByRole('button', { name: 'Save profile' }));
+    await user.clear(screen.getByLabelText('Nome de usuário'));
+    await user.type(screen.getByLabelText('Nome de usuário'), 'jdoe2');
+    await user.clear(screen.getByLabelText('Nome de exibição'));
+    await user.type(screen.getByLabelText('Nome de exibição'), 'John Doe Two');
+    await user.click(screen.getByRole('button', { name: 'Salvar perfil' }));
 
     await waitFor(() => {
       expect(useAuthStore.getState().user?.username).toBe('jdoe2');
     });
-    expect(await screen.findByText('Profile updated successfully')).toBeInTheDocument();
+    expect(await screen.findByText('Perfil atualizado com sucesso')).toBeInTheDocument();
   });
 
   it('shows the backend error message when the profile update fails', async () => {
@@ -63,7 +63,7 @@ describe('SettingsPage', () => {
     const user = userEvent.setup();
     renderSettingsPage();
 
-    await user.click(screen.getByRole('button', { name: 'Save profile' }));
+    await user.click(screen.getByRole('button', { name: 'Salvar perfil' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('username: size must be between 0 and 50');
   });
@@ -72,12 +72,12 @@ describe('SettingsPage', () => {
     const user = userEvent.setup();
     renderSettingsPage();
 
-    await user.type(screen.getByLabelText('Current password'), 'oldpassword');
-    await user.type(screen.getByLabelText('New password'), 'NewPassword1');
-    await user.type(screen.getByLabelText('Confirm new password'), 'NewPassword2');
-    await user.click(screen.getByRole('button', { name: 'Change password' }));
+    await user.type(screen.getByLabelText('Senha atual'), 'oldpassword');
+    await user.type(screen.getByLabelText('Nova senha'), 'NewPassword1');
+    await user.type(screen.getByLabelText('Confirmar nova senha'), 'NewPassword2');
+    await user.click(screen.getByRole('button', { name: 'Alterar senha' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('New password and confirmation do not match');
+    expect(await screen.findByRole('alert')).toHaveTextContent('A nova senha e a confirmação não coincidem');
     expect(api.changePassword).not.toHaveBeenCalled();
   });
 
@@ -87,7 +87,7 @@ describe('SettingsPage', () => {
 
     expect(screen.getByText('Pelo menos 8 caracteres')).toBeInTheDocument();
 
-    await user.type(screen.getByLabelText('New password'), 'Abcdefg1');
+    await user.type(screen.getByLabelText('Nova senha'), 'Abcdefg1');
 
     const met = screen.getAllByText('atendido');
     expect(met).toHaveLength(4);
@@ -97,13 +97,13 @@ describe('SettingsPage', () => {
     const user = userEvent.setup();
     renderSettingsPage();
 
-    await user.type(screen.getByLabelText('Current password'), 'OldPassword1');
-    await user.type(screen.getByLabelText('New password'), 'nouppercase1');
-    await user.type(screen.getByLabelText('Confirm new password'), 'nouppercase1');
-    await user.click(screen.getByRole('button', { name: 'Change password' }));
+    await user.type(screen.getByLabelText('Senha atual'), 'OldPassword1');
+    await user.type(screen.getByLabelText('Nova senha'), 'nouppercase1');
+    await user.type(screen.getByLabelText('Confirmar nova senha'), 'nouppercase1');
+    await user.click(screen.getByRole('button', { name: 'Alterar senha' }));
 
     expect(api.changePassword).not.toHaveBeenCalled();
-    expect(screen.getByLabelText('New password')).toHaveFocus();
+    expect(screen.getByLabelText('Nova senha')).toHaveFocus();
   });
 
   it('clears the password fields and shows a success message on save', async () => {
@@ -111,17 +111,17 @@ describe('SettingsPage', () => {
     const user = userEvent.setup();
     renderSettingsPage();
 
-    await user.type(screen.getByLabelText('Current password'), 'oldpassword');
-    await user.type(screen.getByLabelText('New password'), 'NewPassword1');
-    await user.type(screen.getByLabelText('Confirm new password'), 'NewPassword1');
-    await user.click(screen.getByRole('button', { name: 'Change password' }));
+    await user.type(screen.getByLabelText('Senha atual'), 'oldpassword');
+    await user.type(screen.getByLabelText('Nova senha'), 'NewPassword1');
+    await user.type(screen.getByLabelText('Confirmar nova senha'), 'NewPassword1');
+    await user.click(screen.getByRole('button', { name: 'Alterar senha' }));
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Current password')).toHaveValue('');
+      expect(screen.getByLabelText('Senha atual')).toHaveValue('');
     });
-    expect(screen.getByLabelText('New password')).toHaveValue('');
-    expect(screen.getByLabelText('Confirm new password')).toHaveValue('');
-    expect(await screen.findByText('Password changed successfully')).toBeInTheDocument();
+    expect(screen.getByLabelText('Nova senha')).toHaveValue('');
+    expect(screen.getByLabelText('Confirmar nova senha')).toHaveValue('');
+    expect(await screen.findByText('Senha alterada com sucesso')).toBeInTheDocument();
   });
 
   it('shows the backend error message when the current password is wrong', async () => {
@@ -129,10 +129,10 @@ describe('SettingsPage', () => {
     const user = userEvent.setup();
     renderSettingsPage();
 
-    await user.type(screen.getByLabelText('Current password'), 'wrongpassword');
-    await user.type(screen.getByLabelText('New password'), 'NewPassword1');
-    await user.type(screen.getByLabelText('Confirm new password'), 'NewPassword1');
-    await user.click(screen.getByRole('button', { name: 'Change password' }));
+    await user.type(screen.getByLabelText('Senha atual'), 'wrongpassword');
+    await user.type(screen.getByLabelText('Nova senha'), 'NewPassword1');
+    await user.type(screen.getByLabelText('Confirmar nova senha'), 'NewPassword1');
+    await user.click(screen.getByRole('button', { name: 'Alterar senha' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Current password is incorrect');
   });

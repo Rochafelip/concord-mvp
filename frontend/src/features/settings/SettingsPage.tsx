@@ -14,7 +14,7 @@ const NEW_PASSWORD_REQUIREMENTS_ID = 'new-password-requirements';
 
 function errorMessage(error: unknown): string | null {
   if (error instanceof ApiError) return error.message;
-  if (error) return 'Something went wrong. Please try again.';
+  if (error) return 'Algo deu errado. Tente novamente.';
   return null;
 }
 
@@ -81,15 +81,15 @@ export function SettingsPage() {
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-lg space-y-8 p-8">
-        <h1 className="text-title font-semibold text-ink">Settings</h1>
+        <h1 className="text-title font-semibold text-ink">Configurações</h1>
 
         <form onSubmit={handleProfileSubmit} className="space-y-4" noValidate>
-          <h2 className="text-heading font-medium text-ink">Profile</h2>
+          <h2 className="text-heading font-medium text-ink">Perfil</h2>
           <ErrorBanner message={errorMessage(updateProfileMutation.error)} />
-          {profileSaved && <p className="text-body text-brand">Profile updated successfully</p>}
+          {profileSaved && <p className="text-body text-brand">Perfil atualizado com sucesso</p>}
 
           <TextInput
-            label="Username"
+            label="Nome de usuário"
             name="username"
             autoComplete="username"
             required
@@ -97,7 +97,7 @@ export function SettingsPage() {
             onChange={(event) => setUsername(event.target.value)}
           />
           <TextInput
-            label="Display name"
+            label="Nome de exibição"
             name="displayName"
             autoComplete="nickname"
             required
@@ -105,23 +105,23 @@ export function SettingsPage() {
             onChange={(event) => setDisplayName(event.target.value)}
           />
           <Button type="submit" disabled={updateProfileMutation.isPending}>
-            {updateProfileMutation.isPending ? 'Saving…' : 'Save profile'}
+            {updateProfileMutation.isPending ? 'Salvando…' : 'Salvar perfil'}
           </Button>
         </form>
 
         <form onSubmit={handlePasswordSubmit} className="space-y-4" noValidate>
-          <h2 className="text-heading font-medium text-ink">Password</h2>
+          <h2 className="text-heading font-medium text-ink">Senha</h2>
           <ErrorBanner
             message={
               passwordMismatch
-                ? 'New password and confirmation do not match'
+                ? 'A nova senha e a confirmação não coincidem'
                 : errorMessage(changePasswordMutation.error)
             }
           />
-          {passwordSaved && <p className="text-body text-brand">Password changed successfully</p>}
+          {passwordSaved && <p className="text-body text-brand">Senha alterada com sucesso</p>}
 
           <PasswordInput
-            label="Current password"
+            label="Senha atual"
             name="currentPassword"
             autoComplete="current-password"
             required
@@ -131,7 +131,7 @@ export function SettingsPage() {
           <div className="space-y-2">
             <PasswordInput
               ref={newPasswordRef}
-              label="New password"
+              label="Nova senha"
               name="newPassword"
               autoComplete="new-password"
               required
@@ -142,7 +142,7 @@ export function SettingsPage() {
             <PasswordRequirements id={NEW_PASSWORD_REQUIREMENTS_ID} value={newPassword} />
           </div>
           <PasswordInput
-            label="Confirm new password"
+            label="Confirmar nova senha"
             name="confirmNewPassword"
             autoComplete="new-password"
             required
@@ -150,7 +150,7 @@ export function SettingsPage() {
             onChange={(event) => setConfirmNewPassword(event.target.value)}
           />
           <Button type="submit" disabled={changePasswordMutation.isPending}>
-            {changePasswordMutation.isPending ? 'Saving…' : 'Change password'}
+            {changePasswordMutation.isPending ? 'Salvando…' : 'Alterar senha'}
           </Button>
         </form>
 
