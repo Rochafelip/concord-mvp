@@ -35,6 +35,11 @@ interface ScreenShareTileProps {
  * slides) is illegible squeezed small — but accepts a className override so FocusedCallView's
  * tiered multi-watch area can size it the same way ParticipantTile's tiles are sized.
  *
+ * The fullscreen and volume overlays are hidden until the mouse enters the surrounding watched
+ * area (FocusedCallView's `group/camera-grid` container), matching ParticipantTile — the hover
+ * zone is the whole call area, not each card. See
+ * docs/superpowers/specs/2026-09-09-call-grid-controls-hover-design.md.
+ *
  * The root element also doubles as the Fullscreen API target (see
  * docs/superpowers/specs/2026-09-08-fullscreen-screenshare-design.md): fullscreening it hides
  * every other tile and the app shell for free, since the browser puts the fullscreened element
@@ -120,7 +125,7 @@ export function ScreenShareTile({ participant, className = '', onWatchClick }: S
       className={
         isFullscreen
           ? 'fixed inset-0 z-50 flex items-center justify-center bg-gray-900'
-          : `group relative flex w-full aspect-video items-center justify-center overflow-hidden rounded bg-gray-900 ${className}`
+          : `relative flex w-full aspect-video items-center justify-center overflow-hidden rounded bg-gray-900 ${className}`
       }
     >
       <video ref={videoRef} muted autoPlay playsInline className="h-full w-full object-contain" />
@@ -136,13 +141,13 @@ export function ScreenShareTile({ participant, className = '', onWatchClick }: S
             type="button"
             aria-label="Enter fullscreen"
             onClick={handleEnterFullscreen}
-            className="absolute left-1 top-1 opacity-0 transition-opacity group-hover:opacity-100"
+            className="absolute left-1 top-1 opacity-0 transition-opacity focus-visible:opacity-100 group-hover/camera-grid:opacity-100"
           >
             <Maximize2 size={16} className="text-white" aria-hidden="true" />
           </button>
           {!participant.isLocal && participant.screenShareHasAudio && participant.screenShareAudioEnabled && (
             <div
-              className="absolute right-1 top-1 opacity-0 transition-opacity group-hover:opacity-100"
+              className="absolute right-1 top-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover/camera-grid:opacity-100"
               onClick={stopPropagation}
               onKeyDown={stopPropagation}
             >

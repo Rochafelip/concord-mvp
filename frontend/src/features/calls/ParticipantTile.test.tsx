@@ -203,17 +203,8 @@ describe('ParticipantTile', () => {
       expect(screen.queryByRole('slider')).not.toBeInTheDocument();
     });
 
-    it('reveals on the tile\'s own hover by default, matching Focus Mode\'s unchanged behavior', () => {
+    it('reveals on the surrounding call area\'s hover, never on this tile\'s own hover', () => {
       render(<ParticipantTile participant={participant({ isLocal: false, identity: 'bob' })} />);
-
-      const wrapper = screen.getByRole('slider', { name: 'Volume for Felipe' }).parentElement?.parentElement;
-      expect(wrapper).toHaveClass('group-hover:opacity-100');
-      expect(wrapper).toHaveClass('focus-within:opacity-100');
-      expect(wrapper).not.toHaveClass('group-hover/camera-grid:opacity-100');
-    });
-
-    it('reveals on the grid\'s hover instead of its own when revealOnGridHover is true', () => {
-      render(<ParticipantTile participant={participant({ isLocal: false, identity: 'bob' })} revealOnGridHover />);
 
       const wrapper = screen.getByRole('slider', { name: 'Volume for Felipe' }).parentElement?.parentElement;
       expect(wrapper).toHaveClass('group-hover/camera-grid:opacity-100');

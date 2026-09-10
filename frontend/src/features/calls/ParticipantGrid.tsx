@@ -37,7 +37,6 @@ export function ParticipantGrid({ participants, avatarUrlByUserId, deafenedByUse
           avatarUrl={avatarUrlByUserId.get(participant.identity)}
           deafened={deafenedByUserId.get(participant.identity) ?? false}
           className={tileClassName}
-          revealOnGridHover
           onWatchClick={
             participant.cameraEnabled ? () => onWatch({ type: 'camera', identity: participant.identity }) : undefined
           }

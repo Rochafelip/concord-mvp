@@ -55,7 +55,7 @@ describe('FocusedCallView', () => {
     expect(screen.getByText(/Felipe/)).toBeInTheDocument();
   });
 
-  it('keeps a watched camera tile\'s volume control revealing on its own hover, not the grid\'s', () => {
+  it('reveals a watched camera tile\'s volume control on hover over the whole watched area, not the tile', () => {
     render(
       <FocusedCallView
         participants={[participant({ identity: 'u1', name: 'Felipe', isLocal: false, cameraEnabled: true })]}
@@ -69,9 +69,30 @@ describe('FocusedCallView', () => {
       />,
     );
 
+    expect(screen.getByTestId('watched-area')).toHaveClass('group/camera-grid');
     const wrapper = screen.getByRole('slider', { name: 'Volume for Felipe' }).parentElement?.parentElement;
-    expect(wrapper).toHaveClass('group-hover:opacity-100');
-    expect(wrapper).not.toHaveClass('group-hover/camera-grid:opacity-100');
+    expect(wrapper).toHaveClass('group-hover/camera-grid:opacity-100');
+    expect(wrapper).not.toHaveClass('group-hover:opacity-100');
+  });
+
+  it('reveals a watched share tile\'s fullscreen button on hover over the whole watched area', () => {
+    const track = { attach: vi.fn(), detach: vi.fn() } as never;
+    render(
+      <FocusedCallView
+        participants={[participant({ identity: 'u1', name: 'Felipe', screenShareTrack: track })]}
+        watchTargets={[{ type: 'share', identity: 'u1' }]}
+        isManual={false}
+        onAddWatch={vi.fn()}
+        onRemoveWatch={vi.fn()}
+        onReturnToAutomatic={vi.fn()}
+        avatarUrlByUserId={new Map()}
+        deafenedByUserId={new Map()}
+      />,
+    );
+
+    const button = screen.getByRole('button', { name: 'Enter fullscreen' });
+    expect(button).toHaveClass('group-hover/camera-grid:opacity-100');
+    expect(button).not.toHaveClass('group-hover:opacity-100');
   });
 
   it('renders a ScreenShareTile for a single watched share target', () => {

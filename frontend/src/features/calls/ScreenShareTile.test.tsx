@@ -179,6 +179,28 @@ describe('ScreenShareTile', () => {
     });
   });
 
+  describe('hover-revealed overlay controls', () => {
+    it('reveals the fullscreen button on hover over the surrounding call area, not this tile', () => {
+      render(<ScreenShareTile participant={sharingParticipant()} />);
+
+      const button = screen.getByRole('button', { name: 'Enter fullscreen' });
+      expect(button).toHaveClass('opacity-0');
+      expect(button).toHaveClass('group-hover/camera-grid:opacity-100');
+      expect(button).toHaveClass('focus-visible:opacity-100');
+      expect(button).not.toHaveClass('group-hover:opacity-100');
+    });
+
+    it('reveals the volume control on hover over the surrounding call area, not this tile', () => {
+      render(<ScreenShareTile participant={sharingParticipant({ screenShareHasAudio: true })} />);
+
+      const wrapper = screen.getByRole('slider', { name: "Volume for Felipe's screen" }).parentElement?.parentElement;
+      expect(wrapper).toHaveClass('opacity-0');
+      expect(wrapper).toHaveClass('group-hover/camera-grid:opacity-100');
+      expect(wrapper).toHaveClass('focus-within:opacity-100');
+      expect(wrapper).not.toHaveClass('group-hover:opacity-100');
+    });
+  });
+
   describe('click-to-remove from the watched set', () => {
     it('is not clickable when onWatchClick is omitted', () => {
       const { container } = render(<ScreenShareTile participant={sharingParticipant()} />);

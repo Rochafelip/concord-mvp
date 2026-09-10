@@ -26,6 +26,13 @@ interface FocusedCallViewProps {
  * math to maintain. Clicking any watched tile removes it via onRemoveWatch (each tile type wires
  * its own click-to-remove — ParticipantTile's whole-tile click, ScreenShareTile's non-fullscreen
  * click).
+ *
+ * The watched area carries `group/camera-grid` for the same reason ParticipantGrid's container
+ * does (docs/superpowers/specs/2026-09-09-call-grid-controls-hover-design.md): the tiles' overlay
+ * controls stay hidden until the mouse enters this area, and then every visible tile reveals its
+ * controls at once. The zone is this padded area — not the strip or roster below it, which have
+ * no overlay controls to reveal — and the "return to automatic layout" button stays always
+ * visible, since it duplicates nothing in the footer.
  */
 export function FocusedCallView({
   participants,
@@ -42,7 +49,7 @@ export function FocusedCallView({
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden pb-20">
-      <div className="relative flex flex-1 overflow-hidden p-4">
+      <div data-testid="watched-area" className="group/camera-grid relative flex flex-1 overflow-hidden p-4">
         <div ref={containerRef} className={`flex-1 ${containerClassName}`} style={style}>
           {watchTargets.map((target) => {
             const watched = participants.find((participant) => participant.identity === target.identity);

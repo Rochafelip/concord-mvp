@@ -28,12 +28,6 @@ interface ParticipantTileProps {
    * adds this camera to the call's watched set. See
    * docs/superpowers/specs/2026-09-09-call-grid-unification-multiwatch-design.md §2. */
   onWatchClick?: () => void;
-  /** When true, the volume control reveals on hover over an ancestor carrying Tailwind's named
-   * `group/camera-grid` class instead of this tile's own hover — used by ParticipantGrid so
-   * hovering anywhere in the grid reveals every visible tile's controls at once. Defaults to
-   * false, which preserves the original per-tile hover for FocusedCallView's watched tile(s). See
-   * docs/superpowers/specs/2026-09-09-call-grid-controls-hover-design.md. */
-  revealOnGridHover?: boolean;
 }
 
 const CONNECTION_ISSUE_QUALITIES: ConnectionQuality[] = [ConnectionQuality.Poor, ConnectionQuality.Lost];
@@ -52,6 +46,15 @@ const CONNECTION_ISSUE_QUALITIES: ConnectionQuality[] = [ConnectionQuality.Poor,
  *
  * The tile background and control-bar chrome (black/white overlays) stay literal colors
  * rather than tokens — they sit on top of live video and must read the same in both themes.
+ *
+ * The volume-control overlay is hidden until the mouse enters the surrounding call area, which
+ * is why it reveals on `group-hover/camera-grid` rather than this tile's own hover: the trigger
+ * is one zone per call area — ParticipantGrid's container and FocusedCallView's watched area,
+ * both of which carry Tailwind's named `group/camera-grid` class — so hovering anywhere in it
+ * reveals every visible tile's control at once instead of one card at a time. See
+ * docs/superpowers/specs/2026-09-09-call-grid-controls-hover-design.md. Any future caller must
+ * render this tile inside such a container, or the control stays reachable by Tab only
+ * (focus-within), never by mouse.
  */
 export function ParticipantTile({
   participant,
@@ -60,7 +63,6 @@ export function ParticipantTile({
   className = '',
   showVolumeControl = true,
   onWatchClick,
-  revealOnGridHover = false,
 }: ParticipantTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const { videoTrack } = participant;
@@ -96,7 +98,7 @@ export function ParticipantTile({
 
   return (
     <div
-      className={`group relative flex aspect-video items-center justify-center overflow-hidden rounded ${className} ${
+      className={`relative flex aspect-video items-center justify-center overflow-hidden rounded ${className} ${
         showVideo ? 'bg-gray-800' : tileColorFor(participant.identity)
       } ${participant.speaking ? 'ring-2 ring-success' : ''}`}
       role={onWatchClick ? 'button' : undefined}
@@ -135,9 +137,7 @@ export function ParticipantTile({
 
       {!participant.isLocal && showVolumeControl && (
         <div
-          className={`absolute right-1 top-1 opacity-0 transition-opacity focus-within:opacity-100 ${
-            revealOnGridHover ? 'group-hover/camera-grid:opacity-100' : 'group-hover:opacity-100'
-          }`}
+          className="absolute right-1 top-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover/camera-grid:opacity-100"
           onClick={stopPropagation}
           onKeyDown={stopPropagation}
         >
