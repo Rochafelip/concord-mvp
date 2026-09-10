@@ -38,7 +38,7 @@ public class UserService {
     public User changePassword(UUID userId, String currentPassword, String newPassword) {
         User user = getCurrentUser(userId);
         if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
-            throw new BadRequestException("Current password is incorrect");
+            throw new BadRequestException("Senha atual incorreta");
         }
         user.setPasswordHash(passwordEncoder.encode(newPassword));
         return userRepository.save(user);

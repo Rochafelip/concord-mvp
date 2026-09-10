@@ -55,7 +55,7 @@ public class JwtService {
                     .getSubject();
             return UUID.fromString(subject);
         } catch (JwtException | IllegalArgumentException e) {
-            throw new UnauthorizedException("Invalid or expired token");
+            throw new UnauthorizedException("Sessão inválida ou expirada");
         }
     }
 

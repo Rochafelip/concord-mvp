@@ -131,7 +131,7 @@ class AuthServiceTest {
     }
 
     private String unknownEmailExceptionMessage() {
-        return "Invalid email or password";
+        return "E-mail ou senha inválidos";
     }
 
     private String catchExceptionMessage(Runnable runnable) {

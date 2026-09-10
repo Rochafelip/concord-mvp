@@ -68,7 +68,7 @@ class JwtAuthFilterTest {
 
     @Test
     void leavesRequestUnauthenticated_whenTokenIsInvalid() throws Exception {
-        when(jwtService.parseUserId("bad-token")).thenThrow(new UnauthorizedException("Invalid or expired token"));
+        when(jwtService.parseUserId("bad-token")).thenThrow(new UnauthorizedException("Sessão inválida ou expirada"));
 
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.setCookies(new Cookie(JwtService.COOKIE_NAME, "bad-token"));

@@ -13,7 +13,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class AuthService {
 
-    private static final String INVALID_CREDENTIALS_MESSAGE = "Invalid email or password";
+    private static final String INVALID_CREDENTIALS_MESSAGE = "E-mail ou senha inválidos";
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
@@ -25,7 +25,7 @@ public class AuthService {
 
     public AuthResponse register(RegisterRequest request) {
         if (userRepository.existsByEmail(request.email())) {
-            throw new ConflictException("Email already registered");
+            throw new ConflictException("Este e-mail já está cadastrado");
         }
 
         User user = new User();
