@@ -8,9 +8,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Issues short-lived tickets used to authenticate the {@code /ws} handshake — see
- * {@link WsTicketService}. Requires the normal {@code Authorization: Bearer <jwt>} header (this
- * path is authenticated by the default security rule, same as every other {@code /api/v1/**}
- * endpoint outside {@code /api/v1/auth/**} — see {@code SecurityConfig}).
+ * {@link WsTicketService}. Requires an authenticated session (this path is authenticated by
+ * the default security rule via the {@code concord_session} cookie, same as every other
+ * {@code /api/v1/**} endpoint outside {@code /api/v1/auth/**} — see {@code SecurityConfig}).
  */
 @RestController
 @RequestMapping("/api/v1/realtime")
