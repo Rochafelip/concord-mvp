@@ -1,8 +1,32 @@
 import { render, screen } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useAuthStore } from '../features/auth/authStore';
 import { ProtectedRoute } from './ProtectedRoute';
+
+/** Renders whatever `from` the redirect carried, so the test can assert on it. */
+function LocationProbe() {
+  const location = useLocation();
+  return <span data-testid="from">{(location.state as { from?: string } | null)?.from ?? ''}</span>;
+}
+
+function renderAt(path: string) {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route path="/login" element={<LocationProbe />} />
+        <Route
+          path="/app/*"
+          element={
+            <ProtectedRoute>
+              <div>Protected content</div>
+            </ProtectedRoute>
+          }
+        />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
 
 function renderWithRouter() {
   return render(
@@ -33,6 +57,12 @@ describe('ProtectedRoute', () => {
 
     expect(screen.getByText('Login page')).toBeInTheDocument();
     expect(screen.queryByText('Protected content')).not.toBeInTheDocument();
+  });
+
+  it('carries the attempted route, including its query string, to the login screen', () => {
+    renderAt('/app/servers/s1/channels/c1?tab=files');
+
+    expect(screen.getByTestId('from')).toHaveTextContent('/app/servers/s1/channels/c1?tab=files');
   });
 
   it('renders children when authenticated', () => {
