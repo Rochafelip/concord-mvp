@@ -17,12 +17,10 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
-    private final JwtService jwtService;
 
-    public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtService jwtService) {
+    public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
-        this.jwtService = jwtService;
     }
 
     public AuthResponse register(RegisterRequest request) {
@@ -37,9 +35,8 @@ public class AuthService {
         user.setPasswordHash(passwordEncoder.encode(request.password()));
 
         User saved = userRepository.save(user);
-        String token = jwtService.generateToken(saved.getId());
 
-        return new AuthResponse(token, saved.getId(), saved.getUsername(), saved.getDisplayName(), saved.getEmail());
+        return new AuthResponse(saved.getId(), saved.getUsername(), saved.getDisplayName(), saved.getEmail());
     }
 
     public AuthResponse login(LoginRequest request) {
@@ -50,8 +47,6 @@ public class AuthService {
             throw new UnauthorizedException(INVALID_CREDENTIALS_MESSAGE);
         }
 
-        String token = jwtService.generateToken(user.getId());
-
-        return new AuthResponse(token, user.getId(), user.getUsername(), user.getDisplayName(), user.getEmail());
+        return new AuthResponse(user.getId(), user.getUsername(), user.getDisplayName(), user.getEmail());
     }
 }

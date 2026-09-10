@@ -36,18 +36,15 @@ class AuthServiceTest {
     @Mock
     private PasswordEncoder passwordEncoder;
 
-    @Mock
-    private JwtService jwtService;
-
     private AuthService authService;
 
     @BeforeEach
     void setUp() {
-        authService = new AuthService(userRepository, passwordEncoder, jwtService);
+        authService = new AuthService(userRepository, passwordEncoder);
     }
 
     @Test
-    void register_hashesPasswordAndIssuesToken() {
+    void register_hashesPasswordAndReturnsUserProfile() {
         RegisterRequest request = new RegisterRequest("alice", "Alice", "alice@example.com", "password123");
         UUID generatedId = UUID.randomUUID();
 
@@ -58,7 +55,6 @@ class AuthServiceTest {
             user.setId(generatedId);
             return user;
         });
-        when(jwtService.generateToken(generatedId)).thenReturn("signed-token");
 
         AuthResponse response = authService.register(request);
 
@@ -71,7 +67,6 @@ class AuthServiceTest {
         assertThat(savedUser.getEmail()).isEqualTo("alice@example.com");
         assertThat(savedUser.getPasswordHash()).isEqualTo("hashed-password");
 
-        assertThat(response.token()).isEqualTo("signed-token");
         assertThat(response.userId()).isEqualTo(generatedId);
         assertThat(response.username()).isEqualTo("alice");
         assertThat(response.displayName()).isEqualTo("Alice");
@@ -87,7 +82,6 @@ class AuthServiceTest {
                 .isInstanceOf(ConflictException.class);
 
         verify(userRepository, never()).save(any());
-        verify(jwtService, never()).generateToken(any());
     }
 
     @Test
@@ -104,8 +98,6 @@ class AuthServiceTest {
         assertThatThrownBy(() -> authService.login(request))
                 .isInstanceOf(UnauthorizedException.class)
                 .hasMessage(unknownEmailExceptionMessage());
-
-        verify(jwtService, never()).generateToken(any());
     }
 
     @Test
@@ -116,8 +108,6 @@ class AuthServiceTest {
         assertThatThrownBy(() -> authService.login(request))
                 .isInstanceOf(UnauthorizedException.class)
                 .hasMessage(unknownEmailExceptionMessage());
-
-        verify(jwtService, never()).generateToken(any());
     }
 
     @Test
