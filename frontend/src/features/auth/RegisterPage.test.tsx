@@ -41,7 +41,7 @@ describe('RegisterPage', () => {
 
   it('shows the backend validation message when the mutation fails', async () => {
     vi.mocked(api.register).mockRejectedValue(
-      new ApiError('email: must be a well-formed email address; password: size must be between 8 and 100', 400),
+      new ApiError('email: must be a well-formed email address', 400),
     );
     const user = userEvent.setup();
     renderRegisterPage();
@@ -49,12 +49,69 @@ describe('RegisterPage', () => {
     await user.type(screen.getByLabelText('Username'), 'jdoe');
     await user.type(screen.getByLabelText('Display name'), 'John Doe');
     await user.type(screen.getByLabelText('Email'), 'not-an-email');
-    await user.type(screen.getByLabelText('Password'), 'short');
+    await user.type(screen.getByLabelText('Password'), 'Password123');
     await user.click(screen.getByRole('button', { name: 'Register' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'email: must be a well-formed email address; password: size must be between 8 and 100',
+      'email: must be a well-formed email address',
     );
+  });
+
+  it('shows the password requirements and updates them while typing', async () => {
+    const user = userEvent.setup();
+    renderRegisterPage();
+
+    const lengthRule = () =>
+      screen.getAllByRole('listitem').find((item) => item.textContent?.includes('At least 8 characters'))!;
+
+    expect(lengthRule()).toHaveTextContent('missing');
+
+    await user.type(screen.getByLabelText('Password'), 'Password123');
+
+    expect(lengthRule()).toHaveTextContent('met');
+  });
+
+  it('does not call the API when the password fails the requirements', async () => {
+    const user = userEvent.setup();
+    renderRegisterPage();
+
+    await user.type(screen.getByLabelText('Username'), 'jdoe');
+    await user.type(screen.getByLabelText('Display name'), 'John Doe');
+    await user.type(screen.getByLabelText('Email'), 'a@b.com');
+    await user.type(screen.getByLabelText('Password'), 'password');
+    await user.click(screen.getByRole('button', { name: 'Register' }));
+
+    expect(api.register).not.toHaveBeenCalled();
+  });
+
+  it('moves focus to the password field when the requirements are unmet', async () => {
+    const user = userEvent.setup();
+    renderRegisterPage();
+
+    await user.type(screen.getByLabelText('Username'), 'jdoe');
+    await user.type(screen.getByLabelText('Display name'), 'John Doe');
+    await user.type(screen.getByLabelText('Email'), 'a@b.com');
+    await user.type(screen.getByLabelText('Password'), 'password');
+    await user.click(screen.getByRole('button', { name: 'Register' }));
+
+    expect(screen.getByLabelText('Password')).toHaveFocus();
+  });
+
+  it('describes the password field with the requirement list', () => {
+    renderRegisterPage();
+
+    const describedBy = screen.getByLabelText('Password').getAttribute('aria-describedby');
+    expect(describedBy).toBeTruthy();
+    expect(document.getElementById(describedBy!)).toHaveTextContent('At least 8 characters');
+  });
+
+  it('lets the user reveal the password', async () => {
+    const user = userEvent.setup();
+    renderRegisterPage();
+
+    await user.click(screen.getByRole('button', { name: 'Show password' }));
+
+    expect(screen.getByLabelText('Password')).toHaveAttribute('type', 'text');
   });
 
   it('disables the submit button while the mutation is pending', async () => {
@@ -70,7 +127,7 @@ describe('RegisterPage', () => {
     await user.type(screen.getByLabelText('Username'), 'jdoe');
     await user.type(screen.getByLabelText('Display name'), 'John Doe');
     await user.type(screen.getByLabelText('Email'), 'a@b.com');
-    await user.type(screen.getByLabelText('Password'), 'password123');
+    await user.type(screen.getByLabelText('Password'), 'Password123');
     await user.click(screen.getByRole('button', { name: 'Register' }));
 
     expect(screen.getByRole('button', { name: /Creating account/ })).toBeDisabled();
@@ -96,7 +153,7 @@ describe('RegisterPage', () => {
     await user.type(screen.getByLabelText('Username'), 'jdoe');
     await user.type(screen.getByLabelText('Display name'), 'John Doe');
     await user.type(screen.getByLabelText('Email'), 'a@b.com');
-    await user.type(screen.getByLabelText('Password'), 'password123');
+    await user.type(screen.getByLabelText('Password'), 'Password123');
     await user.click(screen.getByRole('button', { name: 'Register' }));
 
     await waitFor(() => {
@@ -106,7 +163,7 @@ describe('RegisterPage', () => {
       username: 'jdoe',
       displayName: 'John Doe',
       email: 'a@b.com',
-      password: 'password123',
+      password: 'Password123',
     });
   });
 });

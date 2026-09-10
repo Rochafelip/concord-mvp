@@ -2,10 +2,10 @@ import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '../../components/Button';
 import { ErrorBanner } from '../../components/ErrorBanner';
-import { Logo } from '../../components/Logo';
+import { PasswordInput } from '../../components/PasswordInput';
 import { TextInput } from '../../components/TextInput';
-import { ConcordBackdrop } from '../../components/illustrations/ConcordBackdrop';
 import { ApiError } from '../../services/apiClient';
+import { AuthCard } from './AuthCard';
 import { useLogin } from './hooks';
 
 export function LoginPage() {
@@ -26,51 +26,53 @@ export function LoginPage() {
         : null;
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-app px-4">
-      <ConcordBackdrop className="absolute inset-0 h-full w-full opacity-60" />
+    <AuthCard
+      title="Log in"
+      footer={
+        <>
+          Don't have an account?{' '}
+          <Link to="/register" className="font-medium text-brand hover:text-brand-hover">
+            Register
+          </Link>
+        </>
+      }
+    >
+      <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+        <ErrorBanner message={errorMessage} />
 
-      <div className="relative w-full max-w-sm space-y-4 rounded-lg border bg-surface p-8 shadow-sm">
-        <div className="flex justify-center">
-          <Logo size={32} />
-        </div>
+        <TextInput
+          label="Email"
+          type="email"
+          name="email"
+          autoComplete="email"
+          required
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+        />
 
-        <h1 className="text-center text-title font-semibold text-ink">Log in</h1>
-
-        <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-          <ErrorBanner message={errorMessage} />
-
-          <TextInput
-            label="Email"
-            type="email"
-            name="email"
-            autoComplete="email"
-            required
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-          />
-
-          <TextInput
+        <div className="space-y-1">
+          <PasswordInput
             label="Password"
-            type="password"
             name="password"
             autoComplete="current-password"
             required
             value={password}
             onChange={(event) => setPassword(event.target.value)}
           />
+          <div className="text-right">
+            <Link
+              to="/forgot-password"
+              className="text-caption font-medium text-brand hover:text-brand-hover"
+            >
+              Forgot your password?
+            </Link>
+          </div>
+        </div>
 
-          <Button type="submit" disabled={loginMutation.isPending} className="w-full">
-            {loginMutation.isPending ? 'Logging in…' : 'Log in'}
-          </Button>
-        </form>
-
-        <p className="text-center text-body text-muted">
-          Don't have an account?{' '}
-          <Link to="/register" className="font-medium text-brand hover:text-brand-hover">
-            Register
-          </Link>
-        </p>
-      </div>
-    </div>
+        <Button type="submit" disabled={loginMutation.isPending} className="w-full">
+          {loginMutation.isPending ? 'Logging in…' : 'Log in'}
+        </Button>
+      </form>
+    </AuthCard>
   );
 }

@@ -4,6 +4,7 @@ import { ChannelRoute } from '../app/ChannelRoute';
 import { NoServerSelected } from '../app/NoServerSelected';
 import { ServerIndexRoute } from '../app/ServerIndexRoute';
 import { ServerLayout } from '../app/ServerLayout';
+import { ForgotPasswordPage } from '../features/auth/ForgotPasswordPage';
 import { LoginPage } from '../features/auth/LoginPage';
 import { RegisterPage } from '../features/auth/RegisterPage';
 import { useAuthStore } from '../features/auth/authStore';
@@ -21,6 +22,7 @@ export function AppRouter() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
 
       <Route
         path="/app"

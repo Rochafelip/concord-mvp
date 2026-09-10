@@ -37,6 +37,28 @@ describe('LoginPage', () => {
     expect(screen.getByRole('link', { name: 'Register' })).toBeInTheDocument();
   });
 
+  it('lets the user reveal and re-hide the password', async () => {
+    const user = userEvent.setup();
+    renderLoginPage();
+
+    expect(screen.getByLabelText('Password')).toHaveAttribute('type', 'password');
+
+    await user.click(screen.getByRole('button', { name: 'Show password' }));
+    expect(screen.getByLabelText('Password')).toHaveAttribute('type', 'text');
+
+    await user.click(screen.getByRole('button', { name: 'Hide password' }));
+    expect(screen.getByLabelText('Password')).toHaveAttribute('type', 'password');
+  });
+
+  it('offers a route to password recovery', () => {
+    renderLoginPage();
+
+    expect(screen.getByRole('link', { name: 'Forgot your password?' })).toHaveAttribute(
+      'href',
+      '/forgot-password',
+    );
+  });
+
   it('shows the backend error message when the mutation fails', async () => {
     vi.mocked(api.login).mockRejectedValue(new ApiError('Invalid email or password', 401));
     const user = userEvent.setup();

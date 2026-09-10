@@ -1,22 +1,33 @@
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '../../components/Button';
 import { ErrorBanner } from '../../components/ErrorBanner';
-import { Logo } from '../../components/Logo';
+import { PasswordInput } from '../../components/PasswordInput';
 import { TextInput } from '../../components/TextInput';
-import { ConcordBackdrop } from '../../components/illustrations/ConcordBackdrop';
 import { ApiError } from '../../services/apiClient';
+import { AuthCard } from './AuthCard';
 import { useRegister } from './hooks';
+import { PasswordRequirements } from './PasswordRequirements';
+import { isPasswordValid } from './passwordPolicy';
+
+const REQUIREMENTS_ID = 'password-requirements';
 
 export function RegisterPage() {
   const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const passwordRef = useRef<HTMLInputElement>(null);
   const registerMutation = useRegister();
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (!isPasswordValid(password)) {
+      passwordRef.current?.focus();
+      return;
+    }
+
     registerMutation.mutate({ username, displayName, email, password });
   }
 
@@ -28,70 +39,66 @@ export function RegisterPage() {
         : null;
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-app px-4">
-      <ConcordBackdrop className="absolute inset-0 h-full w-full opacity-60" />
-
-      <div className="relative w-full max-w-sm space-y-4 rounded-lg border bg-surface p-8 shadow-sm">
-        <div className="flex justify-center">
-          <Logo size={32} />
-        </div>
-
-        <h1 className="text-center text-title font-semibold text-ink">Create an account</h1>
-
-        <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-          <ErrorBanner message={errorMessage} />
-
-          <TextInput
-            label="Username"
-            name="username"
-            autoComplete="username"
-            required
-            value={username}
-            onChange={(event) => setUsername(event.target.value)}
-          />
-
-          <TextInput
-            label="Display name"
-            name="displayName"
-            autoComplete="nickname"
-            required
-            value={displayName}
-            onChange={(event) => setDisplayName(event.target.value)}
-          />
-
-          <TextInput
-            label="Email"
-            type="email"
-            name="email"
-            autoComplete="email"
-            required
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-          />
-
-          <TextInput
-            label="Password"
-            type="password"
-            name="password"
-            autoComplete="new-password"
-            required
-            minLength={8}
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-          />
-
-          <Button type="submit" disabled={registerMutation.isPending} className="w-full">
-            {registerMutation.isPending ? 'Creating account…' : 'Register'}
-          </Button>
-        </form>
-
-        <p className="text-center text-body text-muted">
+    <AuthCard
+      title="Create an account"
+      footer={
+        <>
           Already have an account?{' '}
           <Link to="/login" className="font-medium text-brand hover:text-brand-hover">
             Log in
           </Link>
-        </p>
-      </div>
-    </div>
+        </>
+      }
+    >
+      <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+        <ErrorBanner message={errorMessage} />
+
+        <TextInput
+          label="Username"
+          name="username"
+          autoComplete="username"
+          required
+          value={username}
+          onChange={(event) => setUsername(event.target.value)}
+        />
+
+        <TextInput
+          label="Display name"
+          name="displayName"
+          autoComplete="nickname"
+          required
+          value={displayName}
+          onChange={(event) => setDisplayName(event.target.value)}
+        />
+
+        <TextInput
+          label="Email"
+          type="email"
+          name="email"
+          autoComplete="email"
+          required
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+        />
+
+        <div className="space-y-2">
+          <PasswordInput
+            ref={passwordRef}
+            label="Password"
+            name="password"
+            autoComplete="new-password"
+            required
+            aria-describedby={REQUIREMENTS_ID}
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+          />
+          <PasswordRequirements id={REQUIREMENTS_ID} value={password} />
+        </div>
+
+        <Button type="submit" disabled={registerMutation.isPending} className="w-full">
+          {registerMutation.isPending ? 'Creating account…' : 'Register'}
+        </Button>
+      </form>
+    </AuthCard>
   );
 }
