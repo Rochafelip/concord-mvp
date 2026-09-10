@@ -23,8 +23,8 @@ import type {
 } from '../types/websocket';
 
 /**
- * Mounted ONCE in AppShell (which only renders once authenticated, per ProtectedRoute — a
- * token is guaranteed present). Owns the WebSocket connection's lifecycle and translates every
+ * Mounted ONCE in AppShell (which only renders once authenticated, per ProtectedRoute — the
+ * session is guaranteed authenticated). Owns the WebSocket connection's lifecycle and translates every
  * server -> client event into a TanStack Query cache update, targeting the EXACT query keys
  * established by features/servers/hooks.ts and features/channels/hooks.ts.
  */
@@ -35,7 +35,7 @@ export function useRealtimeSync(): void {
     serverId?: string;
     channelId?: string;
   }>();
-  const token = useAuthStore((state) => state.token);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const setNotification = useNotificationStore((state) => state.setMessage);
 
   // The SERVER_DELETE and CHANNEL_DELETE subscribers below are set up once (empty-ish dep
@@ -50,12 +50,12 @@ export function useRealtimeSync(): void {
   }, [currentServerId, currentChannelId]);
 
   useEffect(() => {
-    if (!token) return;
+    if (!isAuthenticated) return;
     websocketClient.connect(() => getWsTicket().then((response) => response.ticket));
     return () => {
       websocketClient.disconnect();
     };
-  }, [token]);
+  }, [isAuthenticated]);
 
   useEffect(() => {
     const unsubscribers = [

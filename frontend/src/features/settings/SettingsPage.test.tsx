@@ -21,7 +21,7 @@ function renderSettingsPage() {
 describe('SettingsPage', () => {
   beforeEach(() => {
     useAuthStore.setState({
-      token: 'tok',
+      isAuthenticated: true,
       user: { id: 'u1', username: 'jdoe', displayName: 'John Doe', email: 'j@doe.com', avatarUrl: null },
     });
     vi.mocked(api.updateProfile).mockReset();

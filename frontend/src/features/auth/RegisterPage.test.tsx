@@ -24,7 +24,7 @@ function renderRegisterPage() {
 describe('RegisterPage', () => {
   beforeEach(() => {
     localStorage.clear();
-    useAuthStore.setState({ token: null, user: null });
+    useAuthStore.setState({ isAuthenticated: false, user: null });
     vi.mocked(api.register).mockReset();
   });
 
@@ -76,7 +76,6 @@ describe('RegisterPage', () => {
     expect(screen.getByRole('button', { name: /Creating account/ })).toBeDisabled();
 
     resolveRegister({
-      token: 't',
       userId: 'u1',
       username: 'jdoe',
       displayName: 'John Doe',
@@ -86,7 +85,6 @@ describe('RegisterPage', () => {
 
   it('updates the auth store on a successful registration', async () => {
     vi.mocked(api.register).mockResolvedValue({
-      token: 'jwt-token',
       userId: 'user-1',
       username: 'jdoe',
       displayName: 'John Doe',
@@ -102,7 +100,7 @@ describe('RegisterPage', () => {
     await user.click(screen.getByRole('button', { name: 'Register' }));
 
     await waitFor(() => {
-      expect(useAuthStore.getState().token).toBe('jwt-token');
+      expect(useAuthStore.getState().isAuthenticated).toBe(true);
     });
     expect(vi.mocked(api.register).mock.calls[0][0]).toEqual({
       username: 'jdoe',

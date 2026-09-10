@@ -65,7 +65,7 @@ describe('AppShell', () => {
     vi.mocked(serversApi.getServer).mockResolvedValue(server);
     vi.mocked(channelsApi.getChannel).mockResolvedValue(channel);
     useAuthStore.setState({
-      token: 'tok',
+      isAuthenticated: true,
       user: {
         id: 'u1',
         username: 'me',

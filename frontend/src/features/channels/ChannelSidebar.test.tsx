@@ -56,7 +56,7 @@ describe('ChannelSidebar', () => {
 
   it('lists channels grouped into Text/Voice sections', async () => {
     useAuthStore.setState({
-      token: 't',
+      isAuthenticated: true,
       user: { id: 'member-1', username: 'm', displayName: 'M', email: 'm@x.com', avatarUrl: null },
     });
     renderSidebar();
@@ -69,7 +69,7 @@ describe('ChannelSidebar', () => {
 
   it('shows the Create Channel affordance for the server owner', async () => {
     useAuthStore.setState({
-      token: 't',
+      isAuthenticated: true,
       user: { id: 'owner-1', username: 'o', displayName: 'O', email: 'o@x.com', avatarUrl: null },
     });
     renderSidebar();
@@ -80,7 +80,7 @@ describe('ChannelSidebar', () => {
 
   it('renders an Onboarding section above Text channels, with no create-channel button of its own', async () => {
     useAuthStore.setState({
-      token: 't',
+      isAuthenticated: true,
       user: { id: 'owner-1', username: 'o', displayName: 'O', email: 'o@x.com', avatarUrl: null },
     });
     renderSidebar();
@@ -97,7 +97,7 @@ describe('ChannelSidebar', () => {
 
   it('hides the Create Channel affordance for a non-owner member', async () => {
     useAuthStore.setState({
-      token: 't',
+      isAuthenticated: true,
       user: { id: 'member-1', username: 'm', displayName: 'M', email: 'm@x.com', avatarUrl: null },
     });
     renderSidebar();
@@ -108,7 +108,7 @@ describe('ChannelSidebar', () => {
 
   it('shows a delete icon for the owner on text and voice channels but not onboarding', async () => {
     useAuthStore.setState({
-      token: 't',
+      isAuthenticated: true,
       user: { id: 'owner-1', username: 'o', displayName: 'O', email: 'o@x.com', avatarUrl: null },
     });
     renderSidebar();
@@ -119,7 +119,7 @@ describe('ChannelSidebar', () => {
 
   it('hides the delete icon for a non-owner member', async () => {
     useAuthStore.setState({
-      token: 't',
+      isAuthenticated: true,
       user: { id: 'member-1', username: 'm', displayName: 'M', email: 'm@x.com', avatarUrl: null },
     });
     renderSidebar();
@@ -132,7 +132,7 @@ describe('ChannelSidebar', () => {
     vi.mocked(api.deleteChannel).mockResolvedValue(undefined);
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
     useAuthStore.setState({
-      token: 't',
+      isAuthenticated: true,
       user: { id: 'owner-1', username: 'o', displayName: 'O', email: 'o@x.com', avatarUrl: null },
     });
     const user = userEvent.setup();
@@ -169,7 +169,7 @@ describe('ChannelSidebar', () => {
 
     beforeEach(() => {
       useAuthStore.setState({
-        token: 't',
+        isAuthenticated: true,
         user: { id: 'member-1', username: 'm', displayName: 'M', email: 'm@x.com', avatarUrl: null },
       });
     });

@@ -22,11 +22,11 @@ function TestHarness() {
 describe('useDisconnectVoiceOnLogout', () => {
   beforeEach(() => {
     vi.mocked(voiceClient.disconnect).mockClear();
-    useAuthStore.setState({ token: 'jwt-abc', user: null });
+    useAuthStore.setState({ isAuthenticated: true, user: null });
   });
 
   afterEach(() => {
-    useAuthStore.setState({ token: null, user: null });
+    useAuthStore.setState({ isAuthenticated: false, user: null });
   });
 
   it('does not disconnect while a session is active', () => {
@@ -35,7 +35,7 @@ describe('useDisconnectVoiceOnLogout', () => {
     expect(voiceClient.disconnect).not.toHaveBeenCalled();
   });
 
-  it('disconnects when the token is cleared (logout)', () => {
+  it('disconnects when the session ends (logout)', () => {
     render(<TestHarness />);
 
     act(() => {
@@ -54,7 +54,7 @@ describe('useDisconnectVoiceOnLogout', () => {
   });
 
   it('does nothing if there was never a session to begin with', () => {
-    useAuthStore.setState({ token: null, user: null });
+    useAuthStore.setState({ isAuthenticated: false, user: null });
     const { unmount } = render(<TestHarness />);
 
     unmount();

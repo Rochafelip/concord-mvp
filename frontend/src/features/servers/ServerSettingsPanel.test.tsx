@@ -47,7 +47,7 @@ describe('ServerSettingsPanel', () => {
 
   it('shows the owner invite/transfer/delete actions and disables Leave Server with an explanation', async () => {
     useAuthStore.setState({
-      token: 't',
+      isAuthenticated: true,
       user: { id: 'owner-1', username: 'owner', displayName: 'Owner', email: 'o@x.com', avatarUrl: null },
     });
     renderPanel();
@@ -64,7 +64,7 @@ describe('ServerSettingsPanel', () => {
 
   it('lets a non-owner leave and hides owner-only actions', async () => {
     useAuthStore.setState({
-      token: 't',
+      isAuthenticated: true,
       user: { id: 'member-1', username: 'member', displayName: 'Member', email: 'm@x.com', avatarUrl: null },
     });
     vi.mocked(api.leaveServer).mockResolvedValue(undefined);

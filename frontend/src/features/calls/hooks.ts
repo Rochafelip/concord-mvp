@@ -50,16 +50,16 @@ export function useVoicePresence(serverId: string | undefined) {
 }
 
 /**
- * Ends any active call when the user's session ends — logout (token -> null) or the
+ * Ends any active call when the user's session ends — logout (isAuthenticated -> false) or the
  * component unmounting entirely. Mounted once in AppShell, mirroring how useRealtimeSync
  * owns the WebSocket connection's lifecycle there for the same "only while authenticated"
  * reason.
  */
 export function useDisconnectVoiceOnLogout(): void {
-  const token = useAuthStore((state) => state.token);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
 
   useEffect(() => {
-    if (!token) return;
+    if (!isAuthenticated) return;
     return () => voiceClient.disconnect();
-  }, [token]);
+  }, [isAuthenticated]);
 }

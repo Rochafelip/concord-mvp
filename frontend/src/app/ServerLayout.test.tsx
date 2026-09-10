@@ -45,7 +45,7 @@ describe('ServerLayout', () => {
     vi.mocked(serversApi.getInvite).mockResolvedValue({ code: 'ABC' });
     vi.mocked(callsApi.getVoicePresence).mockResolvedValue([]);
     useAuthStore.setState({
-      token: 't',
+      isAuthenticated: true,
       user: { id: 'owner-1', username: 'o', displayName: 'O', email: 'o@x.com', avatarUrl: null },
     });
   });

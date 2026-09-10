@@ -30,15 +30,15 @@ export function useRegister() {
 }
 
 /**
- * Boot-time (and refresh-time) session validation: confirms the persisted token is still
- * good and refreshes the user's profile. Only runs when a token exists.
+ * Boot-time (and refresh-time) session validation: confirms the session cookie is still good
+ * and refreshes the user's profile. Only runs when we believe a session exists.
  */
 export function useMe() {
-  const token = useAuthStore((state) => state.token);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
 
   return useQuery({
     queryKey: ['users', 'me'],
     queryFn: getMe,
-    enabled: token != null,
+    enabled: isAuthenticated,
   });
 }

@@ -24,7 +24,7 @@ function renderLoginPage() {
 describe('LoginPage', () => {
   beforeEach(() => {
     localStorage.clear();
-    useAuthStore.setState({ token: null, user: null });
+    useAuthStore.setState({ isAuthenticated: false, user: null });
     vi.mocked(api.login).mockReset();
   });
 
@@ -66,7 +66,6 @@ describe('LoginPage', () => {
     expect(screen.getByRole('button', { name: /Logging in/ })).toBeDisabled();
 
     resolveLogin({
-      token: 't',
       userId: 'u1',
       username: 'a',
       displayName: 'A',
@@ -76,7 +75,6 @@ describe('LoginPage', () => {
 
   it('updates the auth store on a successful login', async () => {
     vi.mocked(api.login).mockResolvedValue({
-      token: 'jwt-token',
       userId: 'user-1',
       username: 'jdoe',
       displayName: 'John Doe',
@@ -90,7 +88,7 @@ describe('LoginPage', () => {
     await user.click(screen.getByRole('button', { name: 'Log in' }));
 
     await waitFor(() => {
-      expect(useAuthStore.getState().token).toBe('jwt-token');
+      expect(useAuthStore.getState().isAuthenticated).toBe(true);
     });
     expect(useAuthStore.getState().user?.displayName).toBe('John Doe');
     expect(vi.mocked(api.login).mock.calls[0][0]).toEqual({ email: 'a@b.com', password: 'password123' });

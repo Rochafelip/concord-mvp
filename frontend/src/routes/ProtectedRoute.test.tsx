@@ -25,7 +25,7 @@ function renderWithRouter() {
 describe('ProtectedRoute', () => {
   beforeEach(() => {
     localStorage.clear();
-    useAuthStore.setState({ token: null, user: null });
+    useAuthStore.setState({ isAuthenticated: false, user: null });
   });
 
   it('redirects to /login when unauthenticated', () => {
@@ -37,7 +37,7 @@ describe('ProtectedRoute', () => {
 
   it('renders children when authenticated', () => {
     useAuthStore.setState({
-      token: 'a-token',
+      isAuthenticated: true,
       user: { id: '1', username: 'a', displayName: 'A', email: 'a@b.com', avatarUrl: null },
     });
 

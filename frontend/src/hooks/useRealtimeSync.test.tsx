@@ -84,14 +84,14 @@ describe('useRealtimeSync', () => {
     vi.mocked(getWsTicket).mockClear();
     useVoiceStore.setState({ status: 'disconnected', channelId: null, participants: [], error: null, isDeafened: false });
     useAuthStore.setState({
-      token: 'jwt-abc',
+      isAuthenticated: true,
       user: { id: 'u1', username: 'a', displayName: 'A', email: 'a@x.com', avatarUrl: null },
     });
     useNotificationStore.setState({ message: null });
   });
 
   afterEach(() => {
-    useAuthStore.setState({ token: null, user: null });
+    useAuthStore.setState({ isAuthenticated: false, user: null });
   });
 
   function newQueryClient() {
@@ -112,17 +112,17 @@ describe('useRealtimeSync', () => {
     expect(mockDisconnect).toHaveBeenCalledTimes(1);
   });
 
-  it('disconnects when the token goes from set to null (logout)', () => {
+  it('disconnects when the session ends (logout)', () => {
     const queryClient = newQueryClient();
     renderHarness(queryClient, '/app');
     expect(mockConnect).toHaveBeenCalledTimes(1);
 
     act(() => {
-      useAuthStore.setState({ token: null, user: null });
+      useAuthStore.setState({ isAuthenticated: false, user: null });
     });
 
     expect(mockDisconnect).toHaveBeenCalled();
-    // No second connect() call with a null token.
+    // No second connect() call once unauthenticated.
     expect(mockConnect).toHaveBeenCalledTimes(1);
   });
 

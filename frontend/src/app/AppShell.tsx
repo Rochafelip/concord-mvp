@@ -23,7 +23,7 @@ import { useNotificationStore } from '../stores/notificationStore';
  * for the whole authenticated area.
  */
 export function AppShell() {
-  const token = useAuthStore((state) => state.token);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const user = useAuthStore((state) => state.user);
   const logout = useAuthStore((state) => state.logout);
 
@@ -38,10 +38,10 @@ export function AppShell() {
       <header className="flex flex-shrink-0 items-center justify-between border-b bg-surface px-4 py-2">
         <Logo />
 
-        {/* Gated on `token`, not `user`: if the backend is briefly unreachable during boot
-            rehydration (network error, not a 401), `token` stays set but `user` never
-            populates — the logout button must still be reachable in that case. */}
-        {token && (
+        {/* Gated on `isAuthenticated`, not `user`: if the backend is briefly unreachable during
+            boot rehydration (network error, not a 401), `isAuthenticated` stays set but `user`
+            never populates — the logout button must still be reachable in that case. */}
+        {isAuthenticated && (
           <div className="flex items-center gap-3">
             <button
               type="button"

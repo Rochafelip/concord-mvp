@@ -12,8 +12,8 @@ import { ProtectedRoute } from './ProtectedRoute';
 
 // Catch-all target: send authenticated users back into the app, everyone else to /login.
 function CatchAllRedirect() {
-  const token = useAuthStore((state) => state.token);
-  return <Navigate to={token ? '/app' : '/login'} replace />;
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  return <Navigate to={isAuthenticated ? '/app' : '/login'} replace />;
 }
 
 export function AppRouter() {
