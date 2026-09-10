@@ -12,7 +12,7 @@ const authResult: AuthResult = {
 describe('authStore', () => {
   beforeEach(() => {
     localStorage.clear();
-    useAuthStore.setState({ isAuthenticated: false, user: null });
+    useAuthStore.setState({ isAuthenticated: false, user: null, sessionEndedReason: null });
   });
 
   afterEach(() => {
@@ -77,6 +77,45 @@ describe('authStore', () => {
     expect(state.isAuthenticated).toBe(true);
     expect(state.user?.displayName).toBe('Johnny');
     expect(state.user?.avatarUrl).toBe('https://example.com/avatar.png');
+  });
+
+  it('expireSession() clears the session and records that it was not the user\'s choice', () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true } as Response));
+    useAuthStore.getState().login(authResult);
+
+    useAuthStore.getState().expireSession();
+
+    const state = useAuthStore.getState();
+    expect(state.isAuthenticated).toBe(false);
+    expect(state.user).toBeNull();
+    expect(state.sessionEndedReason).toBe('expired');
+  });
+
+  it('logout() leaves no reason behind, so a deliberate exit shows no notice', () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true } as Response));
+    useAuthStore.setState({ isAuthenticated: true, sessionEndedReason: 'expired' });
+
+    useAuthStore.getState().logout();
+
+    expect(useAuthStore.getState().sessionEndedReason).toBeNull();
+  });
+
+  it('clearSessionEndedReason() drops the reason once it has been shown', () => {
+    useAuthStore.setState({ sessionEndedReason: 'expired' });
+
+    useAuthStore.getState().clearSessionEndedReason();
+
+    expect(useAuthStore.getState().sessionEndedReason).toBeNull();
+  });
+
+  it('does not persist the session-ended reason across reloads', () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true } as Response));
+    useAuthStore.getState().login(authResult);
+
+    useAuthStore.getState().expireSession();
+
+    const persisted = JSON.parse(localStorage.getItem('concord-auth')!);
+    expect(persisted.state.sessionEndedReason).toBeUndefined();
   });
 
   it('persists isAuthenticated and user to localStorage via the persist middleware', () => {

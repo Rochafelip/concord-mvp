@@ -5,9 +5,28 @@ import type { AuthResult, User } from '../../types/user';
 interface AuthState {
   isAuthenticated: boolean;
   user: User | null;
+  /**
+   * Why the session ended, when it wasn't the user's choice. Set by apiClient on a 401 so the
+   * login screen can explain what happened instead of just appearing.
+   *
+   * Deliberately outside `partialize`: this describes one arrival at the login screen, not a
+   * persisted session. Surviving a reload would make the notice reappear for no reason.
+   */
+  sessionEndedReason: 'expired' | null;
   login: (result: AuthResult) => void;
   setUser: (user: User) => void;
   logout: () => void;
+  expireSession: () => void;
+  clearSessionEndedReason: () => void;
+}
+
+/**
+ * JS can't clear an httpOnly cookie itself, so ending a session has to be a real request.
+ * Raw `fetch` rather than apiClient: apiClient depends on this store, and calling into it from
+ * here would close that dependency line into a cycle.
+ */
+function clearSessionCookie() {
+  fetch('/api/v1/auth/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
 }
 
 /**
@@ -24,15 +43,15 @@ interface AuthState {
  *
  *   features/auth/api.ts -> services/apiClient.ts -> features/auth/authStore.ts
  *
- * `logout()` below calls the raw `fetch` API (not `apiClient`) to clear the httpOnly cookie
- * server-side — JS can't clear an httpOnly cookie directly, and calling into apiClient or
- * features/auth/api.ts here would create a cycle with the dependency line above.
+ * Ending a session (`logout()` and `expireSession()`) goes through `clearSessionCookie()` above,
+ * which uses raw `fetch` for the same reason.
  */
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
       isAuthenticated: false,
       user: null,
+      sessionEndedReason: null,
       login: (result) =>
         set({
           isAuthenticated: true,
@@ -46,9 +65,16 @@ export const useAuthStore = create<AuthState>()(
         }),
       setUser: (user) => set({ user }),
       logout: () => {
-        fetch('/api/v1/auth/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
-        set({ isAuthenticated: false, user: null });
+        clearSessionCookie();
+        set({ isAuthenticated: false, user: null, sessionEndedReason: null });
       },
+      // Same clearing as logout(), but records that the user didn't ask for this — LoginPage
+      // reads the reason to explain why they're suddenly back at the login screen.
+      expireSession: () => {
+        clearSessionCookie();
+        set({ isAuthenticated: false, user: null, sessionEndedReason: 'expired' });
+      },
+      clearSessionEndedReason: () => set({ sessionEndedReason: null }),
     }),
     {
       name: 'concord-auth',
