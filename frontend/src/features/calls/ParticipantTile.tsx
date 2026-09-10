@@ -1,6 +1,5 @@
 import { ConnectionQuality } from 'livekit-client';
-import { Focus } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type KeyboardEvent, type MouseEvent } from 'react';
 import { Avatar } from '../../components/Avatar';
 import { Spinner } from '../../components/Spinner';
 import { voiceClient } from '../../services/voiceClient';
@@ -16,25 +15,23 @@ interface ParticipantTileProps {
   avatarUrl?: string | null;
   /** From voice presence, looked up by identity in ParticipantList — defaults to false so tiles render correctly before the first presence fetch resolves. */
   deafened?: boolean;
-  /** Extra classes appended alongside the tile's default aspect-video sizing — CameraGrid's 1-
-   * and 2-participant tiers use this to let a tile fill more space than a fixed grid track. */
+  /** Extra classes appended alongside the tile's default aspect-video sizing — ParticipantGrid's
+   * 1- and 2-participant tiers use this to let a tile fill more space than a fixed grid track. */
   className?: string;
   /** Set to false to suppress the hover volume-control overlay — used when the tile is wrapped
    * in its own click target (e.g. FocusableStrip's focus-picker entries), since nesting a range
    * input inside a button is invalid HTML and would fight the wrapper's click handling. Defaults
    * to true so every existing caller is unaffected. */
   showVolumeControl?: boolean;
-  /** When provided, renders a small hover-revealed focus button in the tile's bottom-right
-   * corner (the one corner not already used by the name pill, connection badge, or volume
-   * control), so a plain CameraGrid tile can be manually pinned into the call's focused main
-   * slot without wrapping the whole tile in a button — which would nest the volume control's
-   * range input inside another interactive element. See
-   * docs/superpowers/specs/2026-09-09-call-focus-mode-design.md. */
-  onFocusClick?: () => void;
+  /** When provided, the whole tile becomes a clickable/keyboard-activatable target (role="button",
+   * not a real <button> — VolumeControl's <input type="range"> can't legally nest inside one) that
+   * adds this camera to the call's watched set. See
+   * docs/superpowers/specs/2026-09-09-call-grid-unification-multiwatch-design.md §2. */
+  onWatchClick?: () => void;
   /** When true, the volume control reveals on hover over an ancestor carrying Tailwind's named
-   * `group/camera-grid` class instead of this tile's own hover — used by CameraGrid so hovering
-   * anywhere in the grid reveals every visible tile's controls at once. Defaults to false, which
-   * preserves the original per-tile hover for FocusedCallView's single focused tile. See
+   * `group/camera-grid` class instead of this tile's own hover — used by ParticipantGrid so
+   * hovering anywhere in the grid reveals every visible tile's controls at once. Defaults to
+   * false, which preserves the original per-tile hover for FocusedCallView's watched tile(s). See
    * docs/superpowers/specs/2026-09-09-call-grid-controls-hover-design.md. */
   revealOnGridHover?: boolean;
 }
@@ -62,7 +59,7 @@ export function ParticipantTile({
   deafened = false,
   className = '',
   showVolumeControl = true,
-  onFocusClick,
+  onWatchClick,
   revealOnGridHover = false,
 }: ParticipantTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -86,11 +83,27 @@ export function ParticipantTile({
     };
   }, [showVideo, videoTrack]);
 
+  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (!onWatchClick) return;
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    onWatchClick();
+  }
+
+  function stopPropagation(event: MouseEvent | KeyboardEvent) {
+    event.stopPropagation();
+  }
+
   return (
     <div
       className={`group relative flex aspect-video items-center justify-center overflow-hidden rounded ${className} ${
         showVideo ? 'bg-gray-800' : tileColorFor(participant.identity)
       } ${participant.speaking ? 'ring-2 ring-success' : ''}`}
+      role={onWatchClick ? 'button' : undefined}
+      tabIndex={onWatchClick ? 0 : undefined}
+      aria-label={onWatchClick ? `Focus on ${participant.name}'s camera` : undefined}
+      onClick={onWatchClick}
+      onKeyDown={handleKeyDown}
     >
       {showVideo ? (
         <video ref={videoRef} muted autoPlay playsInline className="h-full w-full object-cover" />
@@ -125,23 +138,14 @@ export function ParticipantTile({
           className={`absolute right-1 top-1 opacity-0 transition-opacity focus-within:opacity-100 ${
             revealOnGridHover ? 'group-hover/camera-grid:opacity-100' : 'group-hover:opacity-100'
           }`}
+          onClick={stopPropagation}
+          onKeyDown={stopPropagation}
         >
           <VolumeControl
             label={participant.name}
             onVolumeChange={(volume) => voiceClient.setParticipantVolume(participant.identity, volume)}
           />
         </div>
-      )}
-
-      {onFocusClick && (
-        <button
-          type="button"
-          aria-label={`Focus on ${participant.name}'s camera`}
-          onClick={onFocusClick}
-          className="absolute bottom-1 right-1 flex h-6 w-6 items-center justify-center rounded bg-black/50 text-white opacity-0 transition-opacity hover:bg-black/70 focus-visible:opacity-100 group-hover/camera-grid:opacity-100"
-        >
-          <Focus size={14} aria-hidden="true" />
-        </button>
       )}
     </div>
   );

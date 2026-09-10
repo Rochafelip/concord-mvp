@@ -38,7 +38,7 @@ export function CameraGrid({ participants, avatarUrlByUserId, deafenedByUserId, 
           deafened={deafenedByUserId.get(participant.identity) ?? false}
           className={tileClassName}
           revealOnGridHover
-          onFocusClick={() => onFocus({ type: 'camera', identity: participant.identity })}
+          onWatchClick={() => onFocus({ type: 'camera', identity: participant.identity })}
         />
       ))}
     </div>

@@ -222,40 +222,58 @@ describe('ParticipantTile', () => {
     });
   });
 
-  describe('focus button', () => {
-    it('does not render a focus button when onFocusClick is omitted', () => {
-      render(<ParticipantTile participant={participant({ name: 'Felipe' })} />);
+  describe('watch/focus click target', () => {
+    it('is not clickable when onWatchClick is omitted', () => {
+      const { container } = render(<ParticipantTile participant={participant({ name: 'Felipe' })} />);
 
+      expect(container.firstChild).not.toHaveAttribute('role', 'button');
       expect(screen.queryByRole('button', { name: "Focus on Felipe's camera" })).not.toBeInTheDocument();
     });
 
-    it('renders a focus button when onFocusClick is provided, alongside the volume control', async () => {
+    it('makes the whole tile a clickable button when onWatchClick is provided', async () => {
       const user = userEvent.setup();
-      const onFocusClick = vi.fn();
+      const onWatchClick = vi.fn();
       render(
         <ParticipantTile
           participant={participant({ name: 'Felipe', isLocal: false, identity: 'bob' })}
-          onFocusClick={onFocusClick}
+          onWatchClick={onWatchClick}
         />,
       );
 
-      expect(screen.getByRole('slider', { name: 'Volume for Felipe' })).toBeInTheDocument();
       await user.click(screen.getByRole('button', { name: "Focus on Felipe's camera" }));
 
-      expect(onFocusClick).toHaveBeenCalledTimes(1);
+      expect(onWatchClick).toHaveBeenCalledTimes(1);
     });
 
-    it('always reveals on the grid\'s hover and on keyboard focus, regardless of revealOnGridHover', () => {
+    it('activates on Enter and Space from the keyboard', async () => {
+      const user = userEvent.setup();
+      const onWatchClick = vi.fn();
       render(
         <ParticipantTile
           participant={participant({ name: 'Felipe', isLocal: false, identity: 'bob' })}
-          onFocusClick={vi.fn()}
+          onWatchClick={onWatchClick}
         />,
       );
 
-      const focusButton = screen.getByRole('button', { name: "Focus on Felipe's camera" });
-      expect(focusButton).toHaveClass('group-hover/camera-grid:opacity-100');
-      expect(focusButton).toHaveClass('focus-visible:opacity-100');
+      screen.getByRole('button', { name: "Focus on Felipe's camera" }).focus();
+      await user.keyboard('{Enter}');
+      await user.keyboard(' ');
+
+      expect(onWatchClick).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not trigger onWatchClick when the volume slider is used', () => {
+      const onWatchClick = vi.fn();
+      render(
+        <ParticipantTile
+          participant={participant({ name: 'Felipe', isLocal: false, identity: 'bob' })}
+          onWatchClick={onWatchClick}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole('slider', { name: 'Volume for Felipe' }));
+
+      expect(onWatchClick).not.toHaveBeenCalled();
     });
   });
 
