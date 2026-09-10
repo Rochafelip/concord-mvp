@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
 import java.util.UUID;
@@ -19,6 +20,8 @@ import java.util.UUID;
  */
 @Service
 public class JwtService {
+
+    public static final String COOKIE_NAME = "concord_session";
 
     private final SecretKey signingKey;
     private final long expirationDays;
@@ -33,7 +36,7 @@ public class JwtService {
 
     public String generateToken(UUID userId) {
         Instant now = Instant.now();
-        Instant expiry = now.plus(java.time.Duration.ofDays(expirationDays));
+        Instant expiry = now.plus(tokenTtl());
         return Jwts.builder()
                 .subject(userId.toString())
                 .issuedAt(Date.from(now))
@@ -54,5 +57,10 @@ public class JwtService {
         } catch (JwtException | IllegalArgumentException e) {
             throw new UnauthorizedException("Invalid or expired token");
         }
+    }
+
+    /** The session cookie's Max-Age must match this so the cookie never outlives the JWT it holds. */
+    public Duration tokenTtl() {
+        return Duration.ofDays(expirationDays);
     }
 }
