@@ -24,8 +24,27 @@ function renderLoginPage() {
 describe('LoginPage', () => {
   beforeEach(() => {
     localStorage.clear();
-    useAuthStore.setState({ isAuthenticated: false, user: null });
+    useAuthStore.setState({ isAuthenticated: false, user: null, sessionEndedReason: null });
     vi.mocked(api.login).mockReset();
+  });
+
+  it('explains an expired session and consumes the reason', async () => {
+    useAuthStore.setState({ isAuthenticated: false, user: null, sessionEndedReason: 'expired' });
+
+    renderLoginPage();
+
+    expect(screen.getByRole('status')).toHaveTextContent('Sua sessão expirou');
+    await waitFor(() => {
+      expect(useAuthStore.getState().sessionEndedReason).toBeNull();
+    });
+    // The notice must survive being consumed — clearing the store shouldn't blank the screen.
+    expect(screen.getByRole('status')).toBeInTheDocument();
+  });
+
+  it('shows no session notice on a normal visit', () => {
+    renderLoginPage();
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 
   it('renders the login form', () => {

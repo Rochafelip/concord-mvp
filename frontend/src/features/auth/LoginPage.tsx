@@ -1,4 +1,5 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
+import { TriangleAlert } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '../../components/Button';
 import { ErrorBanner } from '../../components/ErrorBanner';
@@ -6,12 +7,27 @@ import { PasswordInput } from '../../components/PasswordInput';
 import { TextInput } from '../../components/TextInput';
 import { ApiError } from '../../services/apiClient';
 import { AuthCard } from './AuthCard';
+import { useAuthStore } from './authStore';
 import { useLogin } from './hooks';
 
 export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const loginMutation = useLogin();
+
+  const sessionEndedReason = useAuthStore((state) => state.sessionEndedReason);
+  const clearSessionEndedReason = useAuthStore((state) => state.clearSessionEndedReason);
+
+  // Frozen at first render so the effect below can drop the reason from the store without the
+  // notice vanishing from the screen in the same tick.
+  const [sessionExpired] = useState(sessionEndedReason === 'expired');
+
+  // Consumed on arrival: the notice belongs to this visit to the login screen, not the next one.
+  useEffect(() => {
+    if (sessionEndedReason) {
+      clearSessionEndedReason();
+    }
+  }, [sessionEndedReason, clearSessionEndedReason]);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -38,6 +54,18 @@ export function LoginPage() {
       }
     >
       <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+        {/* Not an ErrorBanner: an expired session isn't the user's mistake, and `warning` is
+            already this app's language for "here's what happened". */}
+        {sessionExpired && (
+          <div
+            role="status"
+            className="flex gap-3 rounded border border-warning/30 bg-warning/10 px-3 py-2 text-body text-ink"
+          >
+            <TriangleAlert size={18} aria-hidden="true" className="mt-0.5 shrink-0 text-warning" />
+            <p>Sua sessão expirou. Entre novamente para continuar.</p>
+          </div>
+        )}
+
         <ErrorBanner message={errorMessage} />
 
         <TextInput
