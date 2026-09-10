@@ -3,7 +3,7 @@ import { Spinner } from '../../components/Spinner';
 import { FocusedCallView } from './FocusedCallView';
 import { useVoiceParticipants, useVoicePresence } from './hooks';
 import { ParticipantGrid } from './ParticipantGrid';
-import { useFocusTarget } from './useFocusTarget';
+import { useWatchTargets } from './useWatchTargets';
 
 interface ParticipantListProps {
   /** The current channel's server — used to look up who's deafened/their avatar via voice presence. */
@@ -11,17 +11,15 @@ interface ParticipantListProps {
 }
 
 /**
- * Per docs/superpowers/specs/2026-09-09-call-focus-mode-design.md: whenever useFocusTarget
- * resolves a non-null target, renders FocusedCallView instead of the plain grid. With no shares
- * and no pin, renders ParticipantGrid alone — every connected participant, camera on or off, per
- * docs/superpowers/specs/2026-09-09-call-grid-unification-multiwatch-design.md §1. (This file's
- * focused branch still uses the single-target useFocusTarget/FocusedCallView pairing; that's
- * migrated to the multi-watch useWatchTargets/FocusedCallView pairing in a later task.)
+ * Per docs/superpowers/specs/2026-09-09-call-grid-unification-multiwatch-design.md: whenever
+ * useWatchTargets resolves at least one watched target (a manual pin/add, or the automatic
+ * share default), renders FocusedCallView. With nothing watched, renders ParticipantGrid alone —
+ * every connected participant, camera on or off.
  */
 export function ParticipantList({ serverId }: ParticipantListProps) {
   const participants = useVoiceParticipants();
   const { data: presence } = useVoicePresence(serverId);
-  const { focusTarget, isManual, setFocus, clearFocus } = useFocusTarget(participants);
+  const { watchTargets, isManual, addWatch, removeWatch, clearManual } = useWatchTargets(participants);
 
   // participant.identity is LiveKit's identifier, but the backend mints LiveKit tokens with the
   // app's user UUID as the JWT `sub` claim (MediaService), so it's safe to compare directly
@@ -47,14 +45,15 @@ export function ParticipantList({ serverId }: ParticipantListProps) {
     );
   }
 
-  if (focusTarget) {
+  if (watchTargets.length > 0) {
     return (
       <FocusedCallView
         participants={participants}
-        focusTarget={focusTarget}
+        watchTargets={watchTargets}
         isManual={isManual}
-        onFocus={setFocus}
-        onReturnToAutomatic={clearFocus}
+        onAddWatch={addWatch}
+        onRemoveWatch={removeWatch}
+        onReturnToAutomatic={clearManual}
         avatarUrlByUserId={avatarUrlByUserId}
         deafenedByUserId={deafenedByUserId}
       />
@@ -67,7 +66,7 @@ export function ParticipantList({ serverId }: ParticipantListProps) {
         participants={participants}
         avatarUrlByUserId={avatarUrlByUserId}
         deafenedByUserId={deafenedByUserId}
-        onWatch={setFocus}
+        onWatch={addWatch}
       />
     </div>
   );

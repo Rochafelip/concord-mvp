@@ -4,53 +4,69 @@ import { FocusableStrip } from './FocusableStrip';
 import { OffCameraRoster } from './OffCameraRoster';
 import { ParticipantTile } from './ParticipantTile';
 import { ScreenShareTile } from './ScreenShareTile';
-import type { FocusTarget } from './useFocusTarget';
+import { useGridLayout } from './useGridLayout';
+import type { FocusTarget } from './useWatchTargets';
 
 interface FocusedCallViewProps {
   participants: VoiceParticipant[];
-  focusTarget: FocusTarget;
+  watchTargets: FocusTarget[];
   isManual: boolean;
-  onFocus: (target: FocusTarget) => void;
+  onAddWatch: (target: FocusTarget) => void;
+  onRemoveWatch: (target: FocusTarget) => void;
   onReturnToAutomatic: () => void;
   avatarUrlByUserId: Map<string, string | null | undefined>;
   deafenedByUserId: Map<string, boolean>;
 }
 
 /**
- * Renders the call view when something is focused (a manual pin, or the automatic share
- * default) — see docs/superpowers/specs/2026-09-09-call-focus-mode-design.md §3. ParticipantList
- * renders this instead of the Phase 1 CameraGrid/OffCameraRoster pair whenever useFocusTarget
- * resolves a non-null target. `pb-20` (bottom clearance for the floating CallControlBar) is kept
- * here for the same reason ParticipantList's own Phase 1 wrapper has it.
+ * Renders the call view whenever at least one camera/share is being watched — see
+ * docs/superpowers/specs/2026-09-09-call-grid-unification-multiwatch-design.md §4. The main area
+ * reuses useGridLayout — the exact same tiering ParticipantGrid uses for the plain grid — so 1
+ * watched tile fills the space, 2 split evenly, 3 center the third, etc, with no separate layout
+ * math to maintain. Clicking any watched tile removes it via onRemoveWatch (each tile type wires
+ * its own click-to-remove — ParticipantTile's whole-tile click, ScreenShareTile's non-fullscreen
+ * click).
  */
 export function FocusedCallView({
   participants,
-  focusTarget,
+  watchTargets,
   isManual,
-  onFocus,
+  onAddWatch,
+  onRemoveWatch,
   onReturnToAutomatic,
   avatarUrlByUserId,
   deafenedByUserId,
 }: FocusedCallViewProps) {
-  const offCamera = participants.filter(
-    (participant) => !participant.cameraEnabled && !participant.screenShareTrack,
-  );
-  const focusedParticipant = participants.find((participant) => participant.identity === focusTarget.identity);
+  const offCamera = participants.filter((participant) => !participant.cameraEnabled && !participant.screenShareTrack);
+  const { containerRef, containerClassName, tileClassName, style } = useGridLayout(watchTargets.length);
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden pb-20">
-      <div className="relative flex flex-1 items-center justify-center overflow-hidden p-4">
-        {focusedParticipant &&
-          (focusTarget.type === 'share' ? (
-            <ScreenShareTile participant={focusedParticipant} />
-          ) : (
-            <ParticipantTile
-              participant={focusedParticipant}
-              avatarUrl={avatarUrlByUserId.get(focusedParticipant.identity)}
-              deafened={deafenedByUserId.get(focusedParticipant.identity) ?? false}
-              className="h-full max-h-full max-w-full"
-            />
-          ))}
+      <div className="relative flex flex-1 overflow-hidden p-4">
+        <div ref={containerRef} className={`flex-1 ${containerClassName}`} style={style}>
+          {watchTargets.map((target) => {
+            const watched = participants.find((participant) => participant.identity === target.identity);
+            if (!watched) return null;
+            const key = `${target.type}-${target.identity}`;
+            return target.type === 'share' ? (
+              <ScreenShareTile
+                key={key}
+                participant={watched}
+                className={tileClassName}
+                onWatchClick={() => onRemoveWatch(target)}
+              />
+            ) : (
+              <ParticipantTile
+                key={key}
+                participant={watched}
+                avatarUrl={avatarUrlByUserId.get(watched.identity)}
+                deafened={deafenedByUserId.get(watched.identity) ?? false}
+                className={tileClassName}
+                onWatchClick={() => onRemoveWatch(target)}
+              />
+            );
+          })}
+        </div>
         {isManual && (
           <button
             type="button"
@@ -64,8 +80,8 @@ export function FocusedCallView({
       </div>
       <FocusableStrip
         participants={participants}
-        focusTarget={focusTarget}
-        onFocus={onFocus}
+        watchTargets={watchTargets}
+        onAddWatch={onAddWatch}
         avatarUrlByUserId={avatarUrlByUserId}
         deafenedByUserId={deafenedByUserId}
       />

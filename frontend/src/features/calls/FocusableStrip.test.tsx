@@ -28,12 +28,12 @@ function participant(overrides: Partial<VoiceParticipant> = {}): VoiceParticipan
 }
 
 describe('FocusableStrip', () => {
-  it('renders nothing when there is nothing else to focus', () => {
+  it('renders nothing when there is nothing else to watch', () => {
     const { container } = render(
       <FocusableStrip
         participants={[participant({ identity: 'u1', cameraEnabled: true })]}
-        focusTarget={{ type: 'camera', identity: 'u1' }}
-        onFocus={vi.fn()}
+        watchTargets={[{ type: 'camera', identity: 'u1' }]}
+        onAddWatch={vi.fn()}
         avatarUrlByUserId={new Map()}
         deafenedByUserId={new Map()}
       />,
@@ -42,15 +42,15 @@ describe('FocusableStrip', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('renders an entry for another camera-on participant, excluding the focused one', () => {
+  it('renders an entry for another camera-on participant, excluding every currently watched one', () => {
     render(
       <FocusableStrip
         participants={[
           participant({ identity: 'u1', name: 'Felipe', cameraEnabled: true }),
           participant({ identity: 'u2', name: 'João', cameraEnabled: true }),
         ]}
-        focusTarget={{ type: 'camera', identity: 'u1' }}
-        onFocus={vi.fn()}
+        watchTargets={[{ type: 'camera', identity: 'u1' }]}
+        onAddWatch={vi.fn()}
         avatarUrlByUserId={new Map()}
         deafenedByUserId={new Map()}
       />,
@@ -60,7 +60,7 @@ describe('FocusableStrip', () => {
     expect(screen.queryByRole('button', { name: "Focus on Felipe's camera" })).not.toBeInTheDocument();
   });
 
-  it('renders an entry for another sharing participant, excluding the focused share', () => {
+  it('renders an entry for another sharing participant, excluding every currently watched share', () => {
     const track = { attach: vi.fn(), detach: vi.fn() } as never;
     render(
       <FocusableStrip
@@ -68,8 +68,8 @@ describe('FocusableStrip', () => {
           participant({ identity: 'u1', name: 'Felipe', screenShareTrack: track }),
           participant({ identity: 'u2', name: 'João', screenShareTrack: track }),
         ]}
-        focusTarget={{ type: 'share', identity: 'u1' }}
-        onFocus={vi.fn()}
+        watchTargets={[{ type: 'share', identity: 'u1' }]}
+        onAddWatch={vi.fn()}
         avatarUrlByUserId={new Map()}
         deafenedByUserId={new Map()}
       />,
@@ -79,13 +79,37 @@ describe('FocusableStrip', () => {
     expect(screen.queryByRole('button', { name: "Focus on Felipe's screen" })).not.toBeInTheDocument();
   });
 
-  it("still offers a participant's camera when their share is the focused item", () => {
+  it('excludes multiple simultaneously watched shares at once', () => {
+    const track = { attach: vi.fn(), detach: vi.fn() } as never;
+    render(
+      <FocusableStrip
+        participants={[
+          participant({ identity: 'u1', name: 'Felipe', screenShareTrack: track }),
+          participant({ identity: 'u2', name: 'João', screenShareTrack: track }),
+          participant({ identity: 'u3', name: 'Maria', screenShareTrack: track }),
+        ]}
+        watchTargets={[
+          { type: 'share', identity: 'u1' },
+          { type: 'share', identity: 'u2' },
+        ]}
+        onAddWatch={vi.fn()}
+        avatarUrlByUserId={new Map()}
+        deafenedByUserId={new Map()}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: "Focus on Maria's screen" })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: "Focus on Felipe's screen" })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: "Focus on João's screen" })).not.toBeInTheDocument();
+  });
+
+  it("still offers a participant's camera when only their share is watched", () => {
     const track = { attach: vi.fn(), detach: vi.fn() } as never;
     render(
       <FocusableStrip
         participants={[participant({ identity: 'u1', name: 'Felipe', cameraEnabled: true, screenShareTrack: track })]}
-        focusTarget={{ type: 'share', identity: 'u1' }}
-        onFocus={vi.fn()}
+        watchTargets={[{ type: 'share', identity: 'u1' }]}
+        onAddWatch={vi.fn()}
         avatarUrlByUserId={new Map()}
         deafenedByUserId={new Map()}
       />,
@@ -94,17 +118,17 @@ describe('FocusableStrip', () => {
     expect(screen.getByRole('button', { name: "Focus on Felipe's camera" })).toBeInTheDocument();
   });
 
-  it('calls onFocus with the right target when a camera entry is clicked', async () => {
+  it('calls onAddWatch with the right target when a camera entry is clicked', async () => {
     const user = userEvent.setup();
-    const onFocus = vi.fn();
+    const onAddWatch = vi.fn();
     render(
       <FocusableStrip
         participants={[
           participant({ identity: 'u1', name: 'Felipe', cameraEnabled: true }),
           participant({ identity: 'u2', name: 'João', cameraEnabled: true }),
         ]}
-        focusTarget={{ type: 'camera', identity: 'u1' }}
-        onFocus={onFocus}
+        watchTargets={[{ type: 'camera', identity: 'u1' }]}
+        onAddWatch={onAddWatch}
         avatarUrlByUserId={new Map()}
         deafenedByUserId={new Map()}
       />,
@@ -112,7 +136,7 @@ describe('FocusableStrip', () => {
 
     await user.click(screen.getByRole('button', { name: "Focus on João's camera" }));
 
-    expect(onFocus).toHaveBeenCalledWith({ type: 'camera', identity: 'u2' });
+    expect(onAddWatch).toHaveBeenCalledWith({ type: 'camera', identity: 'u2' });
   });
 
   it('never renders a volume-control slider on its camera entries', () => {
@@ -122,8 +146,8 @@ describe('FocusableStrip', () => {
           participant({ identity: 'u1', name: 'Felipe', cameraEnabled: true }),
           participant({ identity: 'u2', name: 'João', cameraEnabled: true }),
         ]}
-        focusTarget={{ type: 'camera', identity: 'u1' }}
-        onFocus={vi.fn()}
+        watchTargets={[{ type: 'camera', identity: 'u1' }]}
+        onAddWatch={vi.fn()}
         avatarUrlByUserId={new Map()}
         deafenedByUserId={new Map()}
       />,

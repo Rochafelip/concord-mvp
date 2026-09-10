@@ -191,8 +191,8 @@ describe('ParticipantList', () => {
     });
   });
 
-  describe('focus mode', () => {
-    it('auto-focuses a lone active screen share with no click required', () => {
+  describe('watch mode', () => {
+    it('auto-watches a lone active screen share with no click required', () => {
       const track = { attach: vi.fn(), detach: vi.fn() } as never;
       useVoiceStore.setState({
         participants: [
@@ -205,7 +205,7 @@ describe('ParticipantList', () => {
       expect(screen.getByText(/João's screen/)).toBeInTheDocument();
     });
 
-    it('auto-focuses the first sharing participant by array order when several are sharing, listing the other as a thumbnail', () => {
+    it('auto-watches only the first sharing participant by array order when several are sharing, listing the other as a thumbnail', () => {
       const track = { attach: vi.fn(), detach: vi.fn() } as never;
       useVoiceStore.setState({
         participants: [
@@ -220,7 +220,7 @@ describe('ParticipantList', () => {
       );
     });
 
-    it('clicking a thumbnail switches which share is focused', async () => {
+    it('clicking a second thumbnail watches it alongside the first, instead of replacing it', async () => {
       const user = userEvent.setup();
       const track = { attach: vi.fn(), detach: vi.fn() } as never;
       useVoiceStore.setState({
@@ -233,6 +233,8 @@ describe('ParticipantList', () => {
 
       await user.click(screen.getByRole('button', { name: "Focus on João's screen" }));
 
+      expect(screen.getByText(/Felipe's screen/)).toBeInTheDocument();
+      expect(screen.getByText(/João's screen/)).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Return to automatic layout' })).toBeInTheDocument();
     });
 
@@ -259,7 +261,7 @@ describe('ParticipantList', () => {
       expect(screen.getByRole('button', { name: 'Return to automatic layout' })).toBeInTheDocument();
     });
 
-    it('clicking "return to automatic" reverts to the auto-focused share', async () => {
+    it('clicking "return to automatic" reverts to the auto-watched share', async () => {
       const user = userEvent.setup();
       const track = { attach: vi.fn(), detach: vi.fn() } as never;
       useVoiceStore.setState({
@@ -279,7 +281,7 @@ describe('ParticipantList', () => {
       expect(screen.getByText(/João's screen/)).toBeInTheDocument();
     });
 
-    it('reverts to the plain grid when a manual pin is cleared and nobody is sharing', async () => {
+    it('reverts to the plain grid when a manual watch is cleared and nobody is sharing', async () => {
       const user = userEvent.setup();
       useVoiceStore.setState({
         participants: [
@@ -294,6 +296,28 @@ describe('ParticipantList', () => {
 
       expect(screen.getByTestId('participant-grid')).toBeInTheDocument();
       expect(screen.queryByTestId('focusable-strip')).not.toBeInTheDocument();
+    });
+
+    it('clicking a watched tile removes just that one, keeping the rest of a multi-watch set', async () => {
+      const user = userEvent.setup();
+      const track = { attach: vi.fn(), detach: vi.fn() } as never;
+      useVoiceStore.setState({
+        participants: [
+          participant({ identity: 'u1', name: 'Felipe', isLocal: false, screenShareTrack: track }),
+          participant({ identity: 'u2', name: 'João', isLocal: false, screenShareTrack: track }),
+        ],
+      });
+      renderList();
+      await user.click(screen.getByRole('button', { name: "Focus on João's screen" }));
+      expect(screen.getByText(/Felipe's screen/)).toBeInTheDocument();
+      expect(screen.getByText(/João's screen/)).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: "Stop watching Felipe's screen" }));
+
+      expect(screen.queryByRole('button', { name: "Stop watching Felipe's screen" })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: "Focus on Felipe's screen" })).toBeInTheDocument();
+      expect(screen.getByText(/João's screen/)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Return to automatic layout' })).toBeInTheDocument();
     });
   });
 });

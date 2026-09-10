@@ -38,13 +38,14 @@ describe('FocusedCallView', () => {
     useVoiceStore.setState({ status: 'connected', channelId: 'c1', participants: [], error: null });
   });
 
-  it('renders a large ParticipantTile for a camera focus target', () => {
+  it('renders a large ParticipantTile for a single watched camera target', () => {
     render(
       <FocusedCallView
         participants={[participant({ identity: 'u1', name: 'Felipe', cameraEnabled: true })]}
-        focusTarget={{ type: 'camera', identity: 'u1' }}
+        watchTargets={[{ type: 'camera', identity: 'u1' }]}
         isManual
-        onFocus={vi.fn()}
+        onAddWatch={vi.fn()}
+        onRemoveWatch={vi.fn()}
         onReturnToAutomatic={vi.fn()}
         avatarUrlByUserId={new Map()}
         deafenedByUserId={new Map()}
@@ -54,13 +55,14 @@ describe('FocusedCallView', () => {
     expect(screen.getByText(/Felipe/)).toBeInTheDocument();
   });
 
-  it('keeps its focused tile\'s volume control revealing on its own hover, not the grid\'s', () => {
+  it('keeps a watched camera tile\'s volume control revealing on its own hover, not the grid\'s', () => {
     render(
       <FocusedCallView
         participants={[participant({ identity: 'u1', name: 'Felipe', isLocal: false, cameraEnabled: true })]}
-        focusTarget={{ type: 'camera', identity: 'u1' }}
+        watchTargets={[{ type: 'camera', identity: 'u1' }]}
         isManual
-        onFocus={vi.fn()}
+        onAddWatch={vi.fn()}
+        onRemoveWatch={vi.fn()}
         onReturnToAutomatic={vi.fn()}
         avatarUrlByUserId={new Map()}
         deafenedByUserId={new Map()}
@@ -72,14 +74,15 @@ describe('FocusedCallView', () => {
     expect(wrapper).not.toHaveClass('group-hover/camera-grid:opacity-100');
   });
 
-  it('renders the ScreenShareTile for a share focus target', () => {
+  it('renders a ScreenShareTile for a single watched share target', () => {
     const track = { attach: vi.fn(), detach: vi.fn() } as never;
     render(
       <FocusedCallView
         participants={[participant({ identity: 'u1', name: 'Felipe', screenShareTrack: track })]}
-        focusTarget={{ type: 'share', identity: 'u1' }}
+        watchTargets={[{ type: 'share', identity: 'u1' }]}
         isManual={false}
-        onFocus={vi.fn()}
+        onAddWatch={vi.fn()}
+        onRemoveWatch={vi.fn()}
         onReturnToAutomatic={vi.fn()}
         avatarUrlByUserId={new Map()}
         deafenedByUserId={new Map()}
@@ -89,13 +92,85 @@ describe('FocusedCallView', () => {
     expect(screen.getByText(/Felipe's screen/)).toBeInTheDocument();
   });
 
+  it('renders one tile per watched target when watching 2 shares at once', () => {
+    const track = { attach: vi.fn(), detach: vi.fn() } as never;
+    render(
+      <FocusedCallView
+        participants={[
+          participant({ identity: 'u1', name: 'Felipe', screenShareTrack: track }),
+          participant({ identity: 'u2', name: 'João', screenShareTrack: track }),
+        ]}
+        watchTargets={[
+          { type: 'share', identity: 'u1' },
+          { type: 'share', identity: 'u2' },
+        ]}
+        isManual
+        onAddWatch={vi.fn()}
+        onRemoveWatch={vi.fn()}
+        onReturnToAutomatic={vi.fn()}
+        avatarUrlByUserId={new Map()}
+        deafenedByUserId={new Map()}
+      />,
+    );
+
+    expect(screen.getByText(/Felipe's screen/)).toBeInTheDocument();
+    expect(screen.getByText(/João's screen/)).toBeInTheDocument();
+  });
+
+  it('renders a mix of a watched camera and a watched share at once', () => {
+    const track = { attach: vi.fn(), detach: vi.fn() } as never;
+    render(
+      <FocusedCallView
+        participants={[
+          participant({ identity: 'u1', name: 'Felipe', cameraEnabled: true }),
+          participant({ identity: 'u2', name: 'João', screenShareTrack: track }),
+        ]}
+        watchTargets={[
+          { type: 'camera', identity: 'u1' },
+          { type: 'share', identity: 'u2' },
+        ]}
+        isManual
+        onAddWatch={vi.fn()}
+        onRemoveWatch={vi.fn()}
+        onReturnToAutomatic={vi.fn()}
+        avatarUrlByUserId={new Map()}
+        deafenedByUserId={new Map()}
+      />,
+    );
+
+    expect(screen.getByText(/^Felipe/)).toBeInTheDocument();
+    expect(screen.getByText(/João's screen/)).toBeInTheDocument();
+  });
+
+  it('clicking a watched camera tile calls onRemoveWatch with that target', async () => {
+    const user = userEvent.setup();
+    const onRemoveWatch = vi.fn();
+    render(
+      <FocusedCallView
+        participants={[participant({ identity: 'u1', name: 'Felipe', cameraEnabled: true })]}
+        watchTargets={[{ type: 'camera', identity: 'u1' }]}
+        isManual
+        onAddWatch={vi.fn()}
+        onRemoveWatch={onRemoveWatch}
+        onReturnToAutomatic={vi.fn()}
+        avatarUrlByUserId={new Map()}
+        deafenedByUserId={new Map()}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: "Focus on Felipe's camera" }));
+
+    expect(onRemoveWatch).toHaveBeenCalledWith({ type: 'camera', identity: 'u1' });
+  });
+
   it('shows "return to automatic" only when isManual is true', () => {
     const { rerender } = render(
       <FocusedCallView
         participants={[participant({ identity: 'u1', cameraEnabled: true })]}
-        focusTarget={{ type: 'camera', identity: 'u1' }}
+        watchTargets={[{ type: 'camera', identity: 'u1' }]}
         isManual={false}
-        onFocus={vi.fn()}
+        onAddWatch={vi.fn()}
+        onRemoveWatch={vi.fn()}
         onReturnToAutomatic={vi.fn()}
         avatarUrlByUserId={new Map()}
         deafenedByUserId={new Map()}
@@ -107,9 +182,10 @@ describe('FocusedCallView', () => {
     rerender(
       <FocusedCallView
         participants={[participant({ identity: 'u1', cameraEnabled: true })]}
-        focusTarget={{ type: 'camera', identity: 'u1' }}
+        watchTargets={[{ type: 'camera', identity: 'u1' }]}
         isManual
-        onFocus={vi.fn()}
+        onAddWatch={vi.fn()}
+        onRemoveWatch={vi.fn()}
         onReturnToAutomatic={vi.fn()}
         avatarUrlByUserId={new Map()}
         deafenedByUserId={new Map()}
@@ -125,9 +201,10 @@ describe('FocusedCallView', () => {
     render(
       <FocusedCallView
         participants={[participant({ identity: 'u1', cameraEnabled: true })]}
-        focusTarget={{ type: 'camera', identity: 'u1' }}
+        watchTargets={[{ type: 'camera', identity: 'u1' }]}
         isManual
-        onFocus={vi.fn()}
+        onAddWatch={vi.fn()}
+        onRemoveWatch={vi.fn()}
         onReturnToAutomatic={onReturnToAutomatic}
         avatarUrlByUserId={new Map()}
         deafenedByUserId={new Map()}
@@ -139,16 +216,17 @@ describe('FocusedCallView', () => {
     expect(onReturnToAutomatic).toHaveBeenCalledTimes(1);
   });
 
-  it('always renders the off-camera roster when there are off-camera participants, regardless of focus', () => {
+  it('always renders the off-camera roster when there are off-camera participants, regardless of what is watched', () => {
     render(
       <FocusedCallView
         participants={[
           participant({ identity: 'u1', name: 'Felipe', cameraEnabled: true }),
           participant({ identity: 'u2', name: 'João', cameraEnabled: false }),
         ]}
-        focusTarget={{ type: 'camera', identity: 'u1' }}
+        watchTargets={[{ type: 'camera', identity: 'u1' }]}
         isManual={false}
-        onFocus={vi.fn()}
+        onAddWatch={vi.fn()}
+        onRemoveWatch={vi.fn()}
         onReturnToAutomatic={vi.fn()}
         avatarUrlByUserId={new Map()}
         deafenedByUserId={new Map()}
