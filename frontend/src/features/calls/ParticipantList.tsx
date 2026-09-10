@@ -1,9 +1,10 @@
 import { useMemo } from 'react';
 import { Spinner } from '../../components/Spinner';
 import { CameraGrid } from './CameraGrid';
+import { FocusedCallView } from './FocusedCallView';
 import { useVoiceParticipants, useVoicePresence } from './hooks';
 import { OffCameraRoster } from './OffCameraRoster';
-import { ScreenShareTile } from './ScreenShareTile';
+import { useFocusTarget } from './useFocusTarget';
 
 interface ParticipantListProps {
   /** The current channel's server — used to look up who's deafened/their avatar via voice presence. */
@@ -11,15 +12,16 @@ interface ParticipantListProps {
 }
 
 /**
- * Splits participants into three groups per
- * docs/superpowers/specs/2026-09-09-call-grid-layout-design.md: active screen shares (full-width,
- * rendered first, unchanged from before), camera-on participants (CameraGrid's tiered layout),
- * and everyone else (OffCameraRoster's horizontal strip) — so off-camera participants no longer
- * take up main-grid space alongside camera tiles.
+ * Per docs/superpowers/specs/2026-09-09-call-focus-mode-design.md: whenever useFocusTarget
+ * resolves a non-null target (a manual pin, or the automatic share default), renders
+ * FocusedCallView instead of the plain grid. With no shares and no pin, renders exactly Phase 1's
+ * CameraGrid/OffCameraRoster pair (docs/superpowers/specs/2026-09-09-call-grid-layout-design.md),
+ * unchanged.
  */
 export function ParticipantList({ serverId }: ParticipantListProps) {
   const participants = useVoiceParticipants();
   const { data: presence } = useVoicePresence(serverId);
+  const { focusTarget, isManual, setFocus, clearFocus } = useFocusTarget(participants);
 
   // participant.identity is LiveKit's identifier, but the backend mints LiveKit tokens with the
   // app's user UUID as the JWT `sub` claim (MediaService), so it's safe to compare directly
@@ -45,7 +47,20 @@ export function ParticipantList({ serverId }: ParticipantListProps) {
     );
   }
 
-  const sharing = participants.filter((participant) => participant.screenShareTrack);
+  if (focusTarget) {
+    return (
+      <FocusedCallView
+        participants={participants}
+        focusTarget={focusTarget}
+        isManual={isManual}
+        onFocus={setFocus}
+        onReturnToAutomatic={clearFocus}
+        avatarUrlByUserId={avatarUrlByUserId}
+        deafenedByUserId={deafenedByUserId}
+      />
+    );
+  }
+
   const onCamera = participants.filter((participant) => participant.cameraEnabled);
   const offCamera = participants.filter(
     (participant) => !participant.cameraEnabled && !participant.screenShareTrack,
@@ -53,14 +68,12 @@ export function ParticipantList({ serverId }: ParticipantListProps) {
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden pb-20">
-      {sharing.length > 0 && (
-        <div className="flex flex-shrink-0 flex-col gap-2 p-4 pb-0">
-          {sharing.map((participant) => (
-            <ScreenShareTile key={`${participant.identity}-screen`} participant={participant} />
-          ))}
-        </div>
-      )}
-      <CameraGrid participants={onCamera} avatarUrlByUserId={avatarUrlByUserId} deafenedByUserId={deafenedByUserId} />
+      <CameraGrid
+        participants={onCamera}
+        avatarUrlByUserId={avatarUrlByUserId}
+        deafenedByUserId={deafenedByUserId}
+        onFocus={setFocus}
+      />
       <OffCameraRoster
         participants={offCamera}
         avatarUrlByUserId={avatarUrlByUserId}

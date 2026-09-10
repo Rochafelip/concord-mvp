@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { ConnectionQuality } from 'livekit-client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useVoiceStore } from '../../stores/voiceStore';
@@ -8,7 +9,14 @@ import * as callsApi from './api';
 import { ParticipantList } from './ParticipantList';
 
 vi.mock('../../services/voiceClient', () => ({
-  voiceClient: { toggleMute: vi.fn(), toggleCamera: vi.fn(), toggleScreenShare: vi.fn() },
+  voiceClient: {
+    toggleMute: vi.fn(),
+    toggleCamera: vi.fn(),
+    toggleScreenShare: vi.fn(),
+    setParticipantVolume: vi.fn(),
+    setScreenShareVolume: vi.fn(),
+    disconnect: vi.fn(),
+  },
 }));
 vi.mock('./api');
 
@@ -201,6 +209,112 @@ describe('ParticipantList', () => {
 
       expect(screen.getByTestId('camera-grid')).toContainElement(screen.getByText(/Felipe/));
       expect(screen.getByTestId('off-camera-roster')).toContainElement(screen.getByText(/João/));
+    });
+  });
+
+  describe('focus mode', () => {
+    it('auto-focuses a lone active screen share with no click required', () => {
+      const track = { attach: vi.fn(), detach: vi.fn() } as never;
+      useVoiceStore.setState({
+        participants: [
+          participant({ identity: 'u1', name: 'Felipe', isLocal: true, cameraEnabled: true }),
+          participant({ identity: 'u2', name: 'João', isLocal: false, screenShareTrack: track }),
+        ],
+      });
+      renderList();
+
+      expect(screen.getByText(/João's screen/)).toBeInTheDocument();
+    });
+
+    it('auto-focuses the first sharing participant by array order when several are sharing, listing the other as a thumbnail', () => {
+      const track = { attach: vi.fn(), detach: vi.fn() } as never;
+      useVoiceStore.setState({
+        participants: [
+          participant({ identity: 'u1', name: 'Felipe', isLocal: true, screenShareTrack: track }),
+          participant({ identity: 'u2', name: 'João', isLocal: false, screenShareTrack: track }),
+        ],
+      });
+      renderList();
+
+      expect(screen.getByTestId('focusable-strip')).toContainElement(
+        screen.getByRole('button', { name: "Focus on João's screen" }),
+      );
+    });
+
+    it('clicking a thumbnail switches which share is focused', async () => {
+      const user = userEvent.setup();
+      const track = { attach: vi.fn(), detach: vi.fn() } as never;
+      useVoiceStore.setState({
+        participants: [
+          participant({ identity: 'u1', name: 'Felipe', isLocal: true, screenShareTrack: track }),
+          participant({ identity: 'u2', name: 'João', isLocal: false, screenShareTrack: track }),
+        ],
+      });
+      renderList();
+
+      await user.click(screen.getByRole('button', { name: "Focus on João's screen" }));
+
+      expect(screen.getByRole('button', { name: 'Return to automatic layout' })).toBeInTheDocument();
+    });
+
+    it('lets a manual camera pin persist when a screen share starts, overriding the auto-focused share', async () => {
+      const user = userEvent.setup();
+      useVoiceStore.setState({
+        participants: [
+          participant({ identity: 'u1', name: 'Felipe', isLocal: true, cameraEnabled: true }),
+          participant({ identity: 'u2', name: 'João', isLocal: false, cameraEnabled: true }),
+        ],
+      });
+      renderList();
+
+      await user.click(screen.getByRole('button', { name: "Focus on João's camera" }));
+
+      const track = { attach: vi.fn(), detach: vi.fn() } as never;
+      useVoiceStore.setState({
+        participants: [
+          participant({ identity: 'u1', name: 'Felipe', isLocal: true, cameraEnabled: true, screenShareTrack: track }),
+          participant({ identity: 'u2', name: 'João', isLocal: false, cameraEnabled: true }),
+        ],
+      });
+
+      expect(screen.getByRole('button', { name: 'Return to automatic layout' })).toBeInTheDocument();
+    });
+
+    it('clicking "return to automatic" reverts to the auto-focused share', async () => {
+      const user = userEvent.setup();
+      const track = { attach: vi.fn(), detach: vi.fn() } as never;
+      useVoiceStore.setState({
+        participants: [
+          participant({ identity: 'u1', name: 'Felipe', isLocal: true, cameraEnabled: true }),
+          participant({ identity: 'u2', name: 'João', isLocal: false, screenShareTrack: track }),
+        ],
+      });
+      renderList();
+
+      await user.click(screen.getByRole('button', { name: "Focus on Felipe's camera" }));
+      expect(screen.getByRole('button', { name: 'Return to automatic layout' })).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Return to automatic layout' }));
+
+      expect(screen.queryByRole('button', { name: 'Return to automatic layout' })).not.toBeInTheDocument();
+      expect(screen.getByText(/João's screen/)).toBeInTheDocument();
+    });
+
+    it('reverts to the plain grid when a manual pin is cleared and nobody is sharing', async () => {
+      const user = userEvent.setup();
+      useVoiceStore.setState({
+        participants: [
+          participant({ identity: 'u1', name: 'Felipe', isLocal: true, cameraEnabled: true }),
+          participant({ identity: 'u2', name: 'João', isLocal: false, cameraEnabled: true }),
+        ],
+      });
+      renderList();
+
+      await user.click(screen.getByRole('button', { name: "Focus on João's camera" }));
+      await user.click(screen.getByRole('button', { name: 'Return to automatic layout' }));
+
+      expect(screen.getByTestId('camera-grid')).toBeInTheDocument();
+      expect(screen.queryByTestId('focusable-strip')).not.toBeInTheDocument();
     });
   });
 });

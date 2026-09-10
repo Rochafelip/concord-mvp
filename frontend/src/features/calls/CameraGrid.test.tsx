@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { ConnectionQuality } from 'livekit-client';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { VoiceParticipant } from '../../types/voice';
 import { CameraGrid } from './CameraGrid';
 
@@ -25,7 +26,7 @@ function participant(overrides: Partial<VoiceParticipant> = {}): VoiceParticipan
 describe('CameraGrid', () => {
   it('renders nothing when there are no camera-on participants', () => {
     const { container } = render(
-      <CameraGrid participants={[]} avatarUrlByUserId={new Map()} deafenedByUserId={new Map()} />,
+      <CameraGrid participants={[]} avatarUrlByUserId={new Map()} deafenedByUserId={new Map()} onFocus={vi.fn()} />,
     );
 
     expect(container).toBeEmptyDOMElement();
@@ -37,6 +38,7 @@ describe('CameraGrid', () => {
         participants={[participant({ identity: 'u1', name: 'Felipe' }), participant({ identity: 'u2', name: 'João' })]}
         avatarUrlByUserId={new Map()}
         deafenedByUserId={new Map()}
+        onFocus={vi.fn()}
       />,
     );
 
@@ -50,6 +52,7 @@ describe('CameraGrid', () => {
         participants={[participant({ identity: 'u1' }), participant({ identity: 'u2' }), participant({ identity: 'u3' })]}
         avatarUrlByUserId={new Map()}
         deafenedByUserId={new Map()}
+        onFocus={vi.fn()}
       />,
     );
 
@@ -63,9 +66,27 @@ describe('CameraGrid', () => {
         participants={[participant({ identity: 'u2', name: 'João', micEnabled: false })]}
         avatarUrlByUserId={new Map([['u2', 'https://example.test/joao.png']])}
         deafenedByUserId={new Map([['u2', true]])}
+        onFocus={vi.fn()}
       />,
     );
 
     expect(screen.getByTestId('deaf-status-on')).toBeInTheDocument();
+  });
+
+  it('calls onFocus with the right target when a tile is manually focused', async () => {
+    const user = userEvent.setup();
+    const onFocus = vi.fn();
+    render(
+      <CameraGrid
+        participants={[participant({ identity: 'u1', name: 'Felipe' }), participant({ identity: 'u2', name: 'João' })]}
+        avatarUrlByUserId={new Map()}
+        deafenedByUserId={new Map()}
+        onFocus={onFocus}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: "Focus on João's camera" }));
+
+    expect(onFocus).toHaveBeenCalledWith({ type: 'camera', identity: 'u2' });
   });
 });
