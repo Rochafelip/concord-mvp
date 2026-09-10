@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAuthStore } from '../features/auth/authStore';
@@ -65,6 +66,7 @@ describe('AppShell', () => {
     vi.mocked(serversApi.getServer).mockResolvedValue(server);
     vi.mocked(channelsApi.getChannel).mockResolvedValue(channel);
     useAuthStore.setState({
+      sessionEndedReason: null,
       isAuthenticated: true,
       user: {
         id: 'u1',
@@ -95,5 +97,38 @@ describe('AppShell', () => {
     renderShell('/app');
 
     expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/app/settings');
+  });
+  it('asks for confirmation instead of logging out on the first click', async () => {
+    const user = userEvent.setup();
+    renderShell('/app');
+
+    await user.click(screen.getByRole('button', { name: 'Sair do Concord' }));
+
+    expect(screen.getByText('Sair do Concord?')).toBeInTheDocument();
+    expect(useAuthStore.getState().isAuthenticated).toBe(true);
+  });
+
+  it('logs out once the user confirms', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true } as Response));
+    const user = userEvent.setup();
+    renderShell('/app');
+
+    await user.click(screen.getByRole('button', { name: 'Sair do Concord' }));
+    await user.click(screen.getByRole('button', { name: 'Sair' }));
+
+    await waitFor(() => {
+      expect(useAuthStore.getState().isAuthenticated).toBe(false);
+    });
+  });
+
+  it('stays logged in when the confirmation is dismissed', async () => {
+    const user = userEvent.setup();
+    renderShell('/app');
+
+    await user.click(screen.getByRole('button', { name: 'Sair do Concord' }));
+    await user.click(screen.getByRole('button', { name: 'Cancelar' }));
+
+    expect(screen.queryByText('Sair do Concord?')).not.toBeInTheDocument();
+    expect(useAuthStore.getState().isAuthenticated).toBe(true);
   });
 });

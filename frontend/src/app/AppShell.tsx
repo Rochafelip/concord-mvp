@@ -1,9 +1,11 @@
 import { Moon, Settings, Sun, X } from 'lucide-react';
+import { useState } from 'react';
 import { Link, Outlet } from 'react-router-dom';
 import { Avatar } from '../components/Avatar';
 import { Button } from '../components/Button';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { Logo } from '../components/Logo';
+import { Modal } from '../components/Modal';
 import { useAuthStore } from '../features/auth/authStore';
 import { VoiceConnectionBar } from '../features/calls/VoiceConnectionBar';
 import { useDisconnectVoiceOnLogout } from '../features/calls/hooks';
@@ -26,6 +28,7 @@ export function AppShell() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const user = useAuthStore((state) => state.user);
   const logout = useAuthStore((state) => state.logout);
+  const [confirmingLogout, setConfirmingLogout] = useState(false);
 
   useRealtimeSync();
   useDisconnectVoiceOnLogout();
@@ -64,12 +67,37 @@ export function AppShell() {
                 <span className="text-body text-ink">{user.displayName}</span>
               </>
             )}
-            <Button variant="secondary" onClick={logout}>
+            <Button
+              variant="secondary"
+              aria-label="Sair do Concord"
+              onClick={() => setConfirmingLogout(true)}
+            >
               Log out
             </Button>
           </div>
         )}
       </header>
+
+      {/* Logging out drops the session and every open call with it, so it asks first. */}
+      <Modal open={confirmingLogout} onClose={() => setConfirmingLogout(false)}>
+        <h2 className="text-heading font-medium text-ink">Sair do Concord?</h2>
+        <p className="mt-2 max-w-xs text-body text-muted">
+          Você precisará entrar novamente para voltar aos seus servidores.
+        </p>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="secondary" onClick={() => setConfirmingLogout(false)}>
+            Cancelar
+          </Button>
+          <Button
+            onClick={() => {
+              setConfirmingLogout(false);
+              logout();
+            }}
+          >
+            Sair
+          </Button>
+        </div>
+      </Modal>
 
       {notification && (
         <div className="flex flex-shrink-0 items-center gap-2 px-4 pt-2">
