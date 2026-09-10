@@ -5,11 +5,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { voiceClient } from '../../services/voiceClient';
 import { useVoiceStore } from '../../stores/voiceStore';
 import type { VoiceParticipant } from '../../types/voice';
+import * as preference from '../settings/audio/noiseSuppressionPreference';
 import { CallControlBar } from './CallControlBar';
 
 vi.mock('../../services/voiceClient', () => ({
-  voiceClient: { toggleMute: vi.fn(), toggleCamera: vi.fn(), toggleScreenShareAudio: vi.fn() },
+  voiceClient: {
+    toggleMute: vi.fn(),
+    toggleCamera: vi.fn(),
+    toggleScreenShareAudio: vi.fn(),
+    setNoiseSuppressionEnabled: vi.fn().mockResolvedValue(undefined),
+  },
 }));
+vi.mock('../settings/audio/noiseSuppressionPreference');
 
 function localParticipant(overrides: Partial<VoiceParticipant> = {}): VoiceParticipant {
   return {
@@ -34,6 +41,9 @@ describe('CallControlBar', () => {
     vi.mocked(voiceClient.toggleMute).mockClear();
     vi.mocked(voiceClient.toggleCamera).mockClear();
     vi.mocked(voiceClient.toggleScreenShareAudio).mockClear();
+    vi.mocked(voiceClient.setNoiseSuppressionEnabled).mockClear();
+    vi.mocked(preference.getNoiseSuppressionPreference).mockReturnValue(true);
+    vi.mocked(preference.setNoiseSuppressionPreference).mockReset();
     useVoiceStore.setState({ participants: [] });
   });
 
@@ -75,6 +85,35 @@ describe('CallControlBar', () => {
     render(<CallControlBar onLeave={vi.fn()} />);
 
     expect(screen.getByRole('button', { name: 'Camera off' })).toBeInTheDocument();
+  });
+
+  it('renders the noise suppression button as enabled when the stored preference is enabled', () => {
+    vi.mocked(preference.getNoiseSuppressionPreference).mockReturnValue(true);
+    useVoiceStore.setState({ participants: [localParticipant()] });
+    render(<CallControlBar onLeave={vi.fn()} />);
+
+    expect(screen.getByRole('button', { name: 'Disable noise suppression' })).toBeInTheDocument();
+  });
+
+  it('renders the noise suppression button as disabled when the stored preference is disabled', () => {
+    vi.mocked(preference.getNoiseSuppressionPreference).mockReturnValue(false);
+    useVoiceStore.setState({ participants: [localParticipant()] });
+    render(<CallControlBar onLeave={vi.fn()} />);
+
+    expect(screen.getByRole('button', { name: 'Enable noise suppression' })).toBeInTheDocument();
+  });
+
+  it('clicking the noise suppression button persists the flipped preference and applies it live', async () => {
+    const user = userEvent.setup();
+    vi.mocked(preference.getNoiseSuppressionPreference).mockReturnValue(true);
+    useVoiceStore.setState({ participants: [localParticipant()] });
+    render(<CallControlBar onLeave={vi.fn()} />);
+
+    await user.click(screen.getByRole('button', { name: 'Disable noise suppression' }));
+
+    expect(preference.setNoiseSuppressionPreference).toHaveBeenCalledWith(false);
+    expect(voiceClient.setNoiseSuppressionEnabled).toHaveBeenCalledWith(false);
+    expect(screen.getByRole('button', { name: 'Enable noise suppression' })).toBeInTheDocument();
   });
 
   it('does not render a screen-share-audio button when not screen sharing', () => {

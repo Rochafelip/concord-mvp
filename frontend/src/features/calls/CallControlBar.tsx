@@ -1,5 +1,7 @@
-import { Mic, MicOff, PhoneOff, Video, VideoOff, Volume2, VolumeX } from 'lucide-react';
+import { AudioLines, AudioLinesOff, Mic, MicOff, PhoneOff, Video, VideoOff, Volume2, VolumeX } from 'lucide-react';
+import { useState } from 'react';
 import { voiceClient } from '../../services/voiceClient';
+import { getNoiseSuppressionPreference, setNoiseSuppressionPreference } from '../settings/audio/noiseSuppressionPreference';
 import { useVoiceParticipants } from './hooks';
 
 interface CallControlBarProps {
@@ -13,7 +15,16 @@ interface CallControlBarProps {
  */
 export function CallControlBar({ onLeave }: CallControlBarProps) {
   const localParticipant = useVoiceParticipants().find((participant) => participant.isLocal);
+  const [suppressionEnabled, setSuppressionEnabled] = useState(getNoiseSuppressionPreference);
+
   if (!localParticipant) return null;
+
+  function handleToggleNoiseSuppression() {
+    const next = !suppressionEnabled;
+    setSuppressionEnabled(next);
+    setNoiseSuppressionPreference(next);
+    void voiceClient.setNoiseSuppressionEnabled(next);
+  }
 
   return (
     <div className="absolute inset-x-0 bottom-4 flex items-center justify-center gap-1.5 rounded-full bg-black/60 px-2 py-1.5">
@@ -27,6 +38,18 @@ export function CallControlBar({ onLeave }: CallControlBarProps) {
           <Mic size={16} aria-hidden="true" />
         ) : (
           <MicOff size={16} aria-hidden="true" />
+        )}
+      </button>
+      <button
+        type="button"
+        aria-label={suppressionEnabled ? 'Disable noise suppression' : 'Enable noise suppression'}
+        onClick={handleToggleNoiseSuppression}
+        className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
+      >
+        {suppressionEnabled ? (
+          <AudioLines size={16} aria-hidden="true" />
+        ) : (
+          <AudioLinesOff size={16} aria-hidden="true" />
         )}
       </button>
       <button
