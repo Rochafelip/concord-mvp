@@ -1,8 +1,8 @@
-import { HeadphoneOff, Mic, MicOff } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { Avatar } from '../../components/Avatar';
 import { voiceClient } from '../../services/voiceClient';
 import type { VoiceParticipant } from '../../types/voice';
+import { MicStatusIcon } from './MicStatusIcon';
 import { tileColorFor } from './tileColor';
 import { VolumeControl } from './VolumeControl';
 
@@ -59,13 +59,7 @@ export function ParticipantTile({ participant, avatarUrl, deafened = false }: Pa
       )}
 
       <span className="absolute bottom-1 left-1 flex items-center gap-1 rounded bg-black/50 px-1.5 py-0.5 text-caption text-white">
-        {deafened ? (
-          <HeadphoneOff data-testid="deaf-status-on" size={12} aria-hidden="true" />
-        ) : participant.micEnabled ? (
-          <Mic data-testid="mic-status-on" size={12} aria-hidden="true" />
-        ) : (
-          <MicOff data-testid="mic-status-off" size={12} aria-hidden="true" />
-        )}
+        <MicStatusIcon micEnabled={participant.micEnabled} deafened={deafened} />
         {participant.name}
         {participant.isLocal ? ' (you)' : ''}
       </span>
