@@ -196,4 +196,65 @@ describe('ParticipantTile', () => {
       expect(voiceClient.setParticipantVolume).toHaveBeenCalledWith('bob', 0.3);
     });
   });
+
+  describe('connecting state', () => {
+    it('shows a loading spinner when the camera is enabled but the track has not attached yet', () => {
+      render(<ParticipantTile participant={participant({ cameraEnabled: true, videoTrack: null })} />);
+
+      expect(screen.getByRole('status')).toBeInTheDocument();
+    });
+
+    it('does not show a spinner once the video track is attached', () => {
+      const videoTrack = { attach: vi.fn(), detach: vi.fn() } as never;
+      render(<ParticipantTile participant={participant({ cameraEnabled: true, videoTrack })} />);
+
+      expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    });
+
+    it('does not show a spinner when the camera is simply off', () => {
+      render(<ParticipantTile participant={participant({ cameraEnabled: false, videoTrack: null })} />);
+
+      expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('connection issue badge', () => {
+    it('shows a badge for a remote participant with poor connection quality', () => {
+      render(<ParticipantTile participant={participant({ isLocal: false, connectionQuality: ConnectionQuality.Poor })} />);
+
+      expect(screen.getByLabelText('Connection: poor')).toBeInTheDocument();
+    });
+
+    it('shows a badge for a remote participant whose connection is lost', () => {
+      render(<ParticipantTile participant={participant({ isLocal: false, connectionQuality: ConnectionQuality.Lost })} />);
+
+      expect(screen.getByLabelText('Connection: lost')).toBeInTheDocument();
+    });
+
+    it('does not show a badge for good or excellent connection quality', () => {
+      render(<ParticipantTile participant={participant({ isLocal: false, connectionQuality: ConnectionQuality.Good })} />);
+
+      expect(screen.queryByLabelText(/Connection:/)).not.toBeInTheDocument();
+    });
+
+    it('never shows a badge for the local participant, even with poor connection quality', () => {
+      render(<ParticipantTile participant={participant({ isLocal: true, connectionQuality: ConnectionQuality.Poor })} />);
+
+      expect(screen.queryByLabelText(/Connection:/)).not.toBeInTheDocument();
+    });
+  });
+
+  describe('tier className prop', () => {
+    it('appends the given className alongside the default aspect-video sizing', () => {
+      const { container } = render(<ParticipantTile participant={participant()} className="h-full max-h-full" />);
+
+      expect(container.firstChild).toHaveClass('aspect-video', 'h-full', 'max-h-full');
+    });
+
+    it('defaults to no extra className', () => {
+      const { container } = render(<ParticipantTile participant={participant()} />);
+
+      expect(container.firstChild).toHaveClass('aspect-video');
+    });
+  });
 });
