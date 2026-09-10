@@ -54,6 +54,24 @@ describe('FocusedCallView', () => {
     expect(screen.getByText(/Felipe/)).toBeInTheDocument();
   });
 
+  it('keeps its focused tile\'s volume control revealing on its own hover, not the grid\'s', () => {
+    render(
+      <FocusedCallView
+        participants={[participant({ identity: 'u1', name: 'Felipe', isLocal: false, cameraEnabled: true })]}
+        focusTarget={{ type: 'camera', identity: 'u1' }}
+        isManual
+        onFocus={vi.fn()}
+        onReturnToAutomatic={vi.fn()}
+        avatarUrlByUserId={new Map()}
+        deafenedByUserId={new Map()}
+      />,
+    );
+
+    const wrapper = screen.getByRole('slider', { name: 'Volume for Felipe' }).parentElement?.parentElement;
+    expect(wrapper).toHaveClass('group-hover:opacity-100');
+    expect(wrapper).not.toHaveClass('group-hover/camera-grid:opacity-100');
+  });
+
   it('renders the ScreenShareTile for a share focus target', () => {
     const track = { attach: vi.fn(), detach: vi.fn() } as never;
     render(
