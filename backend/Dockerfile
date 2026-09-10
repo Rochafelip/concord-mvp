@@ -14,8 +14,11 @@ RUN ./mvnw -B package -DskipTests
 FROM eclipse-temurin:21-jre-alpine AS runtime
 WORKDIR /app
 
-# Create non-root user
-RUN addgroup -S app && adduser -S app -G app
+# Create non-root user. UID/GID are pinned to 1000 to match the chown done by
+# the backend-init container on the shared uploads volume (docker-compose.yml)
+# — leaving them to Alpine's default system-user allocation (uid 100/gid 101)
+# desyncs the two and the app can't write to /app/uploads.
+RUN addgroup -g 1000 -S app && adduser -S -D -H -u 1000 -G app app
 
 # Create directories that the application needs
 RUN mkdir -p /app/uploads \
