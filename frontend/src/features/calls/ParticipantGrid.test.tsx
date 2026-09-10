@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { ConnectionQuality } from 'livekit-client';
 import { describe, expect, it, vi } from 'vitest';
 import type { VoiceParticipant } from '../../types/voice';
-import { CameraGrid } from './CameraGrid';
+import { ParticipantGrid } from './ParticipantGrid';
 
 function participant(overrides: Partial<VoiceParticipant> = {}): VoiceParticipant {
   return {
@@ -23,10 +23,10 @@ function participant(overrides: Partial<VoiceParticipant> = {}): VoiceParticipan
   };
 }
 
-describe('CameraGrid', () => {
-  it('renders nothing when there are no camera-on participants', () => {
+describe('ParticipantGrid', () => {
+  it('renders nothing when there are no participants', () => {
     const { container } = render(
-      <CameraGrid participants={[]} avatarUrlByUserId={new Map()} deafenedByUserId={new Map()} onFocus={vi.fn()} />,
+      <ParticipantGrid participants={[]} avatarUrlByUserId={new Map()} deafenedByUserId={new Map()} onWatch={vi.fn()} />,
     );
 
     expect(container).toBeEmptyDOMElement();
@@ -34,11 +34,11 @@ describe('CameraGrid', () => {
 
   it('renders one tile per participant', () => {
     render(
-      <CameraGrid
+      <ParticipantGrid
         participants={[participant({ identity: 'u1', name: 'Felipe' }), participant({ identity: 'u2', name: 'João' })]}
         avatarUrlByUserId={new Map()}
         deafenedByUserId={new Map()}
-        onFocus={vi.fn()}
+        onWatch={vi.fn()}
       />,
     );
 
@@ -46,74 +46,86 @@ describe('CameraGrid', () => {
     expect(screen.getByText(/João/)).toBeInTheDocument();
   });
 
+  it('renders a camera-off participant as an avatar tile in the same grid, not a separate roster', () => {
+    render(
+      <ParticipantGrid
+        participants={[participant({ identity: 'u1', name: 'Felipe', cameraEnabled: false })]}
+        avatarUrlByUserId={new Map()}
+        deafenedByUserId={new Map()}
+        onWatch={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId('participant-grid')).toContainElement(screen.getByText(/Felipe/));
+  });
+
+  it('does not make a camera-off tile watch-clickable', () => {
+    render(
+      <ParticipantGrid
+        participants={[participant({ identity: 'u1', name: 'Felipe', cameraEnabled: false })]}
+        avatarUrlByUserId={new Map()}
+        deafenedByUserId={new Map()}
+        onWatch={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: "Focus on Felipe's camera" })).not.toBeInTheDocument();
+  });
+
   it('marks its container as a named hover group for grid-wide control reveal', () => {
     render(
-      <CameraGrid
+      <ParticipantGrid
         participants={[participant({ identity: 'u1' })]}
         avatarUrlByUserId={new Map()}
         deafenedByUserId={new Map()}
-        onFocus={vi.fn()}
+        onWatch={vi.fn()}
       />,
     );
 
-    expect(screen.getByTestId('camera-grid')).toHaveClass('group/camera-grid');
-  });
-
-  it('renders tiles whose controls reveal on the grid\'s hover rather than their own', () => {
-    render(
-      <CameraGrid
-        participants={[participant({ identity: 'u1', name: 'Felipe' })]}
-        avatarUrlByUserId={new Map()}
-        deafenedByUserId={new Map()}
-        onFocus={vi.fn()}
-      />,
-    );
-
-    const wrapper = screen.getByRole('slider', { name: 'Volume for Felipe' }).parentElement?.parentElement;
-    expect(wrapper).toHaveClass('group-hover/camera-grid:opacity-100');
+    expect(screen.getByTestId('participant-grid')).toHaveClass('group/camera-grid');
   });
 
   it('applies the 2x2 tier layout for 3 participants, with the third tile spanning both columns', () => {
     render(
-      <CameraGrid
+      <ParticipantGrid
         participants={[participant({ identity: 'u1' }), participant({ identity: 'u2' }), participant({ identity: 'u3' })]}
         avatarUrlByUserId={new Map()}
         deafenedByUserId={new Map()}
-        onFocus={vi.fn()}
+        onWatch={vi.fn()}
       />,
     );
 
-    expect(screen.getByTestId('camera-grid')).toHaveClass('grid-cols-2');
-    expect(screen.getByTestId('camera-grid')).toHaveClass('[&>:nth-child(3)]:col-span-2');
+    expect(screen.getByTestId('participant-grid')).toHaveClass('grid-cols-2');
+    expect(screen.getByTestId('participant-grid')).toHaveClass('[&>:nth-child(3)]:col-span-2');
   });
 
   it('passes deafened and avatarUrl through to the matching tile by identity', () => {
     render(
-      <CameraGrid
+      <ParticipantGrid
         participants={[participant({ identity: 'u2', name: 'João', micEnabled: false })]}
         avatarUrlByUserId={new Map([['u2', 'https://example.test/joao.png']])}
         deafenedByUserId={new Map([['u2', true]])}
-        onFocus={vi.fn()}
+        onWatch={vi.fn()}
       />,
     );
 
     expect(screen.getByTestId('deaf-status-on')).toBeInTheDocument();
   });
 
-  it('calls onFocus with the right target when a tile is manually focused', async () => {
+  it('calls onWatch with the right target when a camera-on tile is clicked', async () => {
     const user = userEvent.setup();
-    const onFocus = vi.fn();
+    const onWatch = vi.fn();
     render(
-      <CameraGrid
+      <ParticipantGrid
         participants={[participant({ identity: 'u1', name: 'Felipe' }), participant({ identity: 'u2', name: 'João' })]}
         avatarUrlByUserId={new Map()}
         deafenedByUserId={new Map()}
-        onFocus={onFocus}
+        onWatch={onWatch}
       />,
     );
 
     await user.click(screen.getByRole('button', { name: "Focus on João's camera" }));
 
-    expect(onFocus).toHaveBeenCalledWith({ type: 'camera', identity: 'u2' });
+    expect(onWatch).toHaveBeenCalledWith({ type: 'camera', identity: 'u2' });
   });
 });

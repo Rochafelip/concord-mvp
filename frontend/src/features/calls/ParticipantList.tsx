@@ -1,9 +1,8 @@
 import { useMemo } from 'react';
 import { Spinner } from '../../components/Spinner';
-import { CameraGrid } from './CameraGrid';
 import { FocusedCallView } from './FocusedCallView';
 import { useVoiceParticipants, useVoicePresence } from './hooks';
-import { OffCameraRoster } from './OffCameraRoster';
+import { ParticipantGrid } from './ParticipantGrid';
 import { useFocusTarget } from './useFocusTarget';
 
 interface ParticipantListProps {
@@ -13,10 +12,11 @@ interface ParticipantListProps {
 
 /**
  * Per docs/superpowers/specs/2026-09-09-call-focus-mode-design.md: whenever useFocusTarget
- * resolves a non-null target (a manual pin, or the automatic share default), renders
- * FocusedCallView instead of the plain grid. With no shares and no pin, renders exactly Phase 1's
- * CameraGrid/OffCameraRoster pair (docs/superpowers/specs/2026-09-09-call-grid-layout-design.md),
- * unchanged.
+ * resolves a non-null target, renders FocusedCallView instead of the plain grid. With no shares
+ * and no pin, renders ParticipantGrid alone — every connected participant, camera on or off, per
+ * docs/superpowers/specs/2026-09-09-call-grid-unification-multiwatch-design.md §1. (This file's
+ * focused branch still uses the single-target useFocusTarget/FocusedCallView pairing; that's
+ * migrated to the multi-watch useWatchTargets/FocusedCallView pairing in a later task.)
  */
 export function ParticipantList({ serverId }: ParticipantListProps) {
   const participants = useVoiceParticipants();
@@ -61,23 +61,13 @@ export function ParticipantList({ serverId }: ParticipantListProps) {
     );
   }
 
-  const onCamera = participants.filter((participant) => participant.cameraEnabled);
-  const offCamera = participants.filter(
-    (participant) => !participant.cameraEnabled && !participant.screenShareTrack,
-  );
-
   return (
     <div className="flex flex-1 flex-col overflow-hidden pb-20">
-      <CameraGrid
-        participants={onCamera}
+      <ParticipantGrid
+        participants={participants}
         avatarUrlByUserId={avatarUrlByUserId}
         deafenedByUserId={deafenedByUserId}
-        onFocus={setFocus}
-      />
-      <OffCameraRoster
-        participants={offCamera}
-        avatarUrlByUserId={avatarUrlByUserId}
-        deafenedByUserId={deafenedByUserId}
+        onWatch={setFocus}
       />
     </div>
   );
