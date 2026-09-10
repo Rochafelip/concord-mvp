@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type RefObject } from 'react';
 
 export interface GridLayout {
-  containerRef: RefObject<HTMLDivElement>;
+  containerRef: RefObject<HTMLDivElement | null>;
   containerClassName: string;
   tileClassName: string;
   style: CSSProperties;
