@@ -46,6 +46,33 @@ describe('CameraGrid', () => {
     expect(screen.getByText(/João/)).toBeInTheDocument();
   });
 
+  it('marks its container as a named hover group for grid-wide control reveal', () => {
+    render(
+      <CameraGrid
+        participants={[participant({ identity: 'u1' })]}
+        avatarUrlByUserId={new Map()}
+        deafenedByUserId={new Map()}
+        onFocus={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId('camera-grid')).toHaveClass('group/camera-grid');
+  });
+
+  it('renders tiles whose controls reveal on the grid\'s hover rather than their own', () => {
+    render(
+      <CameraGrid
+        participants={[participant({ identity: 'u1', name: 'Felipe' })]}
+        avatarUrlByUserId={new Map()}
+        deafenedByUserId={new Map()}
+        onFocus={vi.fn()}
+      />,
+    );
+
+    const wrapper = screen.getByRole('slider', { name: 'Volume for Felipe' }).parentElement?.parentElement;
+    expect(wrapper).toHaveClass('group-hover/camera-grid:opacity-100');
+  });
+
   it('applies the 2x2 tier layout for 3 participants, with the third tile spanning both columns', () => {
     render(
       <CameraGrid

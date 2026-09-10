@@ -27,7 +27,7 @@ export function CameraGrid({ participants, avatarUrlByUserId, deafenedByUserId, 
     <div
       ref={containerRef}
       data-testid="camera-grid"
-      className={`flex-1 overflow-y-auto p-4 ${containerClassName}`}
+      className={`group/camera-grid flex-1 overflow-y-auto p-4 ${containerClassName}`}
       style={style}
     >
       {participants.map((participant) => (
@@ -37,6 +37,7 @@ export function CameraGrid({ participants, avatarUrlByUserId, deafenedByUserId, 
           avatarUrl={avatarUrlByUserId.get(participant.identity)}
           deafened={deafenedByUserId.get(participant.identity) ?? false}
           className={tileClassName}
+          revealOnGridHover
           onFocusClick={() => onFocus({ type: 'camera', identity: participant.identity })}
         />
       ))}
