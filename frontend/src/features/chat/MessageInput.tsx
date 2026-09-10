@@ -6,9 +6,7 @@ import { useWsConnectionStore } from '../../stores/wsConnectionStore';
 import { uploadAttachment } from './api';
 import { sendMessage } from './hooks';
 
-const IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-const MAX_IMAGE_SIZE_BYTES = 8 * 1024 * 1024;
-const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
+const MAX_UPLOAD_SIZE_BYTES = 150 * 1024 * 1024;
 
 interface MessageInputProps {
   channelId: string;
@@ -59,12 +57,8 @@ export function MessageInput({ channelId }: MessageInputProps) {
       return;
     }
 
-    // file.type is just a fast client-side UX hint (browser-reported, spoofable) — the backend
-    // independently validates by actual file content and is the authoritative gate.
-    const isImage = IMAGE_MIME_TYPES.includes(file.type);
-    const maxSize = isImage ? MAX_IMAGE_SIZE_BYTES : MAX_FILE_SIZE_BYTES;
-    if (file.size > maxSize) {
-      setUploadError(isImage ? 'Image exceeds the 8 MB limit' : 'File exceeds the 50 MB limit');
+    if (file.size > MAX_UPLOAD_SIZE_BYTES) {
+      setUploadError('File exceeds the 150 MB limit');
       return;
     }
 

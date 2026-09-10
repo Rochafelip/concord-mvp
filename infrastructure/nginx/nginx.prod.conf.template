@@ -35,6 +35,12 @@ server {
     ssl_certificate     /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
 
+    # nginx's own default (1m) is far below Spring's multipart limit
+    # (application.yml's 150MB), so uploads were rejected with a 413 here
+    # before ever reaching the backend. Kept slightly above Spring's limit
+    # for multipart encoding overhead.
+    client_max_body_size 160m;
+
     # REST API -> backend, preserving the path.
     location /api/ {
         proxy_pass http://backend:8080/api/;

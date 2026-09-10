@@ -106,7 +106,7 @@ class AttachmentUploadServiceTest {
         UUID channelId = UUID.randomUUID();
         UUID requesterId = UUID.randomUUID();
         when(channelService.getChannel(channelId, requesterId)).thenReturn(channel(channelId, UUID.randomUUID()));
-        byte[] oversized = new byte[8 * 1024 * 1024 + 1];
+        byte[] oversized = new byte[150 * 1024 * 1024 + 1];
         System.arraycopy(pngBytes(), 0, oversized, 0, pngBytes().length);
         MockMultipartFile file = new MockMultipartFile("file", "photo.png", "image/png", oversized);
 
@@ -153,27 +153,11 @@ class AttachmentUploadServiceTest {
     }
 
     @Test
-    void upload_nonImageFile_over8MBButUnder50MB_succeeds() {
-        // Proves the higher 50MB limit applies to non-images, not the 8MB image limit: this file
-        // is well over 8MB (which would reject an image) but comfortably under 50MB.
+    void upload_nonImageFile_over150MB_rejected() {
         UUID channelId = UUID.randomUUID();
         UUID requesterId = UUID.randomUUID();
         when(channelService.getChannel(channelId, requesterId)).thenReturn(channel(channelId, UUID.randomUUID()));
-        byte[] content = nonImageBytes(10 * 1024 * 1024);
-        MockMultipartFile file = new MockMultipartFile("file", "report.pdf", "application/pdf", content);
-
-        UploadedAttachment result = attachmentUploadService.upload(channelId, requesterId, file);
-
-        assertThat(result.fileSize()).isEqualTo(content.length);
-        assertThat(result.fileName()).isEqualTo("report.pdf");
-    }
-
-    @Test
-    void upload_nonImageFile_over50MB_rejected() {
-        UUID channelId = UUID.randomUUID();
-        UUID requesterId = UUID.randomUUID();
-        when(channelService.getChannel(channelId, requesterId)).thenReturn(channel(channelId, UUID.randomUUID()));
-        byte[] content = nonImageBytes(50 * 1024 * 1024 + 1);
+        byte[] content = nonImageBytes(150 * 1024 * 1024 + 1);
         MockMultipartFile file = new MockMultipartFile("file", "report.pdf", "application/pdf", content);
 
         assertThatThrownBy(() -> attachmentUploadService.upload(channelId, requesterId, file))

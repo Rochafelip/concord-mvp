@@ -19,19 +19,18 @@ import java.util.UUID;
  * {@link ChannelService#getChannel(java.util.UUID, java.util.UUID)} for the same
  * 404-if-missing/403-if-not-a-member check {@link MessageService} already relies on.
  *
- * <p>Any file type is accepted (project owner's explicit request), but the size limit differs:
- * a file whose content matches one of four known image signatures (JPEG/PNG/GIF/WebP — inspected
+ * <p>Any file type is accepted (project owner's explicit request), capped at 150MB either way.
+ * A file whose content matches one of four known image signatures (JPEG/PNG/GIF/WebP — inspected
  * by magic bytes, not filename/declared Content-Type, so a renamed non-image file isn't
- * misclassified) is capped at 8MB and rendered inline by the frontend; anything else is capped at
- * 50MB and rendered as a downloadable file chip. Serving non-image files in a way that can't
- * execute in the browser (forced download) is handled by a separate serving component, not here —
- * this class only validates and stores bytes.
+ * misclassified) is rendered inline by the frontend; anything else is rendered as a downloadable
+ * file chip. Serving non-image files in a way that can't execute in the browser (forced download)
+ * is handled by a separate serving component, not here — this class only validates and stores
+ * bytes.
  */
 @Service
 public class AttachmentUploadService {
 
-    static final long MAX_IMAGE_SIZE_BYTES = 8L * 1024 * 1024;
-    static final long MAX_FILE_SIZE_BYTES = 50L * 1024 * 1024;
+    static final long MAX_UPLOAD_SIZE_BYTES = 150L * 1024 * 1024;
 
     /**
      * Extensions {@link AttachmentServingController} treats as safe to render inline. A non-image
@@ -59,15 +58,12 @@ public class AttachmentUploadService {
             throw new BadRequestException("File is empty");
         }
 
+        if (file.getSize() > MAX_UPLOAD_SIZE_BYTES) {
+            throw new BadRequestException("File exceeds the 150 MB limit");
+        }
+
         String imageExtension = detectImageExtension(file);
         boolean isImage = imageExtension != null;
-        long maxSize = isImage ? MAX_IMAGE_SIZE_BYTES : MAX_FILE_SIZE_BYTES;
-
-        if (file.getSize() > maxSize) {
-            throw new BadRequestException(isImage
-                    ? "Image exceeds the 8 MB limit"
-                    : "File exceeds the 50 MB limit");
-        }
 
         String storageExtension = isImage ? imageExtension : safeExtension(file.getOriginalFilename());
         String storageFilename = UUID.randomUUID() + (storageExtension.isEmpty() ? "" : "." + storageExtension);

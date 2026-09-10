@@ -144,45 +144,43 @@ describe('MessageInput', () => {
     const user = userEvent.setup();
     render(<MessageInput channelId="c1" />);
 
-    const oversizedImage = new File([new Uint8Array(8 * 1024 * 1024 + 1)], 'huge.png', { type: 'image/png' });
+    const oversizedImage = new File([new Uint8Array(150 * 1024 * 1024 + 1)], 'huge.png', { type: 'image/png' });
     await user.upload(screen.getByLabelText(/attach file/i, { selector: 'input' }), oversizedImage);
 
     expect(apiModule.uploadAttachment).not.toHaveBeenCalled();
     expect(hooksModule.sendMessage).not.toHaveBeenCalled();
-    expect(screen.getByText(/8 mb limit/i)).toBeInTheDocument();
+    expect(screen.getByText(/150 mb limit/i)).toBeInTheDocument();
   });
 
-  it('uploads a non-image file under 50MB successfully', async () => {
+  it('uploads a large non-image file under 150MB successfully', async () => {
     vi.mocked(apiModule.uploadAttachment).mockResolvedValue({
       url: '/api/v1/uploads/abc.pdf',
       fileName: 'report.pdf',
-      fileSize: 20 * 1024 * 1024,
+      fileSize: 100 * 1024 * 1024,
     });
     const user = userEvent.setup();
     render(<MessageInput channelId="c1" />);
 
-    // 20MB — over the 8MB image limit, under the 50MB file limit, proving the higher limit
-    // applies since this file's MIME type isn't one of the recognized image types.
-    const file = new File([new Uint8Array(20 * 1024 * 1024)], 'report.pdf', { type: 'application/pdf' });
+    const file = new File([new Uint8Array(100 * 1024 * 1024)], 'report.pdf', { type: 'application/pdf' });
     await user.upload(screen.getByLabelText(/attach file/i, { selector: 'input' }), file);
 
     expect(apiModule.uploadAttachment).toHaveBeenCalledWith('c1', file);
     await screen.findByRole('button', { name: /send/i });
     expect(hooksModule.sendMessage).toHaveBeenCalledWith(
-      'c1', '', '/api/v1/uploads/abc.pdf', 'report.pdf', 20 * 1024 * 1024,
+      'c1', '', '/api/v1/uploads/abc.pdf', 'report.pdf', 100 * 1024 * 1024,
     );
   });
 
-  it('rejects a non-image file over 50MB client-side without uploading', async () => {
+  it('rejects a non-image file over 150MB client-side without uploading', async () => {
     const user = userEvent.setup();
     render(<MessageInput channelId="c1" />);
 
-    const oversizedFile = new File([new Uint8Array(50 * 1024 * 1024 + 1)], 'huge.zip', { type: 'application/zip' });
+    const oversizedFile = new File([new Uint8Array(150 * 1024 * 1024 + 1)], 'huge.zip', { type: 'application/zip' });
     await user.upload(screen.getByLabelText(/attach file/i, { selector: 'input' }), oversizedFile);
 
     expect(apiModule.uploadAttachment).not.toHaveBeenCalled();
     expect(hooksModule.sendMessage).not.toHaveBeenCalled();
-    expect(screen.getByText(/50 mb limit/i)).toBeInTheDocument();
+    expect(screen.getByText(/150 mb limit/i)).toBeInTheDocument();
   });
 
   it('shows an error and does not send when the upload fails', async () => {
