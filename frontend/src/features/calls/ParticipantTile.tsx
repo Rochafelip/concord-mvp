@@ -18,6 +18,11 @@ interface ParticipantTileProps {
   /** Extra classes appended alongside the tile's default aspect-video sizing — CameraGrid's 1-
    * and 2-participant tiers use this to let a tile fill more space than a fixed grid track. */
   className?: string;
+  /** Set to false to suppress the hover volume-control overlay — used when the tile is wrapped
+   * in its own click target (e.g. FocusableStrip's focus-picker entries), since nesting a range
+   * input inside a button is invalid HTML and would fight the wrapper's click handling. Defaults
+   * to true so every existing caller is unaffected. */
+  showVolumeControl?: boolean;
 }
 
 const CONNECTION_ISSUE_QUALITIES: ConnectionQuality[] = [ConnectionQuality.Poor, ConnectionQuality.Lost];
@@ -37,7 +42,13 @@ const CONNECTION_ISSUE_QUALITIES: ConnectionQuality[] = [ConnectionQuality.Poor,
  * The tile background and control-bar chrome (black/white overlays) stay literal colors
  * rather than tokens — they sit on top of live video and must read the same in both themes.
  */
-export function ParticipantTile({ participant, avatarUrl, deafened = false, className = '' }: ParticipantTileProps) {
+export function ParticipantTile({
+  participant,
+  avatarUrl,
+  deafened = false,
+  className = '',
+  showVolumeControl = true,
+}: ParticipantTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const { videoTrack } = participant;
   // livekit-client mutes the camera publication rather than unpublishing it when the camera is
@@ -93,7 +104,7 @@ export function ParticipantTile({ participant, avatarUrl, deafened = false, clas
         {participant.isLocal ? ' (you)' : ''}
       </span>
 
-      {!participant.isLocal && (
+      {!participant.isLocal && showVolumeControl && (
         <div className="absolute right-1 top-1 opacity-0 transition-opacity group-hover:opacity-100">
           <VolumeControl
             label={participant.name}

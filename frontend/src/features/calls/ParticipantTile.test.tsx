@@ -195,6 +195,12 @@ describe('ParticipantTile', () => {
 
       expect(voiceClient.setParticipantVolume).toHaveBeenCalledWith('bob', 0.3);
     });
+
+    it('hides the volume control when showVolumeControl is false, even for a remote participant', () => {
+      render(<ParticipantTile participant={participant({ isLocal: false, identity: 'bob' })} showVolumeControl={false} />);
+
+      expect(screen.queryByRole('slider')).not.toBeInTheDocument();
+    });
   });
 
   describe('connecting state', () => {
