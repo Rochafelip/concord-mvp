@@ -1,4 +1,5 @@
 import { ConnectionQuality } from 'livekit-client';
+import { Focus } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { Avatar } from '../../components/Avatar';
 import { Spinner } from '../../components/Spinner';
@@ -23,6 +24,13 @@ interface ParticipantTileProps {
    * input inside a button is invalid HTML and would fight the wrapper's click handling. Defaults
    * to true so every existing caller is unaffected. */
   showVolumeControl?: boolean;
+  /** When provided, renders a small hover-revealed focus button in the tile's bottom-right
+   * corner (the one corner not already used by the name pill, connection badge, or volume
+   * control), so a plain CameraGrid tile can be manually pinned into the call's focused main
+   * slot without wrapping the whole tile in a button — which would nest the volume control's
+   * range input inside another interactive element. See
+   * docs/superpowers/specs/2026-09-09-call-focus-mode-design.md. */
+  onFocusClick?: () => void;
 }
 
 const CONNECTION_ISSUE_QUALITIES: ConnectionQuality[] = [ConnectionQuality.Poor, ConnectionQuality.Lost];
@@ -48,6 +56,7 @@ export function ParticipantTile({
   deafened = false,
   className = '',
   showVolumeControl = true,
+  onFocusClick,
 }: ParticipantTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const { videoTrack } = participant;
@@ -111,6 +120,17 @@ export function ParticipantTile({
             onVolumeChange={(volume) => voiceClient.setParticipantVolume(participant.identity, volume)}
           />
         </div>
+      )}
+
+      {onFocusClick && (
+        <button
+          type="button"
+          aria-label={`Focus on ${participant.name}'s camera`}
+          onClick={onFocusClick}
+          className="absolute bottom-1 right-1 flex h-6 w-6 items-center justify-center rounded bg-black/50 text-white opacity-0 transition-opacity hover:bg-black/70 group-hover:opacity-100"
+        >
+          <Focus size={14} aria-hidden="true" />
+        </button>
       )}
     </div>
   );

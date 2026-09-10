@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { ConnectionQuality } from 'livekit-client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { voiceClient } from '../../services/voiceClient';
@@ -200,6 +201,30 @@ describe('ParticipantTile', () => {
       render(<ParticipantTile participant={participant({ isLocal: false, identity: 'bob' })} showVolumeControl={false} />);
 
       expect(screen.queryByRole('slider')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('focus button', () => {
+    it('does not render a focus button when onFocusClick is omitted', () => {
+      render(<ParticipantTile participant={participant({ name: 'Felipe' })} />);
+
+      expect(screen.queryByRole('button', { name: "Focus on Felipe's camera" })).not.toBeInTheDocument();
+    });
+
+    it('renders a focus button when onFocusClick is provided, alongside the volume control', async () => {
+      const user = userEvent.setup();
+      const onFocusClick = vi.fn();
+      render(
+        <ParticipantTile
+          participant={participant({ name: 'Felipe', isLocal: false, identity: 'bob' })}
+          onFocusClick={onFocusClick}
+        />,
+      );
+
+      expect(screen.getByRole('slider', { name: 'Volume for Felipe' })).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: "Focus on Felipe's camera" }));
+
+      expect(onFocusClick).toHaveBeenCalledTimes(1);
     });
   });
 
