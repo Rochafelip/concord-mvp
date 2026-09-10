@@ -59,4 +59,12 @@ class RegisterRequestValidationTest {
 
         assertThat(validator.validate(withPassword(tooLong))).isNotEmpty();
     }
+    @Test
+    void reportsViolationsInPortuguese() {
+        var violations = validator.validate(withPassword("short"));
+
+        assertThat(violations)
+                .extracting(jakarta.validation.ConstraintViolation::getMessage)
+                .contains("deve ter entre 8 e 100 caracteres");
+    }
 }

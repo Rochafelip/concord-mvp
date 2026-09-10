@@ -21,7 +21,7 @@ public final class PasswordPolicy {
     public static final String COMPLEXITY_REGEX = "^(?=.*[A-Z])(?=.*[a-z])(?=.*[0-9]).*$";
 
     public static final String COMPLEXITY_MESSAGE =
-            "must contain an uppercase letter, a lowercase letter and a number";
+            "deve conter uma letra maiúscula, uma letra minúscula e um número";
 
     private PasswordPolicy() {
     }

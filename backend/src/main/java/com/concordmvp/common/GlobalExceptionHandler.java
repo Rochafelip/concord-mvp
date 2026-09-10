@@ -16,6 +16,7 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -25,10 +26,29 @@ import java.util.stream.Collectors;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    /**
+     * Field names reach the user inside validation messages, so they need Portuguese labels too --
+     * without this a translated screen still shows "password: deve ter entre 8 e 100 caracteres".
+     *
+     * Unmapped fields fall back to the raw name on purpose: a field added later should degrade to
+     * something slightly ugly, never break the error response.
+     */
+    private static final Map<String, String> FIELD_LABELS = Map.of(
+            "username", "Nome de usuário",
+            "displayName", "Nome de exibição",
+            "email", "E-mail",
+            "password", "Senha",
+            "currentPassword", "Senha atual",
+            "newPassword", "Nova senha",
+            "content", "Mensagem",
+            "name", "Nome"
+    );
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiError> handleValidation(MethodArgumentNotValidException ex, HttpServletRequest request) {
         String message = ex.getBindingResult().getFieldErrors().stream()
-                .map(fieldError -> fieldError.getField() + ": " + fieldError.getDefaultMessage())
+                .map(fieldError -> FIELD_LABELS.getOrDefault(fieldError.getField(), fieldError.getField())
+                        + ": " + fieldError.getDefaultMessage())
                 .collect(Collectors.joining("; "));
         return build(HttpStatus.BAD_REQUEST, message, request);
     }
@@ -60,12 +80,12 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ApiError> handleMalformedRequest(HttpMessageNotReadableException ex, HttpServletRequest request) {
-        return build(HttpStatus.BAD_REQUEST, "Malformed request body", request);
+        return build(HttpStatus.BAD_REQUEST, "Corpo da requisição inválido", request);
     }
 
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ApiError> handleTypeMismatch(MethodArgumentTypeMismatchException ex, HttpServletRequest request) {
-        return build(HttpStatus.BAD_REQUEST, "Invalid parameter type", request);
+        return build(HttpStatus.BAD_REQUEST, "Parâmetro inválido", request);
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
