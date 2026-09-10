@@ -1,5 +1,5 @@
-import { EyeOff, Maximize2, Mic, MicOff, Minimize2, MonitorUp, PhoneOff } from 'lucide-react';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Maximize2, Mic, MicOff, Minimize2, MonitorUp, PhoneOff } from 'lucide-react';
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import { voiceClient } from '../../services/voiceClient';
 import type { VoiceParticipant } from '../../types/voice';
 import { useVoiceParticipants } from './hooks';
@@ -7,66 +7,60 @@ import { VolumeControl } from './VolumeControl';
 
 interface ScreenShareTileProps {
   participant: VoiceParticipant;
+  /** Extra classes appended alongside the tile's default w-full aspect-video sizing — used when
+   * this tile sits in FocusedCallView's tiered watched area instead of standing alone. */
+  className?: string;
+  /** When provided (and the participant isn't local — you can't "un-watch" your own share), the
+   * whole tile becomes a clickable/keyboard-activatable target (role="button") that removes this
+   * share from the call's watched set. Only wired on the non-fullscreen layout — see
+   * docs/superpowers/specs/2026-09-09-call-grid-unification-multiwatch-design.md §5. */
+  onWatchClick?: () => void;
 }
 
 /**
- * Renders one participant's active screen share. Only ever rendered by ParticipantList for a
- * participant whose screenShareTrack is non-null, so — unlike ParticipantTile — there is no
- * placeholder branch: a mounted ScreenShareTile always has a track to attach once watched. Same
- * attach/detach-via-ref pattern as ParticipantTile (see its doc comment, and design spec
- * docs/superpowers/specs/2026-09-04-phase4-screenshare-design.md §4.1) for why.
+ * Renders one participant's active screen share. Only ever rendered by FocusedCallView for a
+ * participant whose screenShareTrack is non-null and who is in the call's watched set — arriving
+ * here already IS the explicit opt-in (a click on a ScreenShareThumbnail, or the sole auto-focused
+ * share), so there is no separate minimized/"Watch" gate the way there used to be: the <video>
+ * always attaches on mount. Same attach/detach-via-ref pattern as ParticipantTile (see its doc
+ * comment, and design spec docs/superpowers/specs/2026-09-04-phase4-screenshare-design.md §4.1)
+ * for why.
  *
- * A remote participant's share starts minimized (isWatching = false) — watching is a voluntary,
- * per-viewer choice via the Watch/Stop watching buttons below, so a new share never auto-plays
- * video for everyone in the channel (see
- * docs/superpowers/specs/2026-09-08-screenshare-opt-in-watch-design.md). The local participant's
- * own share starts already watching, since it's their own screen. Each tile's isWatching is
- * independent, so a viewer can watch several simultaneous shares at once — there's no
- * exclusivity, just an explicit opt-in per share.
+ * Screen-share audio still starts silent for a remote share until the viewer explicitly raises
+ * the volume slider (see docs/superpowers/specs/2026-09-08-screenshare-opt-in-watch-design.md) —
+ * that's a separate opt-in from video visibility and is unaffected by removing the video gate.
+ * The local participant's own share is never silenced.
  *
- * Audio is muted for as long as a remote share stays minimized, and re-muted whenever it's
- * minimized again — see the setScreenShareVolume effect below.
- *
- * Fills the full width of its wrapping section (w-full) rather than sharing camera tiles' size
- * once watched — screen content (text, code, slides) is illegible squeezed into a small tile.
- * It used to rely on col-span-full inside the grid it shared with camera tiles; now that camera
- * tiles live in their own nested CameraGrid (see
- * docs/superpowers/specs/2026-09-09-call-grid-layout-design.md), screen shares get their own
- * wrapping section from ParticipantList instead, so w-full is what actually fills it.
+ * Fills the full width of its wrapping section (w-full) by default — screen content (text, code,
+ * slides) is illegible squeezed small — but accepts a className override so FocusedCallView's
+ * tiered multi-watch area can size it the same way ParticipantTile's tiles are sized.
  *
  * The root element also doubles as the Fullscreen API target (see
  * docs/superpowers/specs/2026-09-08-fullscreen-screenshare-design.md): fullscreening it hides
  * every other tile and the app shell for free, since the browser puts the fullscreened element
- * alone in the "top layer."
+ * alone in the "top layer." onWatchClick is deliberately not wired while fullscreen — exiting the
+ * watched set would abruptly kill an active fullscreen session.
  */
-export function ScreenShareTile({ participant }: ScreenShareTileProps) {
+export function ScreenShareTile({ participant, className = '', onWatchClick }: ScreenShareTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [isWatching, setIsWatching] = useState(participant.isLocal);
   const { screenShareTrack } = participant;
   const localParticipant = useVoiceParticipants().find((candidate) => candidate.isLocal);
 
   useEffect(() => {
     const element = videoRef.current;
-    if (!isWatching || !screenShareTrack || !element) return;
+    if (!screenShareTrack || !element) return;
     screenShareTrack.attach(element);
     return () => {
       screenShareTrack.detach(element);
     };
-  }, [isWatching, screenShareTrack]);
+  }, [screenShareTrack]);
 
-  // Screen-share audio must start (and stay) muted while minimized — the <video> element's own
-  // `muted` attribute below only silences the never-rendered video-track audio; the actually
-  // audible track is a separate hidden <audio> element voiceClient attaches directly on
-  // subscribe (see voiceClient.ts's handleTrackSubscribed), independent of this tile's watching
-  // state. setScreenShareVolume is the only way to reach it from here. useLayoutEffect (not
-  // useEffect) to close the window between mount/re-mute and the browser actually playing sound
-  // as tightly as possible.
   useLayoutEffect(() => {
     if (participant.isLocal || !participant.screenShareHasAudio) return;
-    if (!isWatching) voiceClient.setScreenShareVolume(participant.identity, 0);
-  }, [isWatching, participant.isLocal, participant.identity, participant.screenShareHasAudio]);
+    voiceClient.setScreenShareVolume(participant.identity, 0);
+  }, [participant.isLocal, participant.identity, participant.screenShareHasAudio]);
 
   useEffect(() => {
     function handleFullscreenChange() {
@@ -78,14 +72,19 @@ export function ScreenShareTile({ participant }: ScreenShareTileProps) {
 
   useEffect(() => {
     if (!isFullscreen || document.fullscreenElement === containerRef.current) return;
-    function handleKeyDown(event: KeyboardEvent) {
+    function handleKeyDown(event: globalThis.KeyboardEvent) {
       if (event.key === 'Escape') setIsFullscreen(false);
     }
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isFullscreen]);
 
-  async function handleEnterFullscreen() {
+  function stopPropagation(event: MouseEvent | KeyboardEvent) {
+    event.stopPropagation();
+  }
+
+  async function handleEnterFullscreen(event: MouseEvent) {
+    stopPropagation(event);
     try {
       await containerRef.current?.requestFullscreen();
     } catch {
@@ -101,30 +100,27 @@ export function ScreenShareTile({ participant }: ScreenShareTileProps) {
     }
   }
 
-  if (!isWatching) {
-    return (
-      <div className="flex w-full aspect-video flex-col items-center justify-center gap-2 rounded bg-gray-800 p-2 text-center">
-        <MonitorUp size={20} className="text-gray-300" aria-hidden="true" />
-        <span className="text-caption text-gray-100">{participant.name}'s screen</span>
-        <button
-          type="button"
-          aria-label={`Watch ${participant.name}'s screen`}
-          onClick={() => setIsWatching(true)}
-          className="rounded bg-white/10 px-2 py-1 text-caption text-white hover:bg-white/20"
-        >
-          Watch
-        </button>
-      </div>
-    );
+  const clickToRemove = !participant.isLocal && !isFullscreen && onWatchClick;
+
+  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (!clickToRemove) return;
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    onWatchClick?.();
   }
 
   return (
     <div
       ref={containerRef}
+      role={clickToRemove ? 'button' : undefined}
+      tabIndex={clickToRemove ? 0 : undefined}
+      aria-label={clickToRemove ? `Stop watching ${participant.name}'s screen` : undefined}
+      onClick={clickToRemove ? onWatchClick : undefined}
+      onKeyDown={handleKeyDown}
       className={
         isFullscreen
           ? 'fixed inset-0 z-50 flex items-center justify-center bg-gray-900'
-          : 'group relative flex w-full aspect-video items-center justify-center overflow-hidden rounded bg-gray-900'
+          : `group relative flex w-full aspect-video items-center justify-center overflow-hidden rounded bg-gray-900 ${className}`
       }
     >
       <video ref={videoRef} muted autoPlay playsInline className="h-full w-full object-contain" />
@@ -144,18 +140,12 @@ export function ScreenShareTile({ participant }: ScreenShareTileProps) {
           >
             <Maximize2 size={16} className="text-white" aria-hidden="true" />
           </button>
-          {!participant.isLocal && (
-            <button
-              type="button"
-              aria-label={`Stop watching ${participant.name}'s screen`}
-              onClick={() => setIsWatching(false)}
-              className="absolute left-9 top-1 opacity-0 transition-opacity group-hover:opacity-100"
-            >
-              <EyeOff size={16} className="text-white" aria-hidden="true" />
-            </button>
-          )}
           {!participant.isLocal && participant.screenShareHasAudio && participant.screenShareAudioEnabled && (
-            <div className="absolute right-1 top-1 opacity-0 transition-opacity group-hover:opacity-100">
+            <div
+              className="absolute right-1 top-1 opacity-0 transition-opacity group-hover:opacity-100"
+              onClick={stopPropagation}
+              onKeyDown={stopPropagation}
+            >
               <VolumeControl
                 label={`${participant.name}'s screen`}
                 onVolumeChange={(volume) => voiceClient.setScreenShareVolume(participant.identity, volume)}
