@@ -335,7 +335,8 @@ Outgoing microphone audio is processed client-side to reduce background noise
 (e.g. keyboard, traffic, background conversations) before it reaches other
 participants.
 
-* On by default; the user can turn it off in Settings.
+* On by default; the user can turn it off in Settings, or from the in-call
+  controls without leaving the call.
 * If suppression can't run (unsupported browser, or the underlying library
   fails to load), the call continues normally with unprocessed audio — this
   must never be the reason a voice call fails.
