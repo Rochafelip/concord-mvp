@@ -1,5 +1,6 @@
 package com.concordmvp.auth.dto;
 
+import com.concordmvp.auth.PasswordPolicy;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -10,11 +11,8 @@ public record RegisterRequest(
         @NotBlank @Size(max = 50) String displayName,
         @NotBlank @Email String email,
         @NotBlank
-        @Size(min = 8, max = 100)
-        @Pattern(
-                regexp = "^(?=.*[A-Z])(?=.*[a-z])(?=.*[0-9]).*$",
-                message = "must contain an uppercase letter, a lowercase letter and a number"
-        )
+        @Size(min = PasswordPolicy.MIN_LENGTH, max = PasswordPolicy.MAX_LENGTH)
+        @Pattern(regexp = PasswordPolicy.COMPLEXITY_REGEX, message = PasswordPolicy.COMPLEXITY_MESSAGE)
         String password
 ) {
 }

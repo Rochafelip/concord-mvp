@@ -73,12 +73,37 @@ describe('SettingsPage', () => {
     renderSettingsPage();
 
     await user.type(screen.getByLabelText('Current password'), 'oldpassword');
-    await user.type(screen.getByLabelText('New password'), 'newpassword1');
-    await user.type(screen.getByLabelText('Confirm new password'), 'newpassword2');
+    await user.type(screen.getByLabelText('New password'), 'NewPassword1');
+    await user.type(screen.getByLabelText('Confirm new password'), 'NewPassword2');
     await user.click(screen.getByRole('button', { name: 'Change password' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('New password and confirmation do not match');
     expect(api.changePassword).not.toHaveBeenCalled();
+  });
+
+  it('shows the password requirements and marks them as the new password meets them', async () => {
+    const user = userEvent.setup();
+    renderSettingsPage();
+
+    expect(screen.getByText('At least 8 characters')).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText('New password'), 'Abcdefg1');
+
+    const met = screen.getAllByText('met');
+    expect(met).toHaveLength(4);
+  });
+
+  it('blocks submission when the new password does not meet the policy', async () => {
+    const user = userEvent.setup();
+    renderSettingsPage();
+
+    await user.type(screen.getByLabelText('Current password'), 'OldPassword1');
+    await user.type(screen.getByLabelText('New password'), 'nouppercase1');
+    await user.type(screen.getByLabelText('Confirm new password'), 'nouppercase1');
+    await user.click(screen.getByRole('button', { name: 'Change password' }));
+
+    expect(api.changePassword).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('New password')).toHaveFocus();
   });
 
   it('clears the password fields and shows a success message on save', async () => {
@@ -87,8 +112,8 @@ describe('SettingsPage', () => {
     renderSettingsPage();
 
     await user.type(screen.getByLabelText('Current password'), 'oldpassword');
-    await user.type(screen.getByLabelText('New password'), 'newpassword1');
-    await user.type(screen.getByLabelText('Confirm new password'), 'newpassword1');
+    await user.type(screen.getByLabelText('New password'), 'NewPassword1');
+    await user.type(screen.getByLabelText('Confirm new password'), 'NewPassword1');
     await user.click(screen.getByRole('button', { name: 'Change password' }));
 
     await waitFor(() => {
@@ -105,8 +130,8 @@ describe('SettingsPage', () => {
     renderSettingsPage();
 
     await user.type(screen.getByLabelText('Current password'), 'wrongpassword');
-    await user.type(screen.getByLabelText('New password'), 'newpassword1');
-    await user.type(screen.getByLabelText('Confirm new password'), 'newpassword1');
+    await user.type(screen.getByLabelText('New password'), 'NewPassword1');
+    await user.type(screen.getByLabelText('Confirm new password'), 'NewPassword1');
     await user.click(screen.getByRole('button', { name: 'Change password' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Current password is incorrect');

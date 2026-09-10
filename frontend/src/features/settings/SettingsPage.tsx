@@ -1,11 +1,16 @@
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { Button } from '../../components/Button';
 import { ErrorBanner } from '../../components/ErrorBanner';
+import { PasswordInput } from '../../components/PasswordInput';
 import { TextInput } from '../../components/TextInput';
 import { ApiError } from '../../services/apiClient';
 import { useAuthStore } from '../auth/authStore';
+import { PasswordRequirements } from '../auth/PasswordRequirements';
+import { isPasswordValid } from '../auth/passwordPolicy';
 import { AudioSettingsSection } from './audio/AudioSettingsSection';
 import { useChangePassword, useUpdateProfile } from './hooks';
+
+const NEW_PASSWORD_REQUIREMENTS_ID = 'new-password-requirements';
 
 function errorMessage(error: unknown): string | null {
   if (error instanceof ApiError) return error.message;
@@ -39,11 +44,21 @@ export function SettingsPage() {
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [passwordMismatch, setPasswordMismatch] = useState(false);
   const [passwordSaved, setPasswordSaved] = useState(false);
+  const newPasswordRef = useRef<HTMLInputElement>(null);
   const changePasswordMutation = useChangePassword();
 
   function handlePasswordSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPasswordSaved(false);
+
+    // Mirrors com.concordmvp.auth.PasswordPolicy. The live requirement list below already says
+    // which rule fails, so there's nothing to add to the error banner here.
+    if (!isPasswordValid(newPassword)) {
+      setPasswordMismatch(false);
+      newPasswordRef.current?.focus();
+      return;
+    }
+
     if (newPassword !== confirmNewPassword) {
       setPasswordMismatch(true);
       return;
@@ -105,32 +120,32 @@ export function SettingsPage() {
           />
           {passwordSaved && <p className="text-body text-brand">Password changed successfully</p>}
 
-          <TextInput
+          <PasswordInput
             label="Current password"
-            type="password"
             name="currentPassword"
             autoComplete="current-password"
             required
             value={currentPassword}
             onChange={(event) => setCurrentPassword(event.target.value)}
           />
-          <TextInput
-            label="New password"
-            type="password"
-            name="newPassword"
-            autoComplete="new-password"
-            required
-            minLength={8}
-            value={newPassword}
-            onChange={(event) => setNewPassword(event.target.value)}
-          />
-          <TextInput
+          <div className="space-y-2">
+            <PasswordInput
+              ref={newPasswordRef}
+              label="New password"
+              name="newPassword"
+              autoComplete="new-password"
+              required
+              aria-describedby={NEW_PASSWORD_REQUIREMENTS_ID}
+              value={newPassword}
+              onChange={(event) => setNewPassword(event.target.value)}
+            />
+            <PasswordRequirements id={NEW_PASSWORD_REQUIREMENTS_ID} value={newPassword} />
+          </div>
+          <PasswordInput
             label="Confirm new password"
-            type="password"
             name="confirmNewPassword"
             autoComplete="new-password"
             required
-            minLength={8}
             value={confirmNewPassword}
             onChange={(event) => setConfirmNewPassword(event.target.value)}
           />
