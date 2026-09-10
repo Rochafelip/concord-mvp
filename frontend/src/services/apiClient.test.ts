@@ -14,37 +14,27 @@ function mockFetchResponse(body: unknown, init: { status: number; ok: boolean })
 describe('apiClient', () => {
   beforeEach(() => {
     localStorage.clear();
-    useAuthStore.setState({ token: null, user: null });
+    useAuthStore.setState({ isAuthenticated: false, user: null });
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  it('attaches the Authorization header when a token is present', async () => {
-    useAuthStore.setState({ token: 'my-token', user: null });
+  it('sends the request with same-origin credentials so the session cookie is included', async () => {
     const fetchMock = vi.fn().mockResolvedValue(mockFetchResponse({ ok: true }, { status: 200, ok: true }));
     vi.stubGlobal('fetch', fetchMock);
 
     await apiClient.get('users/me');
 
     const [, options] = fetchMock.mock.calls[0];
-    expect((options.headers as Record<string, string>).Authorization).toBe('Bearer my-token');
-  });
-
-  it('omits the Authorization header when no token is present', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(mockFetchResponse({ ok: true }, { status: 200, ok: true }));
-    vi.stubGlobal('fetch', fetchMock);
-
-    await apiClient.post('auth/login', { email: 'a@b.com', password: 'password123' });
-
-    const [, options] = fetchMock.mock.calls[0];
+    expect(options.credentials).toBe('same-origin');
     expect((options.headers as Record<string, string>).Authorization).toBeUndefined();
   });
 
   it('clears the auth store when the response is 401', async () => {
     useAuthStore.setState({
-      token: 'stale-token',
+      isAuthenticated: true,
       user: { id: '1', username: 'a', displayName: 'A', email: 'a@b.com', avatarUrl: null },
     });
     const fetchMock = vi.fn().mockResolvedValue(
@@ -57,7 +47,7 @@ describe('apiClient', () => {
 
     await expect(apiClient.get('users/me')).rejects.toThrow();
 
-    expect(useAuthStore.getState().token).toBeNull();
+    expect(useAuthStore.getState().isAuthenticated).toBe(false);
     expect(useAuthStore.getState().user).toBeNull();
   });
 

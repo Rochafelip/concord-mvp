@@ -32,28 +32,26 @@ type RequestOptions = Omit<RequestInit, 'body'> & {
 /**
  * Thin wrapper around fetch. Callers pass a path relative to /api/v1, e.g. 'auth/login'.
  *
- * Reads the current token directly from `authStore` (via `getState()`, not the `useAuthStore`
- * hook, since this is plain module code, not a React component) so callers don't have to pass
- * it in manually. See authStore.ts for why this doesn't create a circular import.
+ * Auth is a session cookie the backend sets on login (see authStore.ts) — `credentials:
+ * 'same-origin'` makes sure it's sent, no header to attach manually.
  */
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { token } = useAuthStore.getState();
   const { body, headers, ...rest } = options;
 
   const response = await fetch(`${API_PREFIX}/${path.replace(/^\/+/, '')}`, {
     ...rest,
+    credentials: 'same-origin',
     headers: {
       'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...headers,
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 
   if (response.status === 401) {
-    // Single long-lived JWT, no server-side revocation (docs/DECISIONS.md D2) — a 401
-    // means the token is missing/invalid/expired, so logging out client-side is enough.
-    // Route-level logic (ProtectedRoute) reacts to the store change and redirects.
+    // Session cookie missing/invalid/expired — logging out client-side is enough; there's no
+    // server-side revocation to call (docs/DECISIONS.md D2). Route-level logic (ProtectedRoute)
+    // reacts to the store change and redirects.
     useAuthStore.getState().logout();
   }
 
