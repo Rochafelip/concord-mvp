@@ -1,4 +1,4 @@
-import type { InputHTMLAttributes } from 'react';
+import type { InputHTMLAttributes, ReactNode } from 'react';
 
 interface TextInputProps extends InputHTMLAttributes<HTMLInputElement> {
   label: string;
@@ -7,6 +7,8 @@ interface TextInputProps extends InputHTMLAttributes<HTMLInputElement> {
   hideLabel?: boolean;
   /** Fully rounded corners, for pill-shaped inputs like the chat message box. */
   pill?: boolean;
+  /** Control rendered inside the field's right edge, such as a password reveal toggle. */
+  trailing?: ReactNode;
 }
 
 export function TextInput({
@@ -14,6 +16,7 @@ export function TextInput({
   id,
   hideLabel = false,
   pill = false,
+  trailing,
   className = '',
   ...rest
 }: TextInputProps) {
@@ -24,13 +27,18 @@ export function TextInput({
       <label htmlFor={inputId} className={hideLabel ? 'sr-only' : 'text-body font-medium text-muted'}>
         {label}
       </label>
-      <input
-        id={inputId}
-        className={`h-10 border bg-surface px-3 text-body text-ink focus:border-brand focus:outline-none ${
-          pill ? 'rounded-full' : 'rounded'
-        } ${className}`}
-        {...rest}
-      />
+      <div className="relative">
+        <input
+          id={inputId}
+          className={`h-10 w-full border bg-surface px-3 text-body text-ink focus:border-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
+            pill ? 'rounded-full' : 'rounded'
+          } ${trailing ? 'pr-10' : ''} ${className}`}
+          {...rest}
+        />
+        {trailing && (
+          <div className="absolute inset-y-0 right-0 flex items-center pr-2">{trailing}</div>
+        )}
+      </div>
     </div>
   );
 }
