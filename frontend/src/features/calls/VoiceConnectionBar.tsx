@@ -1,4 +1,3 @@
-import type { ConnectionQuality } from 'livekit-client';
 import {
   HeadphoneOff,
   Headphones,
@@ -7,11 +6,6 @@ import {
   MonitorUp,
   MonitorX,
   PhoneOff,
-  Signal,
-  SignalHigh,
-  SignalLow,
-  SignalMedium,
-  SignalZero,
   Volume2,
 } from 'lucide-react';
 import { useState } from 'react';
@@ -19,16 +13,9 @@ import { Link } from 'react-router-dom';
 import { voiceClient } from '../../services/voiceClient';
 import { useChannel } from '../channels/hooks';
 import { useServer } from '../servers/hooks';
+import { QUALITY_ICON } from './connectionQuality';
 import { ScreenShareQualityModal } from './ScreenShareQualityModal';
 import { useVoiceParticipants, useVoiceStatus } from './hooks';
-
-const QUALITY_ICON: Record<ConnectionQuality, { Icon: typeof Signal; className: string }> = {
-  excellent: { Icon: SignalHigh, className: 'text-success' },
-  good: { Icon: SignalMedium, className: 'text-warning' },
-  poor: { Icon: SignalLow, className: 'text-danger' },
-  lost: { Icon: SignalZero, className: 'text-danger' },
-  unknown: { Icon: Signal, className: 'text-muted' },
-};
 
 export function VoiceConnectionBar() {
   const { status, channelId, isDeafened } = useVoiceStatus();
