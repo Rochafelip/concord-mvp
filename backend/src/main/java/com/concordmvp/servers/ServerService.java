@@ -14,6 +14,7 @@ import com.concordmvp.realtime.WsEventType;
 import com.concordmvp.servers.dto.ServerDeletedPayload;
 import com.concordmvp.servers.dto.ServerMemberEventPayload;
 import com.concordmvp.servers.dto.ServerOwnerChangePayload;
+import com.concordmvp.servers.dto.ServerMemberUpdatePayload;
 import com.concordmvp.users.User;
 import com.concordmvp.users.UserRepository;
 import org.springframework.stereotype.Service;
@@ -114,6 +115,26 @@ public class ServerService {
         requireServer(serverId);
         requireMember(serverId, requesterId);
         return serverMemberRepository.findByServerId(serverId);
+    }
+
+    @Transactional
+    public ServerMember updateMemberDisplayName(UUID serverId, UUID userId, String displayName) {
+        requireServer(serverId);
+        requireMember(serverId, userId);
+        ServerMember member = serverMemberRepository.findByServerIdAndUserId(serverId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Not a member of this server"));
+
+        String normalized = displayName == null ? null : displayName.trim();
+        member.setDisplayName(normalized == null || normalized.isEmpty() ? null : normalized);
+        ServerMember saved = serverMemberRepository.save(member);
+        realtimeEventPublisher.broadcast(currentMemberIds(serverId),
+                new WsEvent(WsEventType.SERVER_MEMBER_UPDATE,
+                        new ServerMemberUpdatePayload(serverId, userId, effectiveDisplayName(saved, requireUser(userId)))));
+        return saved;
+    }
+
+    public String effectiveDisplayName(ServerMember member, User user) {
+        return member.getDisplayName() == null ? user.getDisplayName() : member.getDisplayName();
     }
 
     @Transactional

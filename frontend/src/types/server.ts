@@ -13,6 +13,8 @@ export interface ServerMember {
     displayName: string;
     avatarUrl: string | null;
   };
+  /** Effective name in this server; older cached responses may omit it. */
+  displayName?: string;
   joinedAt: string;
 }
 

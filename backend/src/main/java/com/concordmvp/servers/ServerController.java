@@ -7,6 +7,7 @@ import com.concordmvp.servers.dto.JoinServerRequest;
 import com.concordmvp.servers.dto.ServerMemberResponse;
 import com.concordmvp.servers.dto.ServerResponse;
 import com.concordmvp.servers.dto.TransferOwnershipRequest;
+import com.concordmvp.servers.dto.UpdateServerMemberRequest;
 import com.concordmvp.users.User;
 import com.concordmvp.users.UserRepository;
 import com.concordmvp.users.UserAvatarUrls;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -76,6 +78,13 @@ public class ServerController {
                 .toList();
     }
 
+    @PatchMapping("/{id}/members/me")
+    public ServerMemberResponse updateMyMemberDisplayName(@PathVariable UUID id,
+                                                           @Valid @RequestBody UpdateServerMemberRequest request) {
+        ServerMember member = serverService.updateMemberDisplayName(id, CurrentUser.id(), request.displayName());
+        return toMemberResponse(member);
+    }
+
     @PostMapping("/{id}/transfer-ownership")
     public ServerResponse transferOwnership(@PathVariable UUID id, @Valid @RequestBody TransferOwnershipRequest request) {
         Server server = serverService.transferOwnership(id, request.newOwnerId(), CurrentUser.id());
@@ -110,6 +119,6 @@ public class ServerController {
                 .orElseThrow(() -> new IllegalStateException("Member references missing user: " + member.getUserId()));
         UserSummaryResponse summary = new UserSummaryResponse(user.getId(), user.getUsername(),
                 user.getDisplayName(), UserAvatarUrls.url(user));
-        return new ServerMemberResponse(summary, member.getJoinedAt());
+        return new ServerMemberResponse(summary, serverService.effectiveDisplayName(member, user), member.getJoinedAt());
     }
 }

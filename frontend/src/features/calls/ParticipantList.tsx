@@ -36,7 +36,17 @@ export function ParticipantList({ serverId }: ParticipantListProps) {
     return map;
   }, [presence]);
 
-  if (participants.length === 0) {
+  const participantsWithCurrentNames = useMemo(
+    () => participants.map((participant) => {
+      const currentName = presence?.find((entry) => entry.userId === participant.identity)?.displayName;
+      return currentName && currentName !== participant.name
+        ? { ...participant, name: currentName }
+        : participant;
+    }),
+    [participants, presence],
+  );
+
+  if (participantsWithCurrentNames.length === 0) {
     return (
       <div className="flex flex-1 items-center justify-center gap-2 p-4 text-body text-muted">
         <Spinner />
@@ -48,7 +58,7 @@ export function ParticipantList({ serverId }: ParticipantListProps) {
   if (watchTargets.length > 0) {
     return (
       <FocusedCallView
-        participants={participants}
+        participants={participantsWithCurrentNames}
         watchTargets={watchTargets}
         isManual={isManual}
         onAddWatch={addWatch}
@@ -63,7 +73,7 @@ export function ParticipantList({ serverId }: ParticipantListProps) {
   return (
     <div className="flex flex-1 flex-col overflow-hidden pb-20">
       <ParticipantGrid
-        participants={participants}
+        participants={participantsWithCurrentNames}
         avatarUrlByUserId={avatarUrlByUserId}
         deafenedByUserId={deafenedByUserId}
         onWatch={addWatch}

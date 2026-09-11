@@ -8,6 +8,8 @@ import com.concordmvp.common.exception.ResourceNotFoundException;
 import com.concordmvp.media.dto.VoiceTokenResponse;
 import com.concordmvp.users.User;
 import com.concordmvp.users.UserRepository;
+import com.concordmvp.servers.ServerMember;
+import com.concordmvp.servers.ServerMemberRepository;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
@@ -43,6 +45,7 @@ public class MediaService {
 
     private final ChannelService channelService;
     private final UserRepository userRepository;
+    private final ServerMemberRepository serverMemberRepository;
     private final String livekitApiKey;
     private final SecretKey livekitSigningKey;
     private final String livekitPublicUrl;
@@ -51,12 +54,19 @@ public class MediaService {
                          UserRepository userRepository,
                          @Value("${livekit.api-key}") String livekitApiKey,
                          @Value("${livekit.api-secret}") String livekitApiSecret,
-                         @Value("${livekit.public-url}") String livekitPublicUrl) {
+                         @Value("${livekit.public-url}") String livekitPublicUrl,
+                         ServerMemberRepository serverMemberRepository) {
         this.channelService = channelService;
         this.userRepository = userRepository;
+        this.serverMemberRepository = serverMemberRepository;
         this.livekitApiKey = livekitApiKey;
         this.livekitSigningKey = Keys.hmacShaKeyFor(livekitApiSecret.getBytes(StandardCharsets.UTF_8));
         this.livekitPublicUrl = livekitPublicUrl;
+    }
+
+    public MediaService(ChannelService channelService, UserRepository userRepository,
+                         String livekitApiKey, String livekitApiSecret, String livekitPublicUrl) {
+        this(channelService, userRepository, livekitApiKey, livekitApiSecret, livekitPublicUrl, null);
     }
 
     public VoiceTokenResponse issueVoiceToken(UUID channelId, UUID requesterId) {
@@ -74,12 +84,21 @@ public class MediaService {
         }
 
         String roomName = "voice-channel-" + channel.getId();
-        String token = buildLiveKitToken(requester, roomName);
+        String displayName = requester.getDisplayName();
+        if (serverMemberRepository != null) {
+            ServerMember membership = serverMemberRepository.findByServerIdAndUserId(
+                            channel.getServerId(), requesterId)
+                    .orElseThrow(() -> new com.concordmvp.common.exception.ForbiddenException(
+                            "Not a member of this server: " + channel.getServerId()));
+            displayName = membership.getDisplayName() == null
+                    ? requester.getDisplayName() : membership.getDisplayName();
+        }
+        String token = buildLiveKitToken(requester, displayName, roomName);
 
         return new VoiceTokenResponse(token, livekitPublicUrl, roomName);
     }
 
-    private String buildLiveKitToken(User requester, String roomName) {
+    private String buildLiveKitToken(User requester, String displayName, String roomName) {
         Instant now = Instant.now();
         Map<String, Object> videoGrant = Map.of(
                 "roomJoin", true,
@@ -92,7 +111,7 @@ public class MediaService {
                 .issuer(livekitApiKey)
                 .subject(requester.getId().toString())
                 .expiration(Date.from(now.plus(TOKEN_TTL)))
-                .claim("name", requester.getDisplayName())
+                .claim("name", displayName)
                 .claim("video", videoGrant)
                 .signWith(livekitSigningKey)
                 .compact();

@@ -65,10 +65,14 @@ public class VoicePresenceService {
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
+        String displayName = serverMemberRepository.findByServerIdAndUserId(channel.getServerId(), userId)
+                .map(ServerMember::getDisplayName)
+                .filter(name -> name != null && !name.isBlank())
+                .orElse(user.getDisplayName());
 
         VoicePresenceResponse response = new VoicePresenceResponse(
                 channel.getServerId(), channelId,
-                new UserSummaryResponse(user.getId(), user.getUsername(), user.getDisplayName(), UserAvatarUrls.url(user)),
+                new UserSummaryResponse(user.getId(), user.getUsername(), displayName, UserAvatarUrls.url(user)),
                 muted, cameraOn, screenSharing, speaking, deafened);
 
         byUserId.put(userId, new Entry(channelId, channel.getServerId(), response));

@@ -18,6 +18,7 @@ import type {
   ErrorPayload,
   ServerDeletedPayload,
   ServerMemberEventPayload,
+  ServerMemberUpdatePayload,
   VoicePresenceLeavePayload,
   VoicePresencePayload,
   UserProfileUpdatePayload,
@@ -132,6 +133,22 @@ export function useRealtimeSync(): void {
         queryClient.invalidateQueries({ queryKey: ['servers', serverId, 'members'] });
       }),
 
+      websocketClient.subscribe('SERVER_MEMBER_UPDATE', (payload) => {
+        const { serverId, userId, displayName } = payload as ServerMemberUpdatePayload;
+        queryClient.setQueryData<import('../types/server').ServerMember[]>(
+          ['servers', serverId, 'members'],
+          (members) => members?.map((member) =>
+            member.user.id === userId ? { ...member, displayName } : member,
+          ),
+        );
+        queryClient.setQueryData<VoicePresenceEntry[]>(
+          ['servers', serverId, 'voice-presence'],
+          (entries) => entries?.map((entry) =>
+            entry.userId === userId ? { ...entry, displayName } : entry,
+          ),
+        );
+      }),
+
       websocketClient.subscribe('SERVER_OWNER_CHANGE', () => {
         // ownerId also lives on the list-shaped Server objects (same reasoning as
         // useTransferOwnership in features/servers/hooks.ts), so invalidate the whole
@@ -193,6 +210,9 @@ export function useRealtimeSync(): void {
             if (Array.isArray(value)) return value.map(replace);
             if (value && typeof value === 'object') {
               const record = value as Record<string, unknown>;
+              if (record.userId === user.id && 'displayName' in record) {
+                return { ...record, displayName: user.displayName, avatarUrl: user.avatarUrl };
+              }
               if (record.id === user.id && 'avatarUrl' in record) return { ...record, ...user };
               if ('author' in record && record.author && typeof record.author === 'object') {
                 const author = record.author as Record<string, unknown>;

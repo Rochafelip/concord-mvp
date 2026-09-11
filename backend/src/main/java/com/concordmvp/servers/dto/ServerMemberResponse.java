@@ -6,6 +6,7 @@ import java.time.Instant;
 
 public record ServerMemberResponse(
         UserSummaryResponse user,
+        String displayName,
         Instant joinedAt
 ) {
 }

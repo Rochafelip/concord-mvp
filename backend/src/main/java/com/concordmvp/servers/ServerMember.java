@@ -25,6 +25,9 @@ public class ServerMember {
     @Column(name = "user_id", nullable = false)
     private UUID userId;
 
+    @Column(name = "display_name", length = 50)
+    private String displayName;
+
     @Column(name = "joined_at", nullable = false)
     private Instant joinedAt;
 
@@ -58,6 +61,14 @@ public class ServerMember {
 
     public void setUserId(UUID userId) {
         this.userId = userId;
+    }
+
+    public String getDisplayName() {
+        return displayName;
+    }
+
+    public void setDisplayName(String displayName) {
+        this.displayName = displayName;
     }
 
     public Instant getJoinedAt() {

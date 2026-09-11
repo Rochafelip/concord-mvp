@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Avatar } from '../../components/Avatar';
 import { Button } from '../../components/Button';
 import { ErrorBanner } from '../../components/ErrorBanner';
@@ -14,6 +14,7 @@ import {
   useServer,
   useServerMembers,
   useTransferOwnership,
+  useUpdateMyServerMember,
 } from './hooks';
 
 interface ServerSettingsPanelProps {
@@ -37,14 +38,26 @@ export function ServerSettingsPanel({ serverId, open, onClose }: ServerSettingsP
   // before the settings panel has ever been clicked open.
   const { data: members } = useServerMembers(open ? serverId : undefined);
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
+  const [serverDisplayName, setServerDisplayName] = useState('');
 
   const isOwner = useIsServerOwner(serverId);
 
   const inviteQuery = useInvite(open && isOwner ? serverId : undefined);
   const regenerateInviteMutation = useRegenerateInvite(serverId);
   const transferOwnershipMutation = useTransferOwnership(serverId);
+  const updateMemberMutation = useUpdateMyServerMember(serverId);
   const deleteServerMutation = useDeleteServer();
   const leaveServerMutation = useLeaveServer();
+
+  useEffect(() => {
+    const currentMember = members?.find((member) => member.user.id === currentUserId);
+    if (currentMember) setServerDisplayName(currentMember.displayName ?? currentMember.user.displayName);
+  }, [members, currentUserId]);
+
+  function handleDisplayNameSave() {
+    const value = serverDisplayName.trim();
+    updateMemberMutation.mutate({ displayName: value || null });
+  }
 
   async function handleCopy() {
     if (!inviteQuery.data) return;
@@ -119,16 +132,32 @@ export function ServerSettingsPanel({ serverId, open, onClose }: ServerSettingsP
 
         <section className="space-y-2">
           <h3 className="text-body font-medium text-muted">Members</h3>
+          <label className="block space-y-1 text-caption text-muted">
+            Your display name in this server
+            <div className="flex gap-2">
+              <input
+                value={serverDisplayName}
+                maxLength={50}
+                onChange={(event) => setServerDisplayName(event.target.value)}
+                className="min-w-0 flex-1 rounded border border-border bg-surface px-2 py-1 text-body text-ink"
+                aria-label="Your display name in this server"
+              />
+              <Button type="button" variant="secondary" onClick={handleDisplayNameSave} disabled={updateMemberMutation.isPending}>
+                Save
+              </Button>
+            </div>
+            <span>Leave it empty to use your global display name.</span>
+          </label>
           <ul className="max-h-48 space-y-1 overflow-y-auto">
             {(members ?? []).map((member) => (
               <li key={member.user.id} className="flex items-center justify-between gap-2 text-body text-ink">
                 <span className="flex items-center gap-2">
                   <Avatar
-                    displayName={member.user.displayName}
+                    displayName={member.displayName ?? member.user.displayName}
                     avatarUrl={member.user.avatarUrl}
                     className="h-6 w-6"
                   />
-                  {member.user.displayName}
+                  {member.displayName ?? member.user.displayName}
                   {server?.ownerId === member.user.id && (
                     <span className="text-caption uppercase text-muted">Owner</span>
                   )}
@@ -137,7 +166,7 @@ export function ServerSettingsPanel({ serverId, open, onClose }: ServerSettingsP
                   <button
                     type="button"
                     className="text-caption text-brand hover:underline"
-                    onClick={() => handleTransfer(member.user.id, member.user.displayName)}
+                    onClick={() => handleTransfer(member.user.id, member.displayName ?? member.user.displayName)}
                   >
                     Make owner
                   </button>

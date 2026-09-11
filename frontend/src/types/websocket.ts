@@ -14,6 +14,7 @@ export type WsEventType =
   | 'CHANNEL_DELETE'
   | 'SERVER_MEMBER_JOIN'
   | 'SERVER_MEMBER_LEAVE'
+  | 'SERVER_MEMBER_UPDATE'
   | 'SERVER_DELETE'
   | 'SERVER_OWNER_CHANGE'
   | 'VOICE_PRESENCE_UPDATE'
@@ -30,6 +31,12 @@ export interface WsEvent<T = unknown> {
 export interface ServerMemberEventPayload {
   serverId: string;
   userId: string;
+}
+
+export interface ServerMemberUpdatePayload {
+  serverId: string;
+  userId: string;
+  displayName: string;
 }
 
 export interface ServerOwnerChangePayload {

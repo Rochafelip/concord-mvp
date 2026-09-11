@@ -453,4 +453,41 @@ describe('useRealtimeSync', () => {
     const cached = queryClient.getQueryData<VoicePresenceEntry[]>(['servers', 's1', 'voice-presence']);
     expect(cached).toEqual([existing[1]]);
   });
+
+  it('USER_PROFILE_UPDATE refreshes the display name in the auth and voice presence caches', () => {
+    const queryClient = newQueryClient();
+    queryClient.setQueryData(['servers', 's1', 'voice-presence'], [
+      {
+        channelId: 'c1',
+        userId: 'u1',
+        displayName: 'Nome antigo',
+        avatarUrl: null,
+        muted: false,
+        cameraOn: false,
+        screenSharing: false,
+        speaking: false,
+        deafened: false,
+      },
+    ]);
+    renderHarness(queryClient, '/app');
+
+    emit('USER_PROFILE_UPDATE', {
+      user: { id: 'u1', username: 'a', displayName: 'Novo nome', avatarUrl: null },
+    });
+
+    expect(useAuthStore.getState().user?.displayName).toBe('Novo nome');
+    expect(queryClient.getQueryData<VoicePresenceEntry[]>(['servers', 's1', 'voice-presence'])).toEqual([
+      {
+        channelId: 'c1',
+        userId: 'u1',
+        displayName: 'Novo nome',
+        avatarUrl: null,
+        muted: false,
+        cameraOn: false,
+        screenSharing: false,
+        speaking: false,
+        deafened: false,
+      },
+    ]);
+  });
 });

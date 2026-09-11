@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../auth/authStore';
+import type { ServerMember } from '../../types/server';
 import * as api from './api';
 
 export function useServers() {
@@ -35,6 +36,20 @@ export function useServerMembers(serverId: string | undefined) {
     queryKey: ['servers', serverId, 'members'],
     queryFn: () => api.getServerMembers(serverId!),
     enabled: serverId != null,
+  });
+}
+
+export function useUpdateMyServerMember(serverId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: api.UpdateServerMemberPayload) => api.updateMyServerMember(serverId, data),
+    onSuccess: (member) => {
+      queryClient.setQueryData<ServerMember[]>(['servers', serverId, 'members'], (members) =>
+        members?.map((candidate) => candidate.user.id === member.user.id ? member : candidate),
+      );
+      queryClient.invalidateQueries({ queryKey: ['servers', serverId, 'voice-presence'] });
+    },
   });
 }
 

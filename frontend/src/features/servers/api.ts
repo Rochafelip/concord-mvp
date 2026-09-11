@@ -9,6 +9,10 @@ export interface JoinServerPayload {
   code: string;
 }
 
+export interface UpdateServerMemberPayload {
+  displayName: string | null;
+}
+
 export interface TransferOwnershipPayload {
   newOwnerId: string;
 }
@@ -35,6 +39,10 @@ export function leaveServer(serverId: string): Promise<void> {
 
 export function getServerMembers(serverId: string): Promise<ServerMember[]> {
   return apiClient.get<ServerMember[]>(`servers/${serverId}/members`);
+}
+
+export function updateMyServerMember(serverId: string, data: UpdateServerMemberPayload): Promise<ServerMember> {
+  return apiClient.patch<ServerMember>(`servers/${serverId}/members/me`, data);
 }
 
 export function transferOwnership(
