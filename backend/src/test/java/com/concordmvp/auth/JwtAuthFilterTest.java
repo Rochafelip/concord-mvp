@@ -1,6 +1,8 @@
 package com.concordmvp.auth;
 
 import com.concordmvp.common.exception.UnauthorizedException;
+import com.concordmvp.users.User;
+import com.concordmvp.users.UserRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.AfterEach;
@@ -14,6 +16,8 @@ import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.util.UUID;
+import java.util.Optional;
+import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
@@ -26,13 +30,16 @@ class JwtAuthFilterTest {
     private JwtService jwtService;
 
     @Mock
+    private UserRepository userRepository;
+
+    @Mock
     private FilterChain filterChain;
 
     private JwtAuthFilter filter;
 
     @BeforeEach
     void setUp() {
-        filter = new JwtAuthFilter(jwtService);
+        filter = new JwtAuthFilter(jwtService, userRepository);
     }
 
     @AfterEach
@@ -44,6 +51,9 @@ class JwtAuthFilterTest {
     void authenticatesUser_whenCookieHasValidToken() throws Exception {
         UUID userId = UUID.randomUUID();
         when(jwtService.parseUserId("valid-token")).thenReturn(userId);
+        User user = new User();
+        user.setId(userId);
+        when(userRepository.findById(userId)).thenReturn(java.util.Optional.of(user));
 
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.setCookies(new Cookie(JwtService.COOKIE_NAME, "valid-token"));
@@ -77,6 +87,46 @@ class JwtAuthFilterTest {
         filter.doFilter(request, response, filterChain);
 
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        verify(filterChain).doFilter(request, response);
+    }
+
+    @Test
+    void rejectsTokenIssuedBeforeThePasswordWasChanged() throws Exception {
+        UUID userId = UUID.randomUUID();
+        User user = new User();
+        user.setId(userId);
+        user.setPasswordChangedAt(Instant.parse("2026-09-11T12:00:00Z"));
+        when(jwtService.parseUserId("old-token")).thenReturn(userId);
+        when(jwtService.parseIssuedAt("old-token")).thenReturn(Instant.parse("2026-09-11T11:59:59Z"));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setCookies(new Cookie(JwtService.COOKIE_NAME, "old-token"));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, filterChain);
+
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        verify(filterChain).doFilter(request, response);
+    }
+
+    @Test
+    void acceptsTokenIssuedAfterThePasswordWasChanged() throws Exception {
+        UUID userId = UUID.randomUUID();
+        User user = new User();
+        user.setId(userId);
+        user.setPasswordChangedAt(Instant.parse("2026-09-11T12:00:00Z"));
+        when(jwtService.parseUserId("new-token")).thenReturn(userId);
+        when(jwtService.parseIssuedAt("new-token")).thenReturn(Instant.parse("2026-09-11T12:00:01Z"));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setCookies(new Cookie(JwtService.COOKIE_NAME, "new-token"));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, filterChain);
+
+        assertThat(SecurityContextHolder.getContext().getAuthentication().getPrincipal()).isEqualTo(userId);
         verify(filterChain).doFilter(request, response);
     }
 }

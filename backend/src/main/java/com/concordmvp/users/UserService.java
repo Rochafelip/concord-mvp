@@ -6,6 +6,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.UUID;
+import java.time.Instant;
 
 @Service
 public class UserService {
@@ -41,6 +42,7 @@ public class UserService {
             throw new BadRequestException("Senha atual incorreta");
         }
         user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.setPasswordChangedAt(Instant.now());
         return userRepository.save(user);
     }
 }

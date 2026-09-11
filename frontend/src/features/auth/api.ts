@@ -33,6 +33,18 @@ export function verifyEmail(token: string): Promise<void> {
   return apiClient.post<void>('auth/verify-email', { token });
 }
 
+export function requestPasswordReset(email: string): Promise<void> {
+  return apiClient.post<void>('auth/forgot-password', { email });
+}
+
+export function verifyPasswordResetToken(token: string): Promise<void> {
+  return apiClient.post<void>('auth/reset-password/verify', { token });
+}
+
+export function resetPassword(token: string, password: string): Promise<void> {
+  return apiClient.post<void>('auth/reset-password', { token, password });
+}
+
 export interface WsTicketResponse {
   ticket: string;
 }

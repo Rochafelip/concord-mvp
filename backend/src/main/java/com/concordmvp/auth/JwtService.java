@@ -47,16 +47,30 @@ public class JwtService {
 
     public UUID parseUserId(String token) {
         try {
-            String subject = Jwts.parser()
-                    .verifyWith(signingKey)
-                    .build()
-                    .parseSignedClaims(token)
-                    .getPayload()
-                    .getSubject();
-            return UUID.fromString(subject);
+            return UUID.fromString(parseClaims(token).getSubject());
         } catch (JwtException | IllegalArgumentException e) {
             throw new UnauthorizedException("Sessão inválida ou expirada");
         }
+    }
+
+    public Instant parseIssuedAt(String token) {
+        try {
+            Date issuedAt = parseClaims(token).getIssuedAt();
+            if (issuedAt == null) {
+                throw new UnauthorizedException("Sessão inválida ou expirada");
+            }
+            return issuedAt.toInstant();
+        } catch (JwtException | IllegalArgumentException e) {
+            throw new UnauthorizedException("Sessão inválida ou expirada");
+        }
+    }
+
+    private io.jsonwebtoken.Claims parseClaims(String token) {
+        return Jwts.parser()
+                    .verifyWith(signingKey)
+                    .build()
+                    .parseSignedClaims(token)
+                    .getPayload();
     }
 
     /** The session cookie's Max-Age must match this so the cookie never outlives the JWT it holds. */

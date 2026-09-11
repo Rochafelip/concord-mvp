@@ -4,6 +4,7 @@ import com.concordmvp.auth.dto.AuthResponse;
 import com.concordmvp.auth.dto.LoginRequest;
 import com.concordmvp.auth.dto.RegisterRequest;
 import com.concordmvp.auth.verification.EmailVerificationService;
+import com.concordmvp.auth.reset.PasswordResetService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,12 +33,20 @@ class AuthControllerTest {
 
     @Mock
     private EmailVerificationService emailVerificationService;
+    @Mock
+    private PasswordResetService passwordResetService;
 
     private AuthController authController;
 
     @BeforeEach
     void setUp() {
-        authController = new AuthController(authService, jwtService, emailVerificationService);
+        authController = new AuthController(
+                authService,
+                jwtService,
+                new SessionCookieFactory(jwtService),
+                emailVerificationService,
+                passwordResetService
+        );
     }
 
     @Test

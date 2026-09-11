@@ -1,6 +1,8 @@
 package com.concordmvp.auth;
 
 import com.concordmvp.common.exception.UnauthorizedException;
+import com.concordmvp.users.User;
+import com.concordmvp.users.UserRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.Cookie;
@@ -28,9 +30,11 @@ import java.util.UUID;
 public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
+    private final UserRepository userRepository;
 
-    public JwtAuthFilter(JwtService jwtService) {
+    public JwtAuthFilter(JwtService jwtService, UserRepository userRepository) {
         this.jwtService = jwtService;
+        this.userRepository = userRepository;
     }
 
     @Override
@@ -44,6 +48,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         if (cookie != null) {
             try {
                 UUID userId = jwtService.parseUserId(cookie.getValue());
+                User user = userRepository.findById(userId).orElseThrow(
+                        () -> new UnauthorizedException("Sessão inválida ou expirada"));
+                if (user.getPasswordChangedAt() != null
+                        && jwtService.parseIssuedAt(cookie.getValue()).isBefore(user.getPasswordChangedAt())) {
+                    throw new UnauthorizedException("Sessão inválida ou expirada");
+                }
                 UsernamePasswordAuthenticationToken authentication =
                         new UsernamePasswordAuthenticationToken(userId, null, Collections.emptyList());
                 SecurityContextHolder.getContext().setAuthentication(authentication);
