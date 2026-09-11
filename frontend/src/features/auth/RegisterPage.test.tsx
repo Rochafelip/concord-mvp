@@ -48,13 +48,27 @@ describe('RegisterPage', () => {
 
     await user.type(screen.getByLabelText('Nome de usuário'), 'jdoe');
     await user.type(screen.getByLabelText('Nome de exibição'), 'John Doe');
-    await user.type(screen.getByLabelText('E-mail'), 'not-an-email');
+    await user.type(screen.getByLabelText('E-mail'), 'alice@example.com');
     await user.type(screen.getByLabelText('Senha'), 'Password123');
     await user.click(screen.getByRole('button', { name: 'Criar conta' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'email: must be a well-formed email address',
     );
+  });
+
+  it('does not call the API when the email format is invalid', async () => {
+    const user = userEvent.setup();
+    renderRegisterPage();
+
+    await user.type(screen.getByLabelText('Nome de usuário'), 'jdoe');
+    await user.type(screen.getByLabelText('Nome de exibição'), 'John Doe');
+    await user.type(screen.getByLabelText('E-mail'), 'not-an-email');
+    await user.type(screen.getByLabelText('Senha'), 'Password123');
+    await user.click(screen.getByRole('button', { name: 'Criar conta' }));
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Digite um e-mail válido.');
+    expect(api.register).not.toHaveBeenCalled();
   });
 
   it('shows the password requirements and updates them while typing', async () => {

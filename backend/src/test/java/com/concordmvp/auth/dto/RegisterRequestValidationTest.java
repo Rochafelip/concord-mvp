@@ -59,6 +59,28 @@ class RegisterRequestValidationTest {
 
         assertThat(validator.validate(withPassword(tooLong))).isNotEmpty();
     }
+
+    @ParameterizedTest
+    @CsvSource({
+            "not-an-email",
+            "missing-at.example.com",
+            "user@"
+    })
+    void rejects_invalidEmailFormat(String email) {
+        RegisterRequest request = new RegisterRequest("alice", "Alice", email, "Password123");
+
+        assertThat(validator.validate(request))
+                .anyMatch(violation -> violation.getPropertyPath().toString().equals("email"));
+    }
+
+    @Test
+    void accepts_validEmailFormat() {
+        RegisterRequest request = new RegisterRequest("alice", "Alice", "alice@example.com", "Password123");
+
+        assertThat(validator.validate(request))
+                .noneMatch(violation -> violation.getPropertyPath().toString().equals("email"));
+    }
+
     @Test
     void reportsViolationsInPortuguese() {
         var violations = validator.validate(withPassword("short"));

@@ -9,6 +9,7 @@ import { AuthCard } from './AuthCard';
 import { useRegister } from './hooks';
 import { PasswordRequirements } from './PasswordRequirements';
 import { isPasswordValid } from './passwordPolicy';
+import { isEmailValid } from './emailValidation';
 
 const REQUIREMENTS_ID = 'password-requirements';
 
@@ -17,11 +18,17 @@ export function RegisterPage() {
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [invalidEmail, setInvalidEmail] = useState(false);
   const passwordRef = useRef<HTMLInputElement>(null);
   const registerMutation = useRegister();
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (!isEmailValid(email)) {
+      setInvalidEmail(true);
+      return;
+    }
 
     if (!isPasswordValid(password)) {
       passwordRef.current?.focus();
@@ -78,8 +85,12 @@ export function RegisterPage() {
           autoComplete="email"
           required
           value={email}
-          onChange={(event) => setEmail(event.target.value)}
+          onChange={(event) => {
+            setEmail(event.target.value);
+            setInvalidEmail(false);
+          }}
         />
+        {invalidEmail && <ErrorBanner message="Digite um e-mail válido." />}
 
         <div className="space-y-2">
           <PasswordInput

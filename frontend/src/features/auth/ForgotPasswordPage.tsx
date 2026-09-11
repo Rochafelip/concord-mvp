@@ -8,6 +8,7 @@ import { TextInput } from '../../components/TextInput';
 import { ApiError } from '../../services/apiClient';
 import { AuthCard } from './AuthCard';
 import { requestPasswordReset } from './api';
+import { isEmailValid } from './emailValidation';
 
 export function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
@@ -16,7 +17,7 @@ export function ForgotPasswordPage() {
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    const valid = isEmailValid(email);
     setInvalidEmail(!valid);
     if (valid) mutation.mutate(email);
   }
