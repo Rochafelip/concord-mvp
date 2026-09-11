@@ -12,6 +12,8 @@ import com.concordmvp.users.dto.UserSummaryResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.UUID;
 import java.time.Instant;
@@ -21,6 +23,7 @@ import java.util.Set;
 @Service
 public class UserService {
 
+    private static final Logger log = LoggerFactory.getLogger(UserService.class);
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final AvatarStorageService avatarStorageService;
@@ -67,7 +70,9 @@ public class UserService {
         User user = getCurrentUser(userId);
         user.setUsername(username);
         user.setDisplayName(displayName);
-        return userRepository.save(user);
+        User saved = userRepository.save(user);
+        publishProfileUpdate(saved);
+        return saved;
     }
 
     public User changePassword(UUID userId, String currentPassword, String newPassword) {
@@ -84,18 +89,10 @@ public class UserService {
         User user = getCurrentUser(userId);
         AvatarStorageService.StoredAvatar stored = avatarStorageService.store(userId, file);
         String previous = user.getAvatarStorageKey();
+        user.setAvatarStorageKey(stored.storageKey());
+        User saved;
         try {
-            user.setAvatarStorageKey(stored.storageKey());
-            User saved = userRepository.save(user);
-            publishProfileUpdate(saved);
-            if (previous != null) {
-                try {
-                    avatarStorageService.delete(previous);
-                } catch (java.io.IOException ex) {
-                    throw new IllegalStateException("Failed to remove previous avatar", ex);
-                }
-            }
-            return saved;
+            saved = userRepository.save(user);
         } catch (RuntimeException ex) {
             try {
                 avatarStorageService.delete(stored.storageKey());
@@ -104,6 +101,15 @@ public class UserService {
             }
             throw ex;
         }
+        publishProfileUpdate(saved);
+        if (previous != null) {
+            try {
+                avatarStorageService.delete(previous);
+            } catch (java.io.IOException ex) {
+                log.error("Failed to remove previous avatar file {}", previous, ex);
+            }
+        }
+        return saved;
     }
 
     public void removeAvatar(UUID userId) {
@@ -115,8 +121,8 @@ public class UserService {
         publishProfileUpdate(saved);
         try {
             avatarStorageService.delete(previous);
-        } catch (Exception ex) {
-            throw new IllegalStateException("Failed to remove avatar", ex);
+        } catch (java.io.IOException ex) {
+            log.error("Failed to remove avatar file {}", previous, ex);
         }
     }
 
