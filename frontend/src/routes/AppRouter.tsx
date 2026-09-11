@@ -1,7 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppShell } from '../app/AppShell';
 import { ChannelRoute } from '../app/ChannelRoute';
-import { NoServerSelected } from '../app/NoServerSelected';
 import { ServerIndexRoute } from '../app/ServerIndexRoute';
 import { ServerLayout } from '../app/ServerLayout';
 import { ForgotPasswordPage } from '../features/auth/ForgotPasswordPage';
@@ -10,6 +9,7 @@ import { RegisterPage } from '../features/auth/RegisterPage';
 import { ResetPasswordPage } from '../features/auth/ResetPasswordPage';
 import { VerifyEmailPage } from '../features/auth/VerifyEmailPage';
 import { useAuthStore } from '../features/auth/authStore';
+import { HomePage } from '../features/home/HomePage';
 import { SettingsPage } from '../features/settings/SettingsPage';
 import { ProtectedRoute } from './ProtectedRoute';
 
@@ -36,7 +36,7 @@ export function AppRouter() {
           </ProtectedRoute>
         }
       >
-        <Route index element={<NoServerSelected />} />
+        <Route index element={<HomePage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="servers/:serverId" element={<ServerLayout />}>
           <Route index element={<ServerIndexRoute />} />
