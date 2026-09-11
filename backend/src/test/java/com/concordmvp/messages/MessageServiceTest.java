@@ -56,12 +56,15 @@ class MessageServiceTest {
     @Mock
     private RealtimeEventPublisher realtimeEventPublisher;
 
+    @Mock
+    private AttachmentCleanupService attachmentCleanupService;
+
     private MessageService messageService;
 
     @BeforeEach
     void setUp() {
         messageService = new MessageService(messageRepository, channelService, serverMemberRepository,
-                userRepository, realtimeEventPublisher);
+                userRepository, realtimeEventPublisher, attachmentCleanupService);
     }
 
     private Channel channel(UUID id, UUID serverId) {

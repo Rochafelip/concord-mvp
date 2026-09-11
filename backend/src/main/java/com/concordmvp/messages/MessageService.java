@@ -7,6 +7,7 @@ import com.concordmvp.common.exception.BadRequestException;
 import com.concordmvp.common.exception.ForbiddenException;
 import com.concordmvp.common.exception.ResourceNotFoundException;
 import com.concordmvp.messages.dto.MessageResponse;
+import com.concordmvp.messages.dto.MessageDeletedPayload;
 import com.concordmvp.realtime.RealtimeEventPublisher;
 import com.concordmvp.realtime.WsEvent;
 import com.concordmvp.realtime.WsEventType;
@@ -54,17 +55,20 @@ public class MessageService {
     private final ServerMemberRepository serverMemberRepository;
     private final UserRepository userRepository;
     private final RealtimeEventPublisher realtimeEventPublisher;
+    private final AttachmentCleanupService attachmentCleanupService;
 
     public MessageService(MessageRepository messageRepository,
                            ChannelService channelService,
                            ServerMemberRepository serverMemberRepository,
                            UserRepository userRepository,
-                           RealtimeEventPublisher realtimeEventPublisher) {
+                           RealtimeEventPublisher realtimeEventPublisher,
+                           AttachmentCleanupService attachmentCleanupService) {
         this.messageRepository = messageRepository;
         this.channelService = channelService;
         this.serverMemberRepository = serverMemberRepository;
         this.userRepository = userRepository;
         this.realtimeEventPublisher = realtimeEventPublisher;
+        this.attachmentCleanupService = attachmentCleanupService;
     }
 
     public static final UUID SYSTEM_USER_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
@@ -185,6 +189,22 @@ public class MessageService {
                     return toResponse(message, author);
                 })
                 .toList();
+    }
+
+    @Transactional
+    public void deleteMessage(UUID messageId, UUID requesterId) {
+        Message message = messageRepository.findById(messageId)
+                .orElseThrow(() -> new ResourceNotFoundException("Message not found: " + messageId));
+        Channel channel = channelService.getChannel(message.getChannelId(), requesterId);
+        if (!message.getAuthorId().equals(requesterId)) {
+            throw new ForbiddenException("Only the message author can delete this message");
+        }
+
+        attachmentCleanupService.deleteForMessages(List.of(message));
+        messageRepository.delete(message);
+        realtimeEventPublisher.broadcast(currentMemberIds(channel.getServerId()),
+                new WsEvent(WsEventType.MESSAGE_DELETE,
+                        new MessageDeletedPayload(message.getId(), message.getChannelId())));
     }
 
     private Set<UUID> currentMemberIds(UUID serverId) {

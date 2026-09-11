@@ -20,7 +20,7 @@ import java.util.UUID;
  * 404-if-missing/403-if-not-a-member check {@link MessageService} already relies on.
  *
  * <p>Any file type is accepted (project owner's explicit request), capped at 150MB either way.
- * A file whose content matches one of four known image signatures (JPEG/PNG/GIF/WebP — inspected
+ * A file whose content matches a known image signature (JPEG/PNG/GIF/WebP/BMP/AVIF — inspected
  * by magic bytes, not filename/declared Content-Type, so a renamed non-image file isn't
  * misclassified) is rendered inline by the frontend; anything else is rendered as a downloadable
  * file chip. Serving non-image files in a way that can't execute in the browser (forced download)
@@ -39,7 +39,8 @@ public class AttachmentUploadService {
      * e.g. {@code evil.png} would be served with an image content-type instead of being forced to
      * download, reopening the MIME-sniffing/stored-XSS risk that distinction exists to prevent.
      */
-    private static final Set<String> RESERVED_IMAGE_EXTENSIONS = Set.of("jpg", "jpeg", "png", "gif", "webp");
+    private static final Set<String> RESERVED_IMAGE_EXTENSIONS =
+            Set.of("jpg", "jpeg", "png", "gif", "webp", "bmp", "avif");
 
     private final ChannelService channelService;
     private final Path uploadsDir;
@@ -64,9 +65,14 @@ public class AttachmentUploadService {
 
         String imageExtension = detectImageExtension(file);
         boolean isImage = imageExtension != null;
+        boolean isPdf = detectPdf(file);
 
-        String storageExtension = isImage ? imageExtension : safeExtension(file.getOriginalFilename());
-        String storageFilename = UUID.randomUUID() + (storageExtension.isEmpty() ? "" : "." + storageExtension);
+        String storageExtension = isImage
+                ? imageExtension
+                : isPdf ? "pdf" : safeExtension(file.getOriginalFilename());
+        String storageFilename = UUID.randomUUID() + (storageExtension == null || storageExtension.isEmpty()
+                ? ""
+                : "." + storageExtension);
 
         try (InputStream in = file.getInputStream()) {
             Files.copy(in, uploadsDir.resolve(storageFilename));
@@ -79,8 +85,8 @@ public class AttachmentUploadService {
     }
 
     /**
-     * Returns "jpg"/"png"/"gif"/"webp" if the file's content matches a known image signature, or
-     * {@code null} if it doesn't look like any of the four supported image formats. Callers treat
+     * Returns a normalized image extension if the file's content matches a known image signature, or
+     * {@code null} if it doesn't look like a supported image format. Callers treat
      * a {@code null} result as "accept as a generic file," not as a rejection — any file type is
      * allowed as a generic attachment, only the size limit differs.
      */
@@ -105,7 +111,23 @@ public class AttachmentUploadService {
                 && startsWith(Arrays.copyOfRange(header, 8, 12), 'W', 'E', 'B', 'P')) {
             return "webp";
         }
+        if (startsWith(header, 'B', 'M')) {
+            return "bmp";
+        }
+        if (header.length >= 12
+                && startsWith(Arrays.copyOfRange(header, 4, 8), 'f', 't', 'y', 'p')
+                && startsWith(Arrays.copyOfRange(header, 8, 12), 'a', 'v', 'i', 'f')) {
+            return "avif";
+        }
         return null;
+    }
+
+    private boolean detectPdf(MultipartFile file) {
+        try (InputStream in = file.getInputStream()) {
+            return startsWith(in.readNBytes(5), '%', 'P', 'D', 'F', '-');
+        } catch (IOException e) {
+            throw new BadRequestException("Unable to read uploaded file");
+        }
     }
 
     /**

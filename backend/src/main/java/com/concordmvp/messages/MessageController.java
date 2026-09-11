@@ -3,6 +3,7 @@ package com.concordmvp.messages;
 import com.concordmvp.common.CurrentUser;
 import com.concordmvp.messages.dto.MessageResponse;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -39,5 +40,10 @@ public class MessageController {
                                              @RequestParam(required = false) Integer limit) {
         int effectiveLimit = limit == null ? 0 : limit;
         return messageService.getHistory(channelId, before, beforeId, effectiveLimit, CurrentUser.id());
+    }
+
+    @DeleteMapping("/api/v1/messages/{messageId}")
+    public void deleteMessage(@PathVariable UUID messageId) {
+        messageService.deleteMessage(messageId, CurrentUser.id());
     }
 }

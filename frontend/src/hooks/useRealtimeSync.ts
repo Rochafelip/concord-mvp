@@ -16,6 +16,7 @@ import type { VoicePresenceEntry } from '../types/voice';
 import type {
   ChannelDeletedPayload,
   ErrorPayload,
+  MessageDeletedPayload,
   ServerDeletedPayload,
   ServerMemberEventPayload,
   ServerMemberUpdatePayload,
@@ -100,6 +101,16 @@ export function useRealtimeSync(): void {
             setNotification(`${label}: ${preview.slice(0, 120)}`);
           }
         }
+      }),
+
+      websocketClient.subscribe('MESSAGE_DELETE', (payload) => {
+        const { messageId, channelId } = payload as MessageDeletedPayload;
+        queryClient.setQueryData<InfiniteData<Message[]>>(
+          ['channels', channelId, 'messages'],
+          (old) => old
+            ? { ...old, pages: old.pages.map((page) => page.filter((message) => message.id !== messageId)) }
+            : old,
+        );
       }),
 
       websocketClient.subscribe('CHANNEL_CREATE', (payload) => {

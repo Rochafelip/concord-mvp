@@ -55,3 +55,7 @@ export async function uploadAttachment(channelId: string, file: File): Promise<U
 
   return response.json();
 }
+
+export function deleteMessage(messageId: string): Promise<void> {
+  return apiClient.delete<void>(`messages/${messageId}`);
+}

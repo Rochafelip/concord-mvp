@@ -57,6 +57,11 @@ export interface ErrorPayload {
   message: string;
 }
 
+export interface MessageDeletedPayload {
+  messageId: string;
+  channelId: string;
+}
+
 /** Wire shape of VOICE_PRESENCE_UPDATE — mirrors backend VoicePresenceResponse. */
 export interface VoicePresencePayload {
   serverId: string;

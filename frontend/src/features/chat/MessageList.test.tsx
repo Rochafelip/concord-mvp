@@ -177,7 +177,7 @@ describe('MessageList', () => {
     expect(screen.getAllByRole('img')).toHaveLength(1);
   });
 
-  it('renders a download chip (not an <img>) for a non-image attachment', () => {
+  it('renders a PDF preview and download link (not an <img>)', () => {
     mockHistory({
       data: {
         pages: [[makeMessage('m1', '', '2026-01-01T00:00:00Z', '/api/v1/uploads/abc.pdf', 'report.pdf', 20480)]],
@@ -188,6 +188,10 @@ describe('MessageList', () => {
     render(<MessageList channelId="c1" />);
 
     expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    expect(screen.getByTitle('report.pdf')).toHaveAttribute(
+      'src',
+      '/api/v1/uploads/abc.pdf',
+    );
     const link = screen.getByRole('link', { name: /report\.pdf/i });
     expect(link).toHaveAttribute('href', '/api/v1/uploads/abc.pdf');
     expect(link).toHaveAttribute('download', 'report.pdf');

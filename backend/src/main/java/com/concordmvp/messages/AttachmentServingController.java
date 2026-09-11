@@ -21,15 +21,15 @@ import java.util.Set;
  * authentication (see {@code SecurityConfig}'s permitAll entry for this same path) — access
  * relies on the random UUID filename being unguessable, the same trust model as a shareable link.
  *
- * <p>Only the four known image extensions are served with a content-type that lets the browser
- * render them inline; every other file is forced to download via {@code Content-Disposition:
- * attachment} regardless of its actual content — an uploaded HTML/SVG file containing a script
- * must never execute in this app's origin just because someone opened its URL directly.
+ * <p>Known image extensions and PDF are served inline for preview; every other file is forced to
+ * download via {@code Content-Disposition: attachment} regardless of its actual content — an
+ * uploaded HTML/SVG file containing a script must never execute in this app's origin.
  */
 @RestController
 public class AttachmentServingController {
 
-    private static final Set<String> INLINE_IMAGE_EXTENSIONS = Set.of("jpg", "png", "gif", "webp");
+    private static final Set<String> INLINE_IMAGE_EXTENSIONS =
+            Set.of("jpg", "jpeg", "png", "gif", "webp", "bmp", "avif");
 
     private final Path uploadsDir;
 
@@ -52,6 +52,12 @@ public class AttachmentServingController {
                     ? MediaType.IMAGE_JPEG
                     : MediaType.parseMediaType("image/" + extension);
             return ResponseEntity.ok().contentType(contentType).body(resource);
+        }
+        if ("pdf".equals(extension)) {
+            return ResponseEntity.ok()
+                    .contentType(MediaType.APPLICATION_PDF)
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline")
+                    .body(resource);
         }
 
         return ResponseEntity.ok()
