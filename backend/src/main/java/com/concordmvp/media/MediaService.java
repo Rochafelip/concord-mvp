@@ -13,6 +13,7 @@ import com.concordmvp.servers.ServerMemberRepository;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
@@ -50,6 +51,7 @@ public class MediaService {
     private final SecretKey livekitSigningKey;
     private final String livekitPublicUrl;
 
+    @Autowired
     public MediaService(ChannelService channelService,
                          UserRepository userRepository,
                          @Value("${livekit.api-key}") String livekitApiKey,
