@@ -1133,3 +1133,18 @@ React
 ```
 
 The system should remain understandable to a single developer throughout the MVP.
+
+## 39. User avatar flow
+
+User avatars are optional profile data. The backend stores image bytes in the
+private application uploads volume and stores only an opaque
+`avatar_storage_key` in PostgreSQL. Authenticated users receive a derived
+`avatarUrl` in user DTOs; the avatar endpoint authorizes the requester as the
+owner or as a member of a shared server.
+
+Avatar uploads accept JPEG, PNG, GIF, and WebP files up to 5 MB. The backend
+validates the declared type and decodes the image content before writing it.
+No avatar bytes travel over WebSocket or LiveKit. After a successful update or
+removal, the backend publishes `USER_PROFILE_UPDATE`, and frontend caches update
+the current user, message authors, server members, and voice presence without
+requiring a new login.

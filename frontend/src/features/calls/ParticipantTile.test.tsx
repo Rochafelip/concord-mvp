@@ -31,10 +31,10 @@ function participant(overrides: Partial<VoiceParticipant> = {}): VoiceParticipan
 }
 
 describe('ParticipantTile', () => {
-  it('shows an initial-letter placeholder when there is no video track', () => {
+  it('shows the Concord avatar placeholder when there is no video track', () => {
     const { container } = render(<ParticipantTile participant={participant()} />);
 
-    expect(screen.getByText('F')).toBeInTheDocument();
+    expect(screen.getByLabelText('Felipe').querySelector('svg')).toBeInTheDocument();
     expect(container.querySelector('video')).toBeNull();
   });
 
@@ -106,7 +106,7 @@ describe('ParticipantTile', () => {
       <ParticipantTile participant={participant({ name: 'Felipe', videoTrack, cameraEnabled: false })} />,
     );
 
-    expect(screen.getByText('F')).toBeInTheDocument();
+    expect(screen.getByLabelText('Felipe').querySelector('svg')).toBeInTheDocument();
     expect(container.querySelector('video')).toBeNull();
   });
 
