@@ -87,7 +87,7 @@ describe('useRealtimeSync', () => {
       isAuthenticated: true,
       user: { id: 'u1', username: 'a', displayName: 'A', email: 'a@x.com', avatarUrl: null },
     });
-    useNotificationStore.setState({ message: null });
+    useNotificationStore.setState({ message: null, unreadServerIds: [] });
   });
 
   afterEach(() => {
@@ -150,8 +150,16 @@ describe('useRealtimeSync', () => {
     ]);
   });
 
-  it('MESSAGE_CREATE shows a notification for a message from another user', () => {
+  it('MESSAGE_CREATE marks the message server as unread', () => {
     const queryClient = newQueryClient();
+    queryClient.setQueryData<Channel[]>(['servers', 's1', 'channels'], [{
+      id: 'c1',
+      serverId: 's1',
+      name: 'general',
+      type: 'TEXT',
+      createdAt: '2026-01-01',
+      updatedAt: '2026-01-01',
+    }]);
     renderHarness(queryClient, '/app');
 
     emit('MESSAGE_CREATE', {
@@ -162,7 +170,8 @@ describe('useRealtimeSync', () => {
       author: { id: 'u2', username: 'b', displayName: 'B', avatarUrl: null },
     });
 
-    expect(useNotificationStore.getState().message).toBe('Nova mensagem recebida: Olá!');
+    expect(useNotificationStore.getState().unreadServerIds).toEqual(['s1']);
+    expect(useNotificationStore.getState().message).toBeNull();
   });
 
   it('MESSAGE_CREATE identifies onboarding notifications and does not notify the sender', () => {
@@ -184,11 +193,10 @@ describe('useRealtimeSync', () => {
       createdAt: '2026-01-01T00:00:01Z',
       author: { id: 'u2', username: 'b', displayName: 'B', avatarUrl: null },
     });
-    expect(useNotificationStore.getState().message).toBe(
-      'Nova mensagem no onboarding: B entrou no servidor',
-    );
+    expect(useNotificationStore.getState().unreadServerIds).toEqual(['s1']);
+    expect(useNotificationStore.getState().message).toBeNull();
 
-    useNotificationStore.setState({ message: null });
+    useNotificationStore.setState({ message: null, unreadServerIds: [] });
     emit('MESSAGE_CREATE', {
       id: 'm3',
       channelId: 'onboarding-1',

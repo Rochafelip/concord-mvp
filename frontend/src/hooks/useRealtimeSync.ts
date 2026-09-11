@@ -40,6 +40,7 @@ export function useRealtimeSync(): void {
   }>();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const setNotification = useNotificationStore((state) => state.setMessage);
+  const markServerUnread = useNotificationStore((state) => state.markServerUnread);
 
   // The SERVER_DELETE and CHANNEL_DELETE subscribers below are set up once (empty-ish dep
   // effect) but need the *current* route's serverId/channelId at the moment the event arrives,
@@ -91,14 +92,19 @@ export function useRealtimeSync(): void {
             queryClient.getQueryData<Channel>(['channels', message.channelId]) ??
             queryClient
               .getQueryData<Channel[]>(['servers', currentServerIdRef.current, 'channels'])
-              ?.find((candidate) => candidate.id === message.channelId);
+              ?.find((candidate) => candidate.id === message.channelId) ??
+            queryClient
+              .getQueriesData<Channel[]>({ queryKey: ['servers'] })
+              .flatMap(([, channels]) => channels ?? [])
+              .find((candidate) => candidate.id === message.channelId);
           const isOnboarding = channel?.name?.toLowerCase() === 'onboarding';
           const { messageNotifications, onboardingNotifications } =
             useNotificationStore.getState().preferences;
           if ((!isOnboarding && messageNotifications) || (isOnboarding && onboardingNotifications)) {
-            const preview = message.content.trim() || 'Novo anexo recebido.';
-            const label = isOnboarding ? 'Nova mensagem no onboarding' : 'Nova mensagem recebida';
-            setNotification(`${label}: ${preview.slice(0, 120)}`);
+            const serverId = channel?.serverId;
+            if (serverId && serverId !== currentServerIdRef.current) {
+              markServerUnread(serverId);
+            }
           }
         }
       }),
@@ -263,5 +269,5 @@ export function useRealtimeSync(): void {
     return () => {
       unsubscribers.forEach((unsubscribe) => unsubscribe());
     };
-  }, [queryClient, navigate, setNotification]);
+  }, [markServerUnread, queryClient, navigate, setNotification]);
 }

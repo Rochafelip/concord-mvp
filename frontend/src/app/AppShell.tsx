@@ -107,7 +107,7 @@ export function AppShell() {
       {notification && (
         <div className="flex flex-shrink-0 items-center gap-2 px-4 pt-2">
           <div className="flex-1">
-            <ErrorBanner message={notification} />
+            <ErrorBanner message={notification} variant="info" />
           </div>
           <button
             type="button"

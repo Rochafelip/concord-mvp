@@ -1,9 +1,10 @@
 import { Plus, UserPlus } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { CreateServerModal } from './CreateServerModal';
 import { useServers } from './hooks';
 import { JoinServerModal } from './JoinServerModal';
+import { useNotificationStore } from '../../stores/notificationStore';
 
 /**
  * The persistent far-left "server rail" (Discord-style icon list). Selection is derived
@@ -15,6 +16,12 @@ export function ServerSidebar() {
   const { data: servers } = useServers();
   const [createOpen, setCreateOpen] = useState(false);
   const [joinOpen, setJoinOpen] = useState(false);
+  const unreadServerIds = useNotificationStore((state) => state.unreadServerIds);
+  const clearServerUnread = useNotificationStore((state) => state.clearServerUnread);
+
+  useEffect(() => {
+    if (serverId) clearServerUnread(serverId);
+  }, [clearServerUnread, serverId]);
 
   return (
     <nav
@@ -33,6 +40,7 @@ export function ServerSidebar() {
 
       {(servers ?? []).map((server) => {
         const isSelected = server.id === serverId;
+        const hasUnread = unreadServerIds.includes(server.id) && !isSelected;
         const initial = server.name.trim().charAt(0).toUpperCase() || '?';
 
         return (
@@ -50,6 +58,12 @@ export function ServerSidebar() {
               }`}
             >
               {initial}
+              {hasUnread && (
+                <span
+                  aria-label="Novas mensagens"
+                  className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-brand ring-2 ring-rail"
+                />
+              )}
             </Link>
           </div>
         );
