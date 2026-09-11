@@ -3,6 +3,7 @@ import { Spinner } from '../components/Spinner';
 import { useMe } from '../features/auth/hooks';
 import { useAuthStore } from '../features/auth/authStore';
 import { AppRouter } from '../routes/AppRouter';
+import { ApiError } from '../services/apiClient';
 
 export function App() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
@@ -19,6 +20,17 @@ export function App() {
       setUser(meQuery.data);
     }
   }, [meQuery.data, setUser]);
+
+  useEffect(() => {
+    // A persisted client session can outlive its user when the database is recreated.
+    // Treat both authentication failures and a missing current user as an expired session.
+    if (
+      meQuery.error instanceof ApiError &&
+      (meQuery.error.status === 401 || meQuery.error.status === 404)
+    ) {
+      useAuthStore.getState().expireSession();
+    }
+  }, [meQuery.error]);
 
   // We believe we're logged in but haven't confirmed it / hydrated the user yet: show a
   // loading state instead of flashing the login page for an already-logged-in user on refresh.
