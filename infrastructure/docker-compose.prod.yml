@@ -51,7 +51,7 @@ services:
 
   backend:
     environment:
-      APP_BASE_URL: https://${DOMAIN}
+      APP_BASE_URL: ${APP_BASE_URL:-https://concordmvp.duckdns.org:45678}
 
   livekit:
     volumes:

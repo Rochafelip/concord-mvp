@@ -49,6 +49,7 @@ services:
       MAIL_PASSWORD: ${MAIL_PASSWORD}
       MAIL_FROM: ${MAIL_FROM}
       MAIL_ENABLED: ${MAIL_ENABLED}
+      APP_BASE_URL: ${APP_BASE_URL:-https://concordmvp.duckdns.org:45678}
 
     volumes:
       - backend_uploads:/app/uploads
