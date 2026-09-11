@@ -27,7 +27,7 @@ export function ParticipantGrid({ participants, avatarUrlByUserId, deafenedByUse
     <div
       ref={containerRef}
       data-testid="participant-grid"
-      className={`group/camera-grid flex-1 overflow-y-auto p-4 ${containerClassName}`}
+      className={`group/camera-grid flex-1 overflow-y-auto p-2 sm:p-4 ${containerClassName}`}
       style={style}
     >
       {participants.map((participant) => (

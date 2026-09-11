@@ -15,8 +15,8 @@ export function ChatWindow() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex-shrink-0 border-b bg-surface px-4 py-3">
-        <span className="text-heading font-semibold text-ink">
+      <div className="flex min-h-14 flex-shrink-0 items-center border-b bg-surface px-3 py-3 sm:px-4">
+        <span className="truncate text-heading font-semibold text-ink">
           {channel ? `# ${channel.name}` : 'Loading…'}
         </span>
       </div>
@@ -34,7 +34,7 @@ export function ChatWindow() {
       {channel?.type === 'ONBOARDING' ? (
         <p
           key={`input-${channelId}`}
-          className="border-t p-3 text-center text-caption text-muted"
+          className="border-t p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] text-center text-caption text-muted"
         >
           This channel is read-only.
         </p>

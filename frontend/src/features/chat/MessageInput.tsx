@@ -88,8 +88,8 @@ export function MessageInput({ channelId }: MessageInputProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-1 border-t p-3">
-      <div className="flex items-end gap-2">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-1 border-t p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:p-3">
+      <div className="flex items-end gap-1.5 sm:gap-2">
         <div className="flex-1">
           <TextInput
             label="Message"
@@ -114,7 +114,8 @@ export function MessageInput({ channelId }: MessageInputProps) {
           />
         </label>
         <Button type="submit" disabled={!isConnected || content.trim().length === 0}>
-          Send
+          <span className="hidden sm:inline">Send</span>
+          <span className="sm:hidden" aria-hidden="true">↑</span>
         </Button>
       </div>
       {!isConnected && (

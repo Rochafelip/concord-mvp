@@ -27,7 +27,7 @@ export function CallControlBar({ onLeave }: CallControlBarProps) {
   }
 
   return (
-    <div className="absolute inset-x-0 bottom-4 flex items-center justify-center gap-1.5 rounded-full bg-black/60 px-2 py-1.5">
+    <div className="absolute inset-x-2 bottom-[max(0.75rem,env(safe-area-inset-bottom))] flex flex-wrap items-center justify-center gap-1.5 rounded-2xl bg-black/70 px-2 py-1.5 sm:inset-x-0 sm:bottom-4 sm:rounded-full">
       <button
         type="button"
         aria-label={localParticipant.micEnabled ? 'Mute' : 'Unmute'}

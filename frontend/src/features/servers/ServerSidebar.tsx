@@ -26,7 +26,7 @@ export function ServerSidebar() {
   return (
     <nav
       aria-label="Servers"
-      className="flex w-16 flex-shrink-0 flex-col items-center gap-2 overflow-y-auto border-r bg-rail py-3"
+      className="flex w-14 flex-shrink-0 flex-col items-center gap-2 overflow-y-auto border-r bg-rail py-2 sm:w-16 sm:py-3"
     >
       <button
         type="button"
@@ -53,7 +53,7 @@ export function ServerSidebar() {
               aria-label={server.name}
               aria-current={isSelected ? 'page' : undefined}
               title={server.name}
-              className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full text-body font-semibold transition-colors ${
+              className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full text-body font-semibold transition-colors sm:h-12 sm:w-12 ${
                 isSelected ? 'bg-brand text-white' : 'bg-sidebar text-muted hover:bg-brand/20'
               }`}
             >

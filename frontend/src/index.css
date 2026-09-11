@@ -42,4 +42,15 @@ body {
   margin: 0;
   background-color: rgb(var(--color-bg-app));
   color: rgb(var(--color-text-primary));
+  overflow-x: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+a,
+label,
+input,
+textarea,
+select {
+  touch-action: manipulation;
 }

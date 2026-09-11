@@ -38,8 +38,8 @@ export function AppShell() {
   const { theme, toggle } = useTheme();
 
   return (
-    <div className="flex h-screen flex-col bg-app">
-      <header className="flex flex-shrink-0 items-center justify-between border-b bg-surface px-4 py-2">
+    <div className="flex h-[100dvh] min-w-0 flex-col overflow-hidden bg-app">
+      <header className="flex min-h-14 flex-shrink-0 items-center justify-between gap-2 border-b bg-surface px-3 py-2 sm:px-4">
         <Link to="/app" aria-label="Ir para a Home do Concord">
           <Logo />
         </Link>
@@ -48,7 +48,7 @@ export function AppShell() {
             boot rehydration (network error, not a 401), `isAuthenticated` stays set but `user`
             never populates — the logout button must still be reachable in that case. */}
         {isAuthenticated && (
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-0 items-center gap-1.5 sm:gap-3">
             <button
               type="button"
               aria-label={theme === 'dark' ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'}
@@ -67,7 +67,7 @@ export function AppShell() {
             {user && (
               <>
                 <Avatar displayName={user.displayName} avatarUrl={user.avatarUrl} />
-                <span className="text-body text-ink">{user.displayName}</span>
+                <span className="hidden max-w-32 truncate text-body text-ink sm:inline">{user.displayName}</span>
               </>
             )}
             <Button
@@ -75,7 +75,8 @@ export function AppShell() {
               aria-label="Sair do Concord"
               onClick={() => setConfirmingLogout(true)}
             >
-              Sair
+              <span className="hidden sm:inline">Sair</span>
+              <span className="sm:hidden">Sair</span>
             </Button>
           </div>
         )}

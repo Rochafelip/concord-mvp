@@ -9,6 +9,10 @@ import type { Channel, ChannelType } from '../../types/channel';
 import { CreateChannelModal } from './CreateChannelModal';
 import { useChannels, useDeleteChannel } from './hooks';
 
+interface ChannelSidebarProps {
+  onNavigate?: () => void;
+}
+
 function channelLinkClassName(isSelected: boolean) {
   return `flex items-center gap-1.5 rounded px-2 py-1 text-body ${
     isSelected ? 'bg-brand/10 text-brand' : 'text-muted hover:bg-border/40'
@@ -20,7 +24,7 @@ function channelLinkClassName(isSelected: boolean) {
  * URL-as-source-of-truth pattern as ServerSidebar). Lists channels grouped by type and hosts
  * the server header (name + settings gear) since that's the natural place for it.
  */
-export function ChannelSidebar() {
+export function ChannelSidebar({ onNavigate }: ChannelSidebarProps) {
   const { serverId, channelId } = useParams<{ serverId: string; channelId?: string }>();
   const { data: server } = useServer(serverId);
   const { data: channels } = useChannels(serverId);
@@ -66,6 +70,7 @@ export function ChannelSidebar() {
               <li key={channel.id}>
                 <Link
                   to={`/app/servers/${serverId}/channels/${channel.id}`}
+                  onClick={onNavigate}
                   aria-current={channel.id === channelId ? 'page' : undefined}
                   className={channelLinkClassName(channel.id === channelId)}
                 >
@@ -96,6 +101,7 @@ export function ChannelSidebar() {
               <li key={channel.id} className="group flex items-center">
                 <Link
                   to={`/app/servers/${serverId}/channels/${channel.id}`}
+                  onClick={onNavigate}
                   aria-current={channel.id === channelId ? 'page' : undefined}
                   className={`flex-1 ${channelLinkClassName(channel.id === channelId)}`}
                 >
@@ -139,6 +145,7 @@ export function ChannelSidebar() {
                   <div className="group flex items-center">
                     <Link
                       to={`/app/servers/${serverId}/channels/${channel.id}`}
+                      onClick={onNavigate}
                       aria-current={channel.id === channelId ? 'page' : undefined}
                       className={`flex-1 ${channelLinkClassName(channel.id === channelId)}`}
                     >

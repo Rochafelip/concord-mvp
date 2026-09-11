@@ -106,7 +106,7 @@ export function SettingsPage() {
 
   return (
     <div className="h-full min-h-0 overflow-y-auto">
-      <div className="mx-auto max-w-lg space-y-8 p-8">
+      <div className="mx-auto max-w-lg space-y-8 p-4 sm:p-8">
         <h1 className="text-title font-semibold text-ink">Configurações</h1>
 
         <section className="space-y-4">
