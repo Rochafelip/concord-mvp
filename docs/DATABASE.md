@@ -1274,3 +1274,12 @@ Screen sharing
 ```
 
 The database should remain simple, relational and understandable throughout the MVP.
+
+## User avatars
+
+The `users.avatar_storage_key` column is nullable and stores only an opaque
+relative key for the user's avatar in the private application upload volume.
+Image bytes are not stored in PostgreSQL. Existing users remain valid with a
+`NULL` key and receive the Concord fallback avatar. Avatar files are limited
+to 5 MB and accepted only for JPEG, PNG, GIF, and WebP content validated by
+the backend.

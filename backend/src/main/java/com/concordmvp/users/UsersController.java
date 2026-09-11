@@ -60,7 +60,7 @@ public class UsersController {
 
     @GetMapping("/{userId}/avatar")
     public ResponseEntity<byte[]> avatar(@PathVariable UUID userId) {
-        User user = userService.getCurrentUser(userId);
+        User user = userService.getAvatarForRequester(userId, CurrentUser.id());
         if (user.getAvatarStorageKey() == null) return ResponseEntity.notFound().build();
         try {
             Path path = avatarStorageService.resolve(user.getAvatarStorageKey());

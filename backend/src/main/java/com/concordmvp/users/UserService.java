@@ -52,6 +52,17 @@ public class UserService {
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
     }
 
+    public User getAvatarForRequester(UUID targetUserId, UUID requesterId) {
+        User target = getCurrentUser(targetUserId);
+        if (targetUserId.equals(requesterId)
+                || serverMemberRepository.findByUserIdOrderByJoinedAtAsc(targetUserId).stream()
+                .anyMatch(membership -> serverMemberRepository
+                        .existsByServerIdAndUserId(membership.getServerId(), requesterId))) {
+            return target;
+        }
+        throw new com.concordmvp.common.exception.ForbiddenException("You cannot view this avatar");
+    }
+
     public User updateProfile(UUID userId, String username, String displayName) {
         User user = getCurrentUser(userId);
         user.setUsername(username);

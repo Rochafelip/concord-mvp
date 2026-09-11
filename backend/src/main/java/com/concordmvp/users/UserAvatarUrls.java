@@ -7,6 +7,8 @@ public final class UserAvatarUrls {
     }
 
     public static String url(User user) {
-        return user.getAvatarStorageKey() == null ? null : "/api/v1/users/" + user.getId() + "/avatar";
+        if (user.getAvatarStorageKey() == null) return null;
+        String base = "/api/v1/users/" + user.getId() + "/avatar";
+        return user.getUpdatedAt() == null ? base : base + "?v=" + user.getUpdatedAt().toEpochMilli();
     }
 }
