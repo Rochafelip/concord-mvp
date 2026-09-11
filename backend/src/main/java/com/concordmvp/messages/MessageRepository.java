@@ -34,4 +34,6 @@ public interface MessageRepository extends JpaRepository<Message, UUID> {
                                   Pageable pageable);
 
     long deleteByChannelIdIn(Collection<UUID> channelIds);
+
+    List<Message> findByChannelIdIn(Collection<UUID> channelIds);
 }

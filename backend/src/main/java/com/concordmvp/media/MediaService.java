@@ -68,6 +68,10 @@ public class MediaService {
 
         User requester = userRepository.findById(requesterId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + requesterId));
+        if (!requester.isEmailVerified()) {
+            throw new com.concordmvp.common.exception.ForbiddenException(
+                    "Verifique seu e-mail antes de entrar no chat de voz.");
+        }
 
         String roomName = "voice-channel-" + channel.getId();
         String token = buildLiveKitToken(requester, roomName);

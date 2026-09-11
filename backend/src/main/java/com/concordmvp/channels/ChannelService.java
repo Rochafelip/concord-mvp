@@ -6,6 +6,7 @@ import com.concordmvp.common.exception.BadRequestException;
 import com.concordmvp.common.exception.ForbiddenException;
 import com.concordmvp.common.exception.ResourceNotFoundException;
 import com.concordmvp.messages.MessageRepository;
+import com.concordmvp.messages.AttachmentCleanupService;
 import com.concordmvp.realtime.RealtimeEventPublisher;
 import com.concordmvp.realtime.WsEvent;
 import com.concordmvp.realtime.WsEventType;
@@ -34,17 +35,20 @@ public class ChannelService {
     private final ServerRepository serverRepository;
     private final ServerMemberRepository serverMemberRepository;
     private final MessageRepository messageRepository;
+    private final AttachmentCleanupService attachmentCleanupService;
     private final RealtimeEventPublisher realtimeEventPublisher;
 
     public ChannelService(ChannelRepository channelRepository,
                            ServerRepository serverRepository,
                            ServerMemberRepository serverMemberRepository,
                            MessageRepository messageRepository,
+                           AttachmentCleanupService attachmentCleanupService,
                            RealtimeEventPublisher realtimeEventPublisher) {
         this.channelRepository = channelRepository;
         this.serverRepository = serverRepository;
         this.serverMemberRepository = serverMemberRepository;
         this.messageRepository = messageRepository;
+        this.attachmentCleanupService = attachmentCleanupService;
         this.realtimeEventPublisher = realtimeEventPublisher;
     }
 
@@ -88,6 +92,8 @@ public class ChannelService {
             throw new ForbiddenException("Only the server owner can delete channels");
         }
 
+        List<com.concordmvp.messages.Message> messages = messageRepository.findByChannelIdIn(List.of(channelId));
+        attachmentCleanupService.deleteForMessages(messages);
         messageRepository.deleteByChannelIdIn(List.of(channelId));
         channelRepository.delete(channel);
 

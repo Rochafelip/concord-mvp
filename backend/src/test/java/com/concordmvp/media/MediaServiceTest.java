@@ -63,6 +63,7 @@ class MediaServiceTest {
         user.setUsername("someuser");
         user.setDisplayName(displayName);
         user.setEmail("someuser@example.test");
+        user.setEmailVerified(true);
         return user;
     }
 

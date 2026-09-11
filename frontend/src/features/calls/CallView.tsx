@@ -2,6 +2,7 @@ import { Volume2 } from 'lucide-react';
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { voiceClient } from '../../services/voiceClient';
+import { ApiError } from '../../services/apiClient';
 import { useVoiceStore } from '../../stores/voiceStore';
 import type { Channel } from '../../types/channel';
 import { CallControlBar } from './CallControlBar';
@@ -24,7 +25,7 @@ interface CallViewProps {
  * until the user explicitly leaves, via handleLeave below or VoiceConnectionBar's Leave button.
  */
 export function CallView({ channel }: CallViewProps) {
-  const { mutate: joinVoiceChannel } = useJoinVoiceChannel();
+  const joinVoiceMutation = useJoinVoiceChannel();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -32,8 +33,8 @@ export function CallView({ channel }: CallViewProps) {
     if (voiceState.channelId === channel.id && voiceState.status !== 'disconnected') {
       return;
     }
-    joinVoiceChannel(channel.id);
-  }, [channel.id, joinVoiceChannel]);
+    joinVoiceMutation.mutate(channel.id);
+  }, [channel.id, joinVoiceMutation]);
 
   function handleLeave() {
     voiceClient.disconnect();
@@ -47,6 +48,13 @@ export function CallView({ channel }: CallViewProps) {
         <span className="text-heading font-semibold text-ink">{channel.name}</span>
       </div>
       <div className="relative flex flex-1 flex-col overflow-hidden bg-gray-950">
+        {joinVoiceMutation.error && (
+          <div className="absolute left-4 right-4 top-4 z-10 rounded border border-warning/40 bg-warning/15 p-3 text-body text-ink">
+            {joinVoiceMutation.error instanceof ApiError
+              ? joinVoiceMutation.error.message
+              : 'Não foi possível entrar no chat de voz. Verifique sua conta e tente novamente.'}
+          </div>
+        )}
         <ParticipantList serverId={channel.serverId} />
         <CallControlBar onLeave={handleLeave} />
       </div>

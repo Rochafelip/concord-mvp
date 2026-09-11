@@ -67,6 +67,7 @@ public class ServerService {
 
     @Transactional
     public Server createServer(String name, UUID ownerId) {
+        requireVerifiedUser(ownerId);
         Server server = new Server();
         server.setName(name);
         server.setOwnerId(ownerId);
@@ -126,6 +127,7 @@ public class ServerService {
             return server;
         }
 
+        requireVerifiedUser(userId);
         ServerMember member = new ServerMember();
         member.setServerId(serverId);
         member.setUserId(userId);
@@ -262,6 +264,13 @@ public class ServerService {
     private User requireUser(UUID userId) {
         return userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
+    }
+
+    private void requireVerifiedUser(UUID userId) {
+        User user = requireUser(userId);
+        if (!user.isEmailVerified()) {
+            throw new ForbiddenException("Verifique seu e-mail antes de criar ou entrar em um servidor.");
+        }
     }
 
     private void requireOwner(Server server, UUID requesterId) {

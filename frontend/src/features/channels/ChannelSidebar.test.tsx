@@ -75,7 +75,8 @@ describe('ChannelSidebar', () => {
     renderSidebar();
 
     await screen.findByText('Alpha');
-    expect(screen.getByRole('button', { name: 'Create channel' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create text channel' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create voice channel' })).toBeInTheDocument();
   });
 
   it('renders an Onboarding section above Text channels, with no create-channel button of its own', async () => {
@@ -87,8 +88,7 @@ describe('ChannelSidebar', () => {
 
     await screen.findByText('Alpha');
     expect(screen.getByRole('link', { name: /onboarding/i })).toBeInTheDocument();
-    // Only the Text channels section owns a create-channel button.
-    expect(screen.getAllByRole('button', { name: 'Create channel' })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: /Create (text|voice) channel/ })).toHaveLength(2);
 
     const headings = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
     expect(headings.indexOf('Onboarding')).toBeGreaterThanOrEqual(0);
@@ -103,7 +103,24 @@ describe('ChannelSidebar', () => {
     renderSidebar();
 
     await screen.findByText('Alpha');
-    expect(screen.queryByRole('button', { name: 'Create channel' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Create text channel' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Create voice channel' })).not.toBeInTheDocument();
+  });
+
+  it('opens a type-specific create form without showing a type selector', async () => {
+    useAuthStore.setState({
+      isAuthenticated: true,
+      user: { id: 'owner-1', username: 'o', displayName: 'O', email: 'o@x.com', avatarUrl: null },
+    });
+    const user = userEvent.setup();
+    renderSidebar();
+
+    await screen.findByText('Alpha');
+    await user.click(screen.getByRole('button', { name: 'Create voice channel' }));
+
+    expect(screen.getByRole('heading', { name: 'Create a voice channel' })).toBeInTheDocument();
+    expect(screen.queryByText('Type')).not.toBeInTheDocument();
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument();
   });
 
   it('shows a delete icon for the owner on text and voice channels but not onboarding', async () => {
@@ -114,7 +131,8 @@ describe('ChannelSidebar', () => {
     renderSidebar();
 
     await screen.findByText('Alpha');
-    expect(screen.getAllByRole('button', { name: 'Delete channel' })).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'Delete text channel general' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Delete voice channel lobby' })).toBeInTheDocument();
   });
 
   it('hides the delete icon for a non-owner member', async () => {
@@ -125,7 +143,7 @@ describe('ChannelSidebar', () => {
     renderSidebar();
 
     await screen.findByText('Alpha');
-    expect(screen.queryByRole('button', { name: 'Delete channel' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Delete (text|voice) channel/ })).not.toBeInTheDocument();
   });
 
   it('deletes the channel only after the confirmation dialog is accepted', async () => {
@@ -139,7 +157,7 @@ describe('ChannelSidebar', () => {
     renderSidebar();
 
     await screen.findByText('Alpha');
-    const [deleteButton] = screen.getAllByRole('button', { name: 'Delete channel' });
+    const deleteButton = screen.getByRole('button', { name: 'Delete text channel general' });
     await user.click(deleteButton);
 
     expect(confirmSpy).toHaveBeenCalledWith('Delete channel "general"? This cannot be undone.');

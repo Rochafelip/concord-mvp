@@ -5,7 +5,7 @@ import { Avatar } from '../../components/Avatar';
 import { useVoicePresence } from '../calls/hooks';
 import { useIsServerOwner, useServer } from '../servers/hooks';
 import { ServerSettingsPanel } from '../servers/ServerSettingsPanel';
-import type { Channel } from '../../types/channel';
+import type { Channel, ChannelType } from '../../types/channel';
 import { CreateChannelModal } from './CreateChannelModal';
 import { useChannels, useDeleteChannel } from './hooks';
 
@@ -26,7 +26,7 @@ export function ChannelSidebar() {
   const { data: channels } = useChannels(serverId);
   const { data: voicePresence } = useVoicePresence(serverId);
   const isOwner = useIsServerOwner(serverId);
-  const [createOpen, setCreateOpen] = useState(false);
+  const [createType, setCreateType] = useState<Exclude<ChannelType, 'ONBOARDING'> | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const deleteChannelMutation = useDeleteChannel(serverId);
 
@@ -83,8 +83,8 @@ export function ChannelSidebar() {
             {isOwner && (
               <button
                 type="button"
-                aria-label="Create channel"
-                onClick={() => setCreateOpen(true)}
+                aria-label="Create text channel"
+                onClick={() => setCreateType('TEXT')}
                 className="flex h-8 w-8 items-center justify-center rounded text-muted hover:text-ink"
               >
                 <Plus size={16} aria-hidden="true" />
@@ -105,7 +105,7 @@ export function ChannelSidebar() {
                 {isOwner && (
                   <button
                     type="button"
-                    aria-label="Delete channel"
+                    aria-label={`Delete text channel ${channel.name}`}
                     onClick={(event) => handleDeleteChannel(event, channel)}
                     className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded text-muted opacity-0 hover:text-danger focus-visible:opacity-100 group-hover:opacity-100"
                   >
@@ -118,7 +118,19 @@ export function ChannelSidebar() {
         </div>
 
         <div>
-          <h3 className="px-1 text-caption font-semibold uppercase text-muted">Voice channels</h3>
+          <div className="flex items-center justify-between px-1">
+            <h3 className="text-caption font-semibold uppercase text-muted">Voice channels</h3>
+            {isOwner && (
+              <button
+                type="button"
+                aria-label="Create voice channel"
+                onClick={() => setCreateType('VOICE')}
+                className="flex h-8 w-8 items-center justify-center rounded text-muted hover:text-ink"
+              >
+                <Plus size={16} aria-hidden="true" />
+              </button>
+            )}
+          </div>
           <ul className="mt-1 space-y-0.5">
             {voiceChannels.map((channel) => {
               const participants = (voicePresence ?? []).filter((entry) => entry.channelId === channel.id);
@@ -136,7 +148,7 @@ export function ChannelSidebar() {
                     {isOwner && (
                       <button
                         type="button"
-                        aria-label="Delete channel"
+                        aria-label={`Delete voice channel ${channel.name}`}
                         onClick={(event) => handleDeleteChannel(event, channel)}
                         className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded text-muted opacity-0 hover:text-danger focus-visible:opacity-100 group-hover:opacity-100"
                       >
@@ -174,7 +186,14 @@ export function ChannelSidebar() {
         </div>
       </div>
 
-      <CreateChannelModal serverId={serverId} open={createOpen} onClose={() => setCreateOpen(false)} />
+      {createType && (
+        <CreateChannelModal
+          serverId={serverId}
+          open
+          type={createType}
+          onClose={() => setCreateType(null)}
+        />
+      )}
       <ServerSettingsPanel serverId={serverId} open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </aside>
   );

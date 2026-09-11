@@ -150,6 +150,55 @@ describe('useRealtimeSync', () => {
     ]);
   });
 
+  it('MESSAGE_CREATE shows a notification for a message from another user', () => {
+    const queryClient = newQueryClient();
+    renderHarness(queryClient, '/app');
+
+    emit('MESSAGE_CREATE', {
+      id: 'm2',
+      channelId: 'c1',
+      content: 'Olá!',
+      createdAt: '2026-01-01T00:00:01Z',
+      author: { id: 'u2', username: 'b', displayName: 'B', avatarUrl: null },
+    });
+
+    expect(useNotificationStore.getState().message).toBe('Nova mensagem recebida: Olá!');
+  });
+
+  it('MESSAGE_CREATE identifies onboarding notifications and does not notify the sender', () => {
+    const queryClient = newQueryClient();
+    queryClient.setQueryData<Channel>(['channels', 'onboarding-1'], {
+      id: 'onboarding-1',
+      serverId: 's1',
+      name: 'onboarding',
+      type: 'ONBOARDING',
+      createdAt: '2026-01-01',
+      updatedAt: '2026-01-01',
+    });
+    renderHarness(queryClient, '/app');
+
+    emit('MESSAGE_CREATE', {
+      id: 'm2',
+      channelId: 'onboarding-1',
+      content: 'B entrou no servidor',
+      createdAt: '2026-01-01T00:00:01Z',
+      author: { id: 'u2', username: 'b', displayName: 'B', avatarUrl: null },
+    });
+    expect(useNotificationStore.getState().message).toBe(
+      'Nova mensagem no onboarding: B entrou no servidor',
+    );
+
+    useNotificationStore.setState({ message: null });
+    emit('MESSAGE_CREATE', {
+      id: 'm3',
+      channelId: 'onboarding-1',
+      content: 'Minha própria mensagem',
+      createdAt: '2026-01-01T00:00:02Z',
+      author: { id: 'u1', username: 'a', displayName: 'A', avatarUrl: null },
+    });
+    expect(useNotificationStore.getState().message).toBeNull();
+  });
+
   it('MESSAGE_CREATE ignores a redelivery of a message id already in the cache', () => {
     const queryClient = newQueryClient();
     const existing = { id: 'm1', channelId: 'c1', content: 'hi', createdAt: '2026-01-01T00:00:00Z', author: {} };

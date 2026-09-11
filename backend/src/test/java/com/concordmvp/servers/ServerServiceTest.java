@@ -132,6 +132,7 @@ class ServerServiceTest {
         user.setDisplayName(displayName);
         user.setEmail(displayName.toLowerCase() + "@example.com");
         user.setPasswordHash("hash");
+        user.setEmailVerified(true);
         return user;
     }
 

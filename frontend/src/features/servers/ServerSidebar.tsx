@@ -1,4 +1,4 @@
-import { LogIn, Plus } from 'lucide-react';
+import { Plus, UserPlus } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { CreateServerModal } from './CreateServerModal';
@@ -21,6 +21,16 @@ export function ServerSidebar() {
       aria-label="Servers"
       className="flex w-16 flex-shrink-0 flex-col items-center gap-2 overflow-y-auto border-r bg-rail py-3"
     >
+      <button
+        type="button"
+        aria-label="Join server"
+        title="Join a server"
+        onClick={() => setJoinOpen(true)}
+        className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-sidebar text-muted hover:bg-brand/20 hover:text-brand"
+      >
+        <UserPlus size={17} aria-hidden="true" />
+      </button>
+
       {(servers ?? []).map((server) => {
         const isSelected = server.id === serverId;
         const initial = server.name.trim().charAt(0).toUpperCase() || '?';
@@ -53,14 +63,6 @@ export function ServerSidebar() {
           className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-sidebar text-muted hover:bg-brand/20"
         >
           <Plus size={20} aria-hidden="true" />
-        </button>
-        <button
-          type="button"
-          aria-label="Join server"
-          onClick={() => setJoinOpen(true)}
-          className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-sidebar text-muted hover:bg-brand/20"
-        >
-          <LogIn size={16} aria-hidden="true" />
         </button>
       </div>
 

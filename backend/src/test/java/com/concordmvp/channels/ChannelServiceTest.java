@@ -6,6 +6,7 @@ import com.concordmvp.common.exception.BadRequestException;
 import com.concordmvp.common.exception.ForbiddenException;
 import com.concordmvp.common.exception.ResourceNotFoundException;
 import com.concordmvp.messages.MessageRepository;
+import com.concordmvp.messages.AttachmentCleanupService;
 import com.concordmvp.realtime.RealtimeEventPublisher;
 import com.concordmvp.realtime.WsEvent;
 import com.concordmvp.realtime.WsEventType;
@@ -52,12 +53,15 @@ class ChannelServiceTest {
     @Mock
     private MessageRepository messageRepository;
 
+    @Mock
+    private AttachmentCleanupService attachmentCleanupService;
+
     private ChannelService channelService;
 
     @BeforeEach
     void setUp() {
         channelService = new ChannelService(channelRepository, serverRepository, serverMemberRepository,
-                messageRepository, realtimeEventPublisher);
+                messageRepository, attachmentCleanupService, realtimeEventPublisher);
     }
 
     private Server server(UUID id, UUID ownerId) {
@@ -299,6 +303,7 @@ class ChannelServiceTest {
         when(serverRepository.findById(serverId)).thenReturn(Optional.of(server(serverId, ownerId)));
         when(serverMemberRepository.findByServerId(serverId))
                 .thenReturn(List.of(member(serverId, ownerId), member(serverId, otherMemberId)));
+        when(messageRepository.findByChannelIdIn(List.of(channelId))).thenReturn(List.of());
 
         channelService.deleteChannel(channelId, ownerId);
 

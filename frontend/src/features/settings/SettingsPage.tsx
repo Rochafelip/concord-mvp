@@ -6,6 +6,7 @@ import { PasswordInput } from '../../components/PasswordInput';
 import { TextInput } from '../../components/TextInput';
 import { ApiError } from '../../services/apiClient';
 import { useAuthStore } from '../auth/authStore';
+import { useNotificationStore } from '../../stores/notificationStore';
 import { PasswordRequirements } from '../auth/PasswordRequirements';
 import { isPasswordValid } from '../auth/passwordPolicy';
 import { AudioSettingsSection } from './audio/AudioSettingsSection';
@@ -21,6 +22,8 @@ function errorMessage(error: unknown): string | null {
 
 export function SettingsPage() {
   const user = useAuthStore((state) => state.user);
+  const notificationPreferences = useNotificationStore((state) => state.preferences);
+  const setNotificationPreferences = useNotificationStore((state) => state.setPreferences);
   const [username, setUsername] = useState(user?.username ?? '');
   const [displayName, setDisplayName] = useState(user?.displayName ?? '');
   const [profileSaved, setProfileSaved] = useState(false);
@@ -105,6 +108,46 @@ export function SettingsPage() {
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-lg space-y-8 p-8">
         <h1 className="text-title font-semibold text-ink">Configurações</h1>
+
+        <section className="space-y-4">
+          <h2 className="text-heading font-medium text-ink">Notificações</h2>
+          <p className="text-body text-muted">
+            Escolha quais avisos de novas mensagens aparecem no sistema. Mensagens de erro
+            importantes continuam sendo exibidas.
+          </p>
+          <label className="flex items-start gap-3 text-body text-ink">
+            <input
+              type="checkbox"
+              checked={notificationPreferences.messageNotifications}
+              onChange={(event) =>
+                setNotificationPreferences({ messageNotifications: event.target.checked })
+              }
+              className="mt-1"
+            />
+            <span>
+              <span className="block font-medium">Mensagens dos canais</span>
+              <span className="text-caption text-muted">
+                Avisar quando alguém enviar uma mensagem em um canal de texto.
+              </span>
+            </span>
+          </label>
+          <label className="flex items-start gap-3 text-body text-ink">
+            <input
+              type="checkbox"
+              checked={notificationPreferences.onboardingNotifications}
+              onChange={(event) =>
+                setNotificationPreferences({ onboardingNotifications: event.target.checked })
+              }
+              className="mt-1"
+            />
+            <span>
+              <span className="block font-medium">Onboarding</span>
+              <span className="text-caption text-muted">
+                Avisar sobre entradas e eventos no canal de onboarding.
+              </span>
+            </span>
+          </label>
+        </section>
 
         <form onSubmit={handleProfileSubmit} className="space-y-4" noValidate>
           <h2 className="text-heading font-medium text-ink">Perfil</h2>

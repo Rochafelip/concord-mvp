@@ -25,7 +25,9 @@ export function VerifyEmailBanner() {
       className="flex flex-shrink-0 items-center gap-3 border-b border-warning/30 bg-warning/10 px-4 py-2 text-body text-ink"
     >
       <MailWarning size={18} aria-hidden="true" className="shrink-0 text-warning" />
-      <p className="flex-1">Confirme seu e-mail para proteger sua conta.</p>
+      <p className="flex-1">
+        Verifique seu e-mail para criar ou entrar em servidores e usar o chat de voz.
+      </p>
       <Button
         variant="secondary"
         disabled={cooldown > 0 || resendMutation.isPending}

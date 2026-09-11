@@ -67,4 +67,14 @@ describe('ServerSidebar', () => {
 
     expect(await screen.findByRole('heading', { name: 'Join a server' })).toBeInTheDocument();
   });
+
+  it('places the compact join-server invite button above the server list', async () => {
+    renderSidebar();
+
+    const joinButton = screen.getByRole('button', { name: 'Join server' });
+    const firstServer = await screen.findByRole('link', { name: 'Alpha' });
+
+    expect(joinButton).toHaveAttribute('title', 'Join a server');
+    expect(joinButton.compareDocumentPosition(firstServer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
 });

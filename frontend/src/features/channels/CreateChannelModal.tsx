@@ -10,12 +10,12 @@ import { useCreateChannel } from './hooks';
 interface CreateChannelModalProps {
   serverId: string;
   open: boolean;
+  type: Exclude<ChannelType, 'ONBOARDING'>;
   onClose: () => void;
 }
 
-export function CreateChannelModal({ serverId, open, onClose }: CreateChannelModalProps) {
+export function CreateChannelModal({ serverId, open, type, onClose }: CreateChannelModalProps) {
   const [name, setName] = useState('');
-  const [type, setType] = useState<ChannelType>('TEXT');
   const createChannelMutation = useCreateChannel(serverId);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -25,7 +25,6 @@ export function CreateChannelModal({ serverId, open, onClose }: CreateChannelMod
       {
         onSuccess: () => {
           setName('');
-          setType('TEXT');
           onClose();
         },
       },
@@ -42,7 +41,9 @@ export function CreateChannelModal({ serverId, open, onClose }: CreateChannelMod
   return (
     <Modal open={open} onClose={onClose}>
       <form onSubmit={handleSubmit} className="w-72 space-y-4">
-        <h2 className="text-heading font-semibold text-ink">Create a channel</h2>
+        <h2 className="text-heading font-semibold text-ink">
+          Create a {type === 'TEXT' ? 'text' : 'voice'} channel
+        </h2>
 
         <ErrorBanner message={errorMessage} />
 
@@ -53,30 +54,6 @@ export function CreateChannelModal({ serverId, open, onClose }: CreateChannelMod
           value={name}
           onChange={(event) => setName(event.target.value)}
         />
-
-        <fieldset className="space-y-1">
-          <legend className="text-body font-medium text-muted">Type</legend>
-          <label className="flex items-center gap-2 text-body text-muted">
-            <input
-              type="radio"
-              name="type"
-              value="TEXT"
-              checked={type === 'TEXT'}
-              onChange={() => setType('TEXT')}
-            />
-            Text
-          </label>
-          <label className="flex items-center gap-2 text-body text-muted">
-            <input
-              type="radio"
-              name="type"
-              value="VOICE"
-              checked={type === 'VOICE'}
-              onChange={() => setType('VOICE')}
-            />
-            Voice
-          </label>
-        </fieldset>
 
         <div className="flex justify-end gap-2">
           <Button type="button" variant="secondary" onClick={onClose}>

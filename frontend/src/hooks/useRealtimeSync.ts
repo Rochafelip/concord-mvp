@@ -62,6 +62,7 @@ export function useRealtimeSync(): void {
     const unsubscribers = [
       websocketClient.subscribe('MESSAGE_CREATE', (payload) => {
         const message = payload as Message;
+        const currentUserId = useAuthStore.getState().user?.id;
         queryClient.setQueryData<InfiniteData<Message[]>>(
           ['channels', message.channelId, 'messages'],
           (old) => {
@@ -80,6 +81,24 @@ export function useRealtimeSync(): void {
             return { ...old, pages };
           },
         );
+
+        // The server broadcasts a message back to its author as well. Only notify other
+        // users, including system messages posted to the onboarding channel.
+        if (message.author.id !== currentUserId) {
+          const channel =
+            queryClient.getQueryData<Channel>(['channels', message.channelId]) ??
+            queryClient
+              .getQueryData<Channel[]>(['servers', currentServerIdRef.current, 'channels'])
+              ?.find((candidate) => candidate.id === message.channelId);
+          const isOnboarding = channel?.name?.toLowerCase() === 'onboarding';
+          const { messageNotifications, onboardingNotifications } =
+            useNotificationStore.getState().preferences;
+          if ((!isOnboarding && messageNotifications) || (isOnboarding && onboardingNotifications)) {
+            const preview = message.content.trim() || 'Novo anexo recebido.';
+            const label = isOnboarding ? 'Nova mensagem no onboarding' : 'Nova mensagem recebida';
+            setNotification(`${label}: ${preview.slice(0, 120)}`);
+          }
+        }
       }),
 
       websocketClient.subscribe('CHANNEL_CREATE', (payload) => {
