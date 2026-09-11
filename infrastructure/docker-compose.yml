@@ -43,6 +43,12 @@ services:
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
       LIVEKIT_PUBLIC_URL: ${LIVEKIT_PUBLIC_URL}
       APP_UPLOADS_DIR: /app/uploads
+      MAIL_HOST: ${MAIL_HOST}
+      MAIL_PORT: ${MAIL_PORT}
+      MAIL_USERNAME: ${MAIL_USERNAME}
+      MAIL_PASSWORD: ${MAIL_PASSWORD}
+      MAIL_FROM: ${MAIL_FROM}
+      MAIL_ENABLED: ${MAIL_ENABLED}
 
     volumes:
       - backend_uploads:/app/uploads

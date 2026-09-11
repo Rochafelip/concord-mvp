@@ -98,6 +98,41 @@ describe('AppShell', () => {
 
     expect(screen.getByRole('link', { name: 'Configurações' })).toHaveAttribute('href', '/app/settings');
   });
+
+  it('shows the email verification banner for an unverified user', () => {
+    useAuthStore.setState({
+      user: {
+        id: 'u1',
+        username: 'me',
+        displayName: 'Me',
+        email: 'me@example.com',
+        avatarUrl: null,
+        emailVerified: false,
+      },
+    });
+
+    renderShell('/app');
+
+    expect(screen.getByRole('status')).toHaveTextContent('Confirme seu e-mail');
+  });
+
+  it('hides the email verification banner for a verified user', () => {
+    useAuthStore.setState({
+      user: {
+        id: 'u1',
+        username: 'me',
+        displayName: 'Me',
+        email: 'me@example.com',
+        avatarUrl: null,
+        emailVerified: true,
+      },
+    });
+
+    renderShell('/app');
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
   it('asks for confirmation instead of logging out on the first click', async () => {
     const user = userEvent.setup();
     renderShell('/app');

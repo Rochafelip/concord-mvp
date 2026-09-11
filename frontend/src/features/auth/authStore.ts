@@ -61,6 +61,7 @@ export const useAuthStore = create<AuthState>()(
             displayName: result.displayName,
             email: result.email,
             avatarUrl: null,
+            emailVerified: result.emailVerified ?? true,
           },
         }),
       setUser: (user) => set({ user }),

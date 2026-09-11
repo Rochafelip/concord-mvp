@@ -3,6 +3,7 @@ package com.concordmvp.auth;
 import com.concordmvp.auth.dto.AuthResponse;
 import com.concordmvp.auth.dto.LoginRequest;
 import com.concordmvp.auth.dto.RegisterRequest;
+import com.concordmvp.auth.verification.EmailVerificationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -17,6 +18,8 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
+import static org.mockito.ArgumentMatchers.anyString;
 
 @ExtendWith(MockitoExtension.class)
 class AuthControllerTest {
@@ -27,17 +30,20 @@ class AuthControllerTest {
     @Mock
     private JwtService jwtService;
 
+    @Mock
+    private EmailVerificationService emailVerificationService;
+
     private AuthController authController;
 
     @BeforeEach
     void setUp() {
-        authController = new AuthController(authService, jwtService);
+        authController = new AuthController(authService, jwtService, emailVerificationService);
     }
 
     @Test
     void register_setsHttpOnlySessionCookie_andOmitsTokenFromBody() {
         UUID userId = UUID.randomUUID();
-        AuthResponse response = new AuthResponse(userId, "alice", "Alice", "alice@example.com");
+        AuthResponse response = new AuthResponse(userId, "alice", "Alice", "alice@example.com", false);
         RegisterRequest request = new RegisterRequest("alice", "Alice", "alice@example.com", "password123");
 
         when(authService.register(request)).thenReturn(response);
@@ -60,7 +66,7 @@ class AuthControllerTest {
     @Test
     void login_setsHttpOnlySessionCookie_andOmitsTokenFromBody() {
         UUID userId = UUID.randomUUID();
-        AuthResponse response = new AuthResponse(userId, "alice", "Alice", "alice@example.com");
+        AuthResponse response = new AuthResponse(userId, "alice", "Alice", "alice@example.com", false);
         LoginRequest request = new LoginRequest("alice@example.com", "password123");
 
         when(authService.login(request)).thenReturn(response);

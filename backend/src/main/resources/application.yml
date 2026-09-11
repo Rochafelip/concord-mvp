@@ -6,27 +6,29 @@ spring:
     url: ${DATABASE_URL}
     username: ${DATABASE_USERNAME}
     password: ${DATABASE_PASSWORD}
+
   jpa:
     hibernate:
       ddl-auto: validate
     open-in-view: false
+
   flyway:
     enabled: true
+
   servlet:
     multipart:
       max-file-size: 150MB
       max-request-size: 150MB
+
   mail:
     host: ${MAIL_HOST:smtp.gmail.com}
     port: ${MAIL_PORT:587}
-    # Empty defaults so the app still boots without mail configured -- tests and local runs that
-    # never send anything shouldn't need credentials.
-    username: ${MAIL_USERNAME:}
-    password: ${MAIL_APP_PASSWORD:}
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+
     properties:
       mail.smtp.auth: true
       mail.smtp.starttls.enable: true
-      # A hung SMTP server must not hold a pool thread indefinitely.
       mail.smtp.connectiontimeout: 5000
       mail.smtp.timeout: 5000
       mail.smtp.writetimeout: 5000
@@ -43,8 +45,9 @@ livekit:
 app:
   uploads:
     dir: ${APP_UPLOADS_DIR:/app/uploads}
+
   mail:
-    from: ${MAIL_FROM:${MAIL_USERNAME:}}
+    from: ${MAIL_FROM:${MAIL_USERNAME}}
     enabled: ${MAIL_ENABLED:true}
-  # Base of the links sent by email. Must be the address users actually reach the app at.
+
   base-url: ${APP_BASE_URL:http://localhost:5173}

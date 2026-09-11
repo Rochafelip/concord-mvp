@@ -44,6 +44,13 @@ public class UsersController {
     }
 
     private MeResponse toMeResponse(User user) {
-        return new MeResponse(user.getId(), user.getUsername(), user.getDisplayName(), user.getEmail(), user.getAvatarUrl());
+        return new MeResponse(
+                user.getId(),
+                user.getUsername(),
+                user.getDisplayName(),
+                user.getEmail(),
+                user.getAvatarUrl(),
+                user.isEmailVerified()
+        );
     }
 }

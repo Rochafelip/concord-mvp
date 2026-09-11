@@ -25,6 +25,14 @@ export function getMe(): Promise<User> {
   return apiClient.get<User>('users/me');
 }
 
+export function resendVerification(): Promise<void> {
+  return apiClient.post<void>('auth/verify-email/resend');
+}
+
+export function verifyEmail(token: string): Promise<void> {
+  return apiClient.post<void>('auth/verify-email', { token });
+}
+
 export interface WsTicketResponse {
   ticket: string;
 }

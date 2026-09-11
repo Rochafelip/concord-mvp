@@ -3,6 +3,7 @@ package com.concordmvp.auth;
 import com.concordmvp.auth.dto.AuthResponse;
 import com.concordmvp.auth.dto.LoginRequest;
 import com.concordmvp.auth.dto.RegisterRequest;
+import com.concordmvp.auth.verification.EmailVerificationService;
 import com.concordmvp.common.exception.ConflictException;
 import com.concordmvp.common.exception.UnauthorizedException;
 import com.concordmvp.users.User;
@@ -36,11 +37,14 @@ class AuthServiceTest {
     @Mock
     private PasswordEncoder passwordEncoder;
 
+    @Mock
+    private EmailVerificationService emailVerificationService;
+
     private AuthService authService;
 
     @BeforeEach
     void setUp() {
-        authService = new AuthService(userRepository, passwordEncoder);
+        authService = new AuthService(userRepository, passwordEncoder, emailVerificationService);
     }
 
     @Test
@@ -71,6 +75,8 @@ class AuthServiceTest {
         assertThat(response.username()).isEqualTo("alice");
         assertThat(response.displayName()).isEqualTo("Alice");
         assertThat(response.email()).isEqualTo("alice@example.com");
+        assertThat(response.emailVerified()).isFalse();
+        verify(emailVerificationService).sendVerification(savedUserCaptor.getValue());
     }
 
     @Test

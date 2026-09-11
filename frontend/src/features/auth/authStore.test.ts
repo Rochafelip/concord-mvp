@@ -7,6 +7,7 @@ const authResult: AuthResult = {
   username: 'jdoe',
   displayName: 'John Doe',
   email: 'jdoe@example.com',
+  emailVerified: true,
 };
 
 describe('authStore', () => {
@@ -30,6 +31,7 @@ describe('authStore', () => {
       displayName: 'John Doe',
       email: 'jdoe@example.com',
       avatarUrl: null,
+      emailVerified: true,
     });
   });
 

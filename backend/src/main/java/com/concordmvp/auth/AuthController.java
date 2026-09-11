@@ -3,6 +3,9 @@ package com.concordmvp.auth;
 import com.concordmvp.auth.dto.AuthResponse;
 import com.concordmvp.auth.dto.LoginRequest;
 import com.concordmvp.auth.dto.RegisterRequest;
+import com.concordmvp.auth.dto.VerifyEmailRequest;
+import com.concordmvp.auth.verification.EmailVerificationService;
+import com.concordmvp.common.CurrentUser;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -21,10 +24,16 @@ public class AuthController {
 
     private final AuthService authService;
     private final JwtService jwtService;
+    private final EmailVerificationService emailVerificationService;
 
-    public AuthController(AuthService authService, JwtService jwtService) {
+    public AuthController(
+            AuthService authService,
+            JwtService jwtService,
+            EmailVerificationService emailVerificationService
+    ) {
         this.authService = authService;
         this.jwtService = jwtService;
+        this.emailVerificationService = emailVerificationService;
     }
 
     @PostMapping("/register")
@@ -54,6 +63,18 @@ public class AuthController {
         return ResponseEntity.noContent()
                 .header(HttpHeaders.SET_COOKIE, clearedSessionCookie().toString())
                 .build();
+    }
+
+    @PostMapping("/verify-email")
+    public ResponseEntity<Void> verifyEmail(@Valid @RequestBody VerifyEmailRequest request) {
+        emailVerificationService.verify(request.token());
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/verify-email/resend")
+    public ResponseEntity<Void> resendVerification() {
+        emailVerificationService.resend(CurrentUser.id());
+        return ResponseEntity.noContent().build();
     }
 
     private ResponseCookie sessionCookie(String token) {

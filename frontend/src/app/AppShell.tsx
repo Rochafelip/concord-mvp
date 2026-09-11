@@ -7,6 +7,7 @@ import { ErrorBanner } from '../components/ErrorBanner';
 import { Logo } from '../components/Logo';
 import { Modal } from '../components/Modal';
 import { useAuthStore } from '../features/auth/authStore';
+import { VerifyEmailBanner } from '../features/auth/VerifyEmailBanner';
 import { VoiceConnectionBar } from '../features/calls/VoiceConnectionBar';
 import { useDisconnectVoiceOnLogout } from '../features/calls/hooks';
 import { ServerSidebar } from '../features/servers/ServerSidebar';
@@ -77,6 +78,8 @@ export function AppShell() {
           </div>
         )}
       </header>
+
+      {user && user.emailVerified === false && <VerifyEmailBanner />}
 
       {/* Logging out drops the session and every open call with it, so it asks first. */}
       <Modal open={confirmingLogout} onClose={() => setConfirmingLogout(false)}>

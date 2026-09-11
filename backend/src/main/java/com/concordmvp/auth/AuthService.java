@@ -3,6 +3,7 @@ package com.concordmvp.auth;
 import com.concordmvp.auth.dto.AuthResponse;
 import com.concordmvp.auth.dto.LoginRequest;
 import com.concordmvp.auth.dto.RegisterRequest;
+import com.concordmvp.auth.verification.EmailVerificationService;
 import com.concordmvp.common.exception.ConflictException;
 import com.concordmvp.common.exception.UnauthorizedException;
 import com.concordmvp.users.User;
@@ -17,10 +18,16 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final EmailVerificationService emailVerificationService;
 
-    public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    public AuthService(
+            UserRepository userRepository,
+            PasswordEncoder passwordEncoder,
+            EmailVerificationService emailVerificationService
+    ) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.emailVerificationService = emailVerificationService;
     }
 
     public AuthResponse register(RegisterRequest request) {
@@ -35,8 +42,10 @@ public class AuthService {
         user.setPasswordHash(passwordEncoder.encode(request.password()));
 
         User saved = userRepository.save(user);
+        emailVerificationService.sendVerification(saved);
 
-        return new AuthResponse(saved.getId(), saved.getUsername(), saved.getDisplayName(), saved.getEmail());
+        return new AuthResponse(
+                saved.getId(), saved.getUsername(), saved.getDisplayName(), saved.getEmail(), saved.isEmailVerified());
     }
 
     public AuthResponse login(LoginRequest request) {
@@ -47,6 +56,7 @@ public class AuthService {
             throw new UnauthorizedException(INVALID_CREDENTIALS_MESSAGE);
         }
 
-        return new AuthResponse(user.getId(), user.getUsername(), user.getDisplayName(), user.getEmail());
+        return new AuthResponse(
+                user.getId(), user.getUsername(), user.getDisplayName(), user.getEmail(), user.isEmailVerified());
     }
 }

@@ -6,6 +6,7 @@ public record AuthResponse(
         UUID userId,
         String username,
         String displayName,
-        String email
+        String email,
+        boolean emailVerified
 ) {
 }

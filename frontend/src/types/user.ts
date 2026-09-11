@@ -4,6 +4,8 @@ export interface User {
   displayName: string;
   email: string;
   avatarUrl: string | null;
+  /** Profiles cached before email verification shipped do not have this field. */
+  emailVerified?: boolean;
 }
 
 export interface AuthResult {
@@ -11,4 +13,5 @@ export interface AuthResult {
   username: string;
   displayName: string;
   email: string;
+  emailVerified?: boolean;
 }
