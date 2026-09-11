@@ -1,5 +1,6 @@
 import { useRef, useState, type FormEvent } from 'react';
 import { Button } from '../../components/Button';
+import { Avatar } from '../../components/Avatar';
 import { ErrorBanner } from '../../components/ErrorBanner';
 import { PasswordInput } from '../../components/PasswordInput';
 import { TextInput } from '../../components/TextInput';
@@ -8,7 +9,7 @@ import { useAuthStore } from '../auth/authStore';
 import { PasswordRequirements } from '../auth/PasswordRequirements';
 import { isPasswordValid } from '../auth/passwordPolicy';
 import { AudioSettingsSection } from './audio/AudioSettingsSection';
-import { useChangePassword, useUpdateProfile } from './hooks';
+import { useChangePassword, useRemoveAvatar, useUpdateProfile, useUploadAvatar } from './hooks';
 
 const NEW_PASSWORD_REQUIREMENTS_ID = 'new-password-requirements';
 
@@ -23,7 +24,11 @@ export function SettingsPage() {
   const [username, setUsername] = useState(user?.username ?? '');
   const [displayName, setDisplayName] = useState(user?.displayName ?? '');
   const [profileSaved, setProfileSaved] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
   const updateProfileMutation = useUpdateProfile();
+  const uploadAvatarMutation = useUploadAvatar();
+  const removeAvatarMutation = useRemoveAvatar();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   function handleProfileSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -37,6 +42,24 @@ export function SettingsPage() {
         },
       },
     );
+  }
+
+  function handleAvatarChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowed.includes(file.type) || file.size > 5 * 1024 * 1024) {
+      setAvatarError(
+        !allowed.includes(file.type)
+          ? 'Selecione uma imagem JPEG, PNG, GIF ou WebP'
+          : 'A imagem deve ter no máximo 5 MB',
+      );
+      uploadAvatarMutation.reset();
+      return;
+    }
+    setAvatarError(null);
+    uploadAvatarMutation.mutate(file);
   }
 
   const [currentPassword, setCurrentPassword] = useState('');
@@ -86,7 +109,43 @@ export function SettingsPage() {
         <form onSubmit={handleProfileSubmit} className="space-y-4" noValidate>
           <h2 className="text-heading font-medium text-ink">Perfil</h2>
           <ErrorBanner message={errorMessage(updateProfileMutation.error)} />
+          <ErrorBanner
+            message={
+              avatarError ??
+              (uploadAvatarMutation.error
+                ? uploadAvatarMutation.error instanceof ApiError && uploadAvatarMutation.error.status === 413
+                  ? 'A imagem deve ter no máximo 5 MB'
+                  : errorMessage(uploadAvatarMutation.error)
+                : errorMessage(removeAvatarMutation.error)
+              )
+            }
+          />
           {profileSaved && <p className="text-body text-brand">Perfil atualizado com sucesso</p>}
+
+          <div className="flex items-center gap-4 rounded border border-border bg-surface p-4">
+            <Avatar displayName={user?.displayName ?? ''} avatarUrl={user?.avatarUrl} size="lg" loading={uploadAvatarMutation.isPending} />
+            <div className="space-y-2">
+              <p className="text-body font-medium text-ink">Foto de perfil</p>
+              <div className="flex gap-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/gif,image/webp"
+                  className="sr-only"
+                  onChange={handleAvatarChange}
+                />
+                <Button type="button" disabled={uploadAvatarMutation.isPending || removeAvatarMutation.isPending} onClick={() => fileInputRef.current?.click()}>
+                  {uploadAvatarMutation.isPending ? 'Enviando…' : user?.avatarUrl ? 'Alterar' : 'Adicionar'}
+                </Button>
+                {user?.avatarUrl && (
+                  <Button type="button" disabled={uploadAvatarMutation.isPending || removeAvatarMutation.isPending} onClick={() => removeAvatarMutation.mutate()}>
+                    {removeAvatarMutation.isPending ? 'Removendo…' : 'Remover'}
+                  </Button>
+                )}
+              </div>
+              <p className="text-caption text-muted">JPEG, PNG, GIF ou WebP · máximo de 5 MB</p>
+            </div>
+          </div>
 
           <TextInput
             label="Nome de usuário"

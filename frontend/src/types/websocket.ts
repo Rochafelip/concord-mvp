@@ -18,6 +18,7 @@ export type WsEventType =
   | 'SERVER_OWNER_CHANGE'
   | 'VOICE_PRESENCE_UPDATE'
   | 'VOICE_PRESENCE_LEAVE'
+  | 'USER_PROFILE_UPDATE'
   | 'ERROR';
 
 /** Generic envelope for a WebSocket frame in both directions: {"type": "...", "payload": {...}}. */
@@ -65,4 +66,13 @@ export interface VoicePresenceLeavePayload {
   serverId: string;
   channelId: string;
   userId: string;
+}
+
+export interface UserProfileUpdatePayload {
+  user: {
+    id: string;
+    username: string;
+    displayName: string;
+    avatarUrl: string | null;
+  };
 }

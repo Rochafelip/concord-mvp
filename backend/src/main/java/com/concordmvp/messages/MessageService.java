@@ -14,6 +14,7 @@ import com.concordmvp.servers.ServerMember;
 import com.concordmvp.servers.ServerMemberRepository;
 import com.concordmvp.users.User;
 import com.concordmvp.users.UserRepository;
+import com.concordmvp.users.UserAvatarUrls;
 import com.concordmvp.users.dto.UserSummaryResponse;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -194,7 +195,7 @@ public class MessageService {
 
     private MessageResponse toResponse(Message message, User author) {
         UserSummaryResponse authorSummary = new UserSummaryResponse(
-                author.getId(), author.getUsername(), author.getDisplayName(), author.getAvatarUrl());
+                author.getId(), author.getUsername(), author.getDisplayName(), UserAvatarUrls.url(author));
         return new MessageResponse(message.getId(), message.getChannelId(), authorSummary,
                 message.getContent(), message.getImageUrl(), message.getFileName(), message.getFileSize(),
                 message.getCreatedAt());

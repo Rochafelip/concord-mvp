@@ -15,6 +15,7 @@ import com.concordmvp.servers.ServerMember;
 import com.concordmvp.servers.ServerMemberRepository;
 import com.concordmvp.users.User;
 import com.concordmvp.users.UserRepository;
+import com.concordmvp.users.UserAvatarUrls;
 import com.concordmvp.users.dto.UserSummaryResponse;
 import org.springframework.stereotype.Service;
 
@@ -67,7 +68,7 @@ public class VoicePresenceService {
 
         VoicePresenceResponse response = new VoicePresenceResponse(
                 channel.getServerId(), channelId,
-                new UserSummaryResponse(user.getId(), user.getUsername(), user.getDisplayName(), user.getAvatarUrl()),
+                new UserSummaryResponse(user.getId(), user.getUsername(), user.getDisplayName(), UserAvatarUrls.url(user)),
                 muted, cameraOn, screenSharing, speaking, deafened);
 
         byUserId.put(userId, new Entry(channelId, channel.getServerId(), response));

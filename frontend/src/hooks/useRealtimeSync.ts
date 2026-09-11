@@ -20,6 +20,7 @@ import type {
   ServerMemberEventPayload,
   VoicePresenceLeavePayload,
   VoicePresencePayload,
+  UserProfileUpdatePayload,
 } from '../types/websocket';
 
 /**
@@ -158,6 +159,54 @@ export function useRealtimeSync(): void {
         queryClient.setQueryData<VoicePresenceEntry[]>(['servers', serverId, 'voice-presence'], (old) =>
           old?.filter((entry) => entry.userId !== userId),
         );
+      }),
+
+      websocketClient.subscribe('USER_PROFILE_UPDATE', (payload) => {
+        const { user } = payload as UserProfileUpdatePayload;
+        const currentUser = useAuthStore.getState().user;
+        if (currentUser?.id === user.id) {
+          useAuthStore.getState().setUser({ ...currentUser, ...user });
+        }
+
+        queryClient.setQueriesData({ queryKey: ['servers'] }, (data: unknown) => {
+          if (!data) return data;
+          const replace = (value: unknown): unknown => {
+            if (Array.isArray(value)) return value.map(replace);
+            if (value && typeof value === 'object') {
+              const record = value as Record<string, unknown>;
+              if (record.id === user.id && 'avatarUrl' in record) return { ...record, ...user };
+              if ('author' in record && record.author && typeof record.author === 'object') {
+                const author = record.author as Record<string, unknown>;
+                return author.id === user.id ? { ...record, author: { ...author, ...user } } : record;
+              }
+              if ('user' in record && record.user && typeof record.user === 'object') {
+                const nested = record.user as Record<string, unknown>;
+                return nested.id === user.id ? { ...record, user: { ...nested, ...user } } : record;
+              }
+            }
+            return value;
+          };
+          return replace(data);
+        });
+        queryClient.setQueriesData({ queryKey: ['channels'] }, (data: unknown) => {
+          if (!data) return data;
+          const pages = data as { pages?: unknown[] };
+          if (Array.isArray(pages.pages)) {
+            const replace = (value: unknown): unknown => {
+              if (Array.isArray(value)) return value.map(replace);
+              if (value && typeof value === 'object') {
+                const record = value as Record<string, unknown>;
+                if (record.author && typeof record.author === 'object') {
+                  const author = record.author as Record<string, unknown>;
+                  if (author.id === user.id) return { ...record, author: { ...author, ...user } };
+                }
+              }
+              return value;
+            };
+            return { ...data, pages: pages.pages.map(replace) };
+          }
+          return data;
+        });
       }),
     ];
 

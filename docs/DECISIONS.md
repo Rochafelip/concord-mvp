@@ -317,3 +317,24 @@ very restrictive client networks), a standalone Coturn service can still be
 added later without touching the application layer — LiveKit's SFU only
 needs its `turn:` config disabled and `rtc.turn_servers` pointed at an
 external server.
+
+---
+
+## D17 — User avatar storage
+
+Date: 2026-09-11
+
+**Decision**: Store optional user avatar bytes on the existing private
+`backend_uploads` volume under an opaque user-scoped key. Store only that key
+in PostgreSQL; do not store image bytes in the `users` table and do not expose
+an anonymous public URL. Authenticated avatar responses accept JPEG, PNG, GIF,
+or WebP up to 5 MB and validate the actual decodable image content.
+
+The API derives `avatarUrl` from the authenticated endpoint
+`/api/v1/users/{userId}/avatar`. Avatar changes emit `USER_PROFILE_UPDATE` so
+connected clients can update cached user summaries without a new login.
+
+**Consequences**: The MVP remains compatible with the current single-instance
+self-hosted deployment and introduces no object-storage dependency. A future
+S3-compatible adapter can replace the local storage implementation behind its
+service boundary.

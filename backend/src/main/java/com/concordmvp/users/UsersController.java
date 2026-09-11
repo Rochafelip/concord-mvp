@@ -14,9 +14,17 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import org.springframework.http.MediaType;
+import org.springframework.http.CacheControl;
+import java.time.Duration;
 
 @RestController
 @RequestMapping("/api/v1/users")
@@ -25,15 +33,46 @@ public class UsersController {
     private final UserService userService;
     private final JwtService jwtService;
     private final SessionCookieFactory sessionCookieFactory;
+    private final AvatarStorageService avatarStorageService;
 
     public UsersController(
             UserService userService,
             JwtService jwtService,
-            SessionCookieFactory sessionCookieFactory
+            SessionCookieFactory sessionCookieFactory,
+            AvatarStorageService avatarStorageService
     ) {
         this.userService = userService;
         this.jwtService = jwtService;
         this.sessionCookieFactory = sessionCookieFactory;
+        this.avatarStorageService = avatarStorageService;
+    }
+
+    @PutMapping(value = "/me/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public MeResponse uploadAvatar(@RequestParam("file") org.springframework.web.multipart.MultipartFile file) {
+        return toMeResponse(userService.updateAvatar(CurrentUser.id(), file));
+    }
+
+    @DeleteMapping("/me/avatar")
+    public ResponseEntity<Void> deleteAvatar() {
+        userService.removeAvatar(CurrentUser.id());
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{userId}/avatar")
+    public ResponseEntity<byte[]> avatar(@PathVariable UUID userId) {
+        User user = userService.getCurrentUser(userId);
+        if (user.getAvatarStorageKey() == null) return ResponseEntity.notFound().build();
+        try {
+            Path path = avatarStorageService.resolve(user.getAvatarStorageKey());
+            if (!Files.exists(path)) return ResponseEntity.notFound().build();
+            String contentType = Files.probeContentType(path);
+            MediaType mediaType = contentType == null ? MediaType.APPLICATION_OCTET_STREAM : MediaType.parseMediaType(contentType);
+            return ResponseEntity.ok().contentType(mediaType)
+                    .cacheControl(CacheControl.maxAge(Duration.ofMinutes(5)).cachePrivate())
+                    .body(Files.readAllBytes(path));
+        } catch (java.io.IOException ex) {
+            throw new com.concordmvp.common.exception.ResourceNotFoundException("Avatar not found");
+        }
     }
 
     @GetMapping("/me")
@@ -63,7 +102,7 @@ public class UsersController {
                 user.getUsername(),
                 user.getDisplayName(),
                 user.getEmail(),
-                user.getAvatarUrl(),
+                UserAvatarUrls.url(user),
                 user.isEmailVerified()
         );
     }

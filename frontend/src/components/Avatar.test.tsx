@@ -3,11 +3,11 @@ import { describe, expect, it } from 'vitest';
 import { Avatar } from './Avatar';
 
 describe('Avatar', () => {
-  it('renders an initial-letter fallback at size lg when there is no avatarUrl', () => {
+  it('renders the Concord fallback at size lg when there is no avatarUrl', () => {
     render(<Avatar displayName="Felipe" size="lg" />);
 
     const fallback = screen.getByLabelText('Felipe');
-    expect(fallback).toHaveTextContent('F');
+    expect(fallback.querySelector('svg')).toBeInTheDocument();
     expect(fallback).toHaveClass('h-20', 'w-20');
   });
 

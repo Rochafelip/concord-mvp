@@ -32,8 +32,8 @@ public class User {
     @Column(name = "password_hash", nullable = false, length = 255)
     private String passwordHash;
 
-    @Column(name = "avatar_url", length = 500)
-    private String avatarUrl;
+    @Column(name = "avatar_storage_key", length = 500)
+    private String avatarStorageKey;
 
     @Column(name = "email_verified", nullable = false)
     private boolean emailVerified;
@@ -122,12 +122,12 @@ public class User {
         this.passwordHash = passwordHash;
     }
 
-    public String getAvatarUrl() {
-        return avatarUrl;
+    public String getAvatarStorageKey() {
+        return avatarStorageKey;
     }
 
-    public void setAvatarUrl(String avatarUrl) {
-        this.avatarUrl = avatarUrl;
+    public void setAvatarStorageKey(String avatarStorageKey) {
+        this.avatarStorageKey = avatarStorageKey;
     }
 
     public Instant getCreatedAt() {

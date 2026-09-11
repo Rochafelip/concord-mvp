@@ -37,15 +37,16 @@ type RequestOptions = Omit<RequestInit, 'body'> & {
  */
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { body, headers, ...rest } = options;
+  const isFormData = body instanceof FormData;
 
   const response = await fetch(`${API_PREFIX}/${path.replace(/^\/+/, '')}`, {
     ...rest,
     credentials: 'same-origin',
     headers: {
-      'Content-Type': 'application/json',
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...headers,
     },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    body: body !== undefined ? (isFormData ? body : JSON.stringify(body)) : undefined,
   });
 
   if (response.status === 401) {

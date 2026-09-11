@@ -9,6 +9,7 @@ import com.concordmvp.servers.dto.ServerResponse;
 import com.concordmvp.servers.dto.TransferOwnershipRequest;
 import com.concordmvp.users.User;
 import com.concordmvp.users.UserRepository;
+import com.concordmvp.users.UserAvatarUrls;
 import com.concordmvp.users.dto.UserSummaryResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -108,7 +109,7 @@ public class ServerController {
         User user = userRepository.findById(member.getUserId())
                 .orElseThrow(() -> new IllegalStateException("Member references missing user: " + member.getUserId()));
         UserSummaryResponse summary = new UserSummaryResponse(user.getId(), user.getUsername(),
-                user.getDisplayName(), user.getAvatarUrl());
+                user.getDisplayName(), UserAvatarUrls.url(user));
         return new ServerMemberResponse(summary, member.getJoinedAt());
     }
 }
