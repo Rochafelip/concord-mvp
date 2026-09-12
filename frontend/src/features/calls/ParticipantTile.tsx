@@ -108,7 +108,7 @@ export function ParticipantTile({
       onKeyDown={handleKeyDown}
     >
       {showVideo ? (
-        <video ref={videoRef} muted autoPlay playsInline className="h-full w-full object-cover" />
+        <video ref={videoRef} muted autoPlay playsInline className="block h-full w-full object-cover" />
       ) : (
         <Avatar displayName={participant.name} avatarUrl={avatarUrl} size="lg" />
       )}

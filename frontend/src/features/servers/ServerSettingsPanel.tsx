@@ -38,7 +38,7 @@ export function ServerSettingsPanel({ serverId, open, onClose }: ServerSettingsP
   // before the settings panel has ever been clicked open.
   const { data: members } = useServerMembers(open ? serverId : undefined);
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
-  const [displayNameDraft, setDisplayNameDraft] = useState<string | undefined>();
+  const [displayNameDraft, setDisplayNameDraft] = useState<{ serverId: string; value: string } | null>(null);
 
   const isOwner = useIsServerOwner(serverId);
 
@@ -50,8 +50,8 @@ export function ServerSettingsPanel({ serverId, open, onClose }: ServerSettingsP
   const leaveServerMutation = useLeaveServer();
 
   const currentMember = members?.find((member) => member.user.id === currentUserId);
-  const currentDisplayName = currentMember?.displayName ?? currentMember?.user.displayName ?? '';
-  const serverDisplayName = displayNameDraft ?? currentDisplayName;
+  const memberDisplayName = currentMember?.displayName ?? currentMember?.user.displayName ?? '';
+  const serverDisplayName = displayNameDraft?.serverId === serverId ? displayNameDraft.value : memberDisplayName;
 
   function handleDisplayNameSave() {
     const value = serverDisplayName.trim();
@@ -137,7 +137,7 @@ export function ServerSettingsPanel({ serverId, open, onClose }: ServerSettingsP
               <input
                 value={serverDisplayName}
                 maxLength={50}
-                onChange={(event) => setDisplayNameDraft(event.target.value)}
+                onChange={(event) => setDisplayNameDraft({ serverId, value: event.target.value })}
                 className="min-w-0 flex-1 rounded border border-border bg-surface px-2 py-1 text-body text-ink"
                 aria-label="Your display name in this server"
               />
