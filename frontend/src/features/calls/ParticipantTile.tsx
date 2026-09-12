@@ -98,7 +98,7 @@ export function ParticipantTile({
 
   return (
     <div
-      className={`relative flex aspect-video items-center justify-center overflow-hidden rounded ${className} ${
+      className={`relative flex w-full min-w-0 aspect-video items-center justify-center overflow-hidden rounded ${className} ${
         showVideo ? 'bg-gray-800' : tileColorFor(participant.identity)
       } ${participant.speaking ? 'ring-2 ring-success' : ''}`}
       role={onWatchClick ? 'button' : undefined}
@@ -108,7 +108,7 @@ export function ParticipantTile({
       onKeyDown={handleKeyDown}
     >
       {showVideo ? (
-        <video ref={videoRef} muted autoPlay playsInline className="h-full w-full object-cover" />
+        <video ref={videoRef} muted autoPlay playsInline className="block h-full w-full object-cover" />
       ) : (
         <Avatar displayName={participant.name} avatarUrl={avatarUrl} size="lg" />
       )}
