@@ -48,9 +48,9 @@ export function FocusedCallView({
   const { containerRef, containerClassName, tileClassName, style } = useGridLayout(watchTargets.length);
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden pb-20">
-      <div data-testid="watched-area" className="group/camera-grid relative flex flex-1 overflow-hidden p-4">
-        <div ref={containerRef} className={`flex-1 ${containerClassName}`} style={style}>
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pb-20">
+      <div data-testid="watched-area" className="group/camera-grid relative flex min-h-0 min-w-0 flex-1 overflow-hidden p-4">
+        <div ref={containerRef} className={`min-h-0 min-w-0 flex-1 ${containerClassName}`} style={style}>
           {watchTargets.map((target) => {
             const watched = participants.find((participant) => participant.identity === target.identity);
             if (!watched) return null;

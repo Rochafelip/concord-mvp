@@ -36,8 +36,8 @@ export function useGridLayout(count: number): GridLayout {
   if (count <= 1) {
     return {
       containerRef,
-      containerClassName: 'flex items-center justify-center',
-      tileClassName: 'h-full max-h-full max-w-full',
+      containerClassName: 'flex min-h-0 min-w-0 items-center justify-center',
+      tileClassName: 'h-full min-h-0 min-w-0 max-h-full max-w-full',
       style: {},
     };
   }
@@ -45,8 +45,8 @@ export function useGridLayout(count: number): GridLayout {
   if (count === 2) {
     return {
       containerRef,
-      containerClassName: 'flex flex-col items-center justify-center gap-2 sm:flex-row',
-      tileClassName: 'max-h-full max-w-full flex-1',
+      containerClassName: 'flex min-h-0 min-w-0 flex-col items-center justify-center gap-2 sm:flex-row',
+      tileClassName: 'min-h-0 min-w-0 max-h-full max-w-full flex-1',
       style: {},
     };
   }
@@ -56,9 +56,9 @@ export function useGridLayout(count: number): GridLayout {
       containerRef,
       containerClassName:
         count === 3
-          ? 'grid grid-cols-2 grid-rows-2 gap-2 [&>:nth-child(3)]:col-span-2 [&>:nth-child(3)]:mx-auto [&>:nth-child(3)]:w-1/2'
-          : 'grid grid-cols-2 grid-rows-2 gap-2',
-      tileClassName: '',
+          ? 'grid min-h-0 min-w-0 grid-cols-2 grid-rows-[repeat(2,minmax(0,1fr))] gap-2 [&>:nth-child(3)]:col-span-2 [&>:nth-child(3)]:mx-auto [&>:nth-child(3)]:w-1/2'
+          : 'grid min-h-0 min-w-0 grid-cols-2 grid-rows-[repeat(2,minmax(0,1fr))] gap-2',
+      tileClassName: 'h-full min-h-0 min-w-0 w-full',
       style: {},
     };
   }
@@ -68,8 +68,8 @@ export function useGridLayout(count: number): GridLayout {
 
   return {
     containerRef,
-    containerClassName: 'grid auto-rows-min gap-2',
-    tileClassName: '',
+    containerClassName: 'grid min-h-0 min-w-0 auto-rows-[minmax(0,1fr)] gap-2',
+    tileClassName: 'h-full min-h-0 min-w-0 w-full',
     style: { gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` },
   };
 }
