@@ -37,7 +37,7 @@ export function useGridLayout(count: number): GridLayout {
     return {
       containerRef,
       containerClassName: 'flex min-h-0 min-w-0 items-center justify-center',
-      tileClassName: 'h-full min-h-0 min-w-0 max-h-full max-w-full',
+      tileClassName: 'h-full min-h-0 min-w-0 w-full max-w-4xl',
       style: {},
     };
   }
