@@ -15,7 +15,7 @@ interface ParticipantTileProps {
   avatarUrl?: string | null;
   /** From voice presence, looked up by identity in ParticipantList — defaults to false so tiles render correctly before the first presence fetch resolves. */
   deafened?: boolean;
-  /** Extra classes appended alongside the tile's default aspect-video sizing — ParticipantGrid's
+  /** Extra classes appended alongside the tile's default sizing — ParticipantGrid's
    * 1- and 2-participant tiers use this to let a tile fill more space than a fixed grid track. */
   className?: string;
   /** Set to false to suppress the hover volume-control overlay — used when the tile is wrapped
@@ -98,7 +98,7 @@ export function ParticipantTile({
 
   return (
     <div
-      className={`relative flex aspect-video items-center justify-center overflow-hidden rounded ${className} ${
+      className={`relative flex min-h-0 min-w-0 items-center justify-center overflow-hidden rounded ${className} ${
         showVideo ? 'bg-gray-800' : tileColorFor(participant.identity)
       } ${participant.speaking ? 'ring-2 ring-success' : ''}`}
       role={onWatchClick ? 'button' : undefined}

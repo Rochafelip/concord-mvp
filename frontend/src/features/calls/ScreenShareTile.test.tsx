@@ -390,7 +390,7 @@ describe('ScreenShareTile', () => {
     it('appends a given className alongside the default sizing', () => {
       const { container } = render(<ScreenShareTile participant={sharingParticipant()} className="h-full max-h-full max-w-full" />);
 
-      expect(container.firstChild).toHaveClass('aspect-video', 'h-full', 'max-h-full');
+      expect(container.firstChild).toHaveClass('w-full', 'h-full', 'max-h-full', 'max-w-full');
     });
   });
 });

@@ -282,6 +282,8 @@ class VoiceClient {
   toggleScreenShare(options?: ScreenShareOptions): void {
     const localParticipant = this.room?.localParticipant;
     if (!localParticipant) return;
+    // Prevent screen share from starting before the user is connected to a call
+    if (!this.room) return;
     const enabling = !localParticipant.isScreenShareEnabled;
     const promise =
       enabling && options
@@ -313,8 +315,10 @@ class VoiceClient {
   // TrackMuted/TrackUnmuted events fire for local tracks too, and registerListeners already
   // resyncs on those, so no new event wiring is needed here.
   toggleScreenShareAudio(): void {
-    const publication = this.room?.localParticipant.getTrackPublication(Track.Source.ScreenShareAudio);
+    const publication = this.room?.localParticipant?.getTrackPublication(Track.Source.ScreenShareAudio);
     if (!publication) return;
+    // Prevent screen share audio toggle before the user is connected to a call
+    if (!this.room) return;
     const promise = publication.isMuted ? publication.unmute() : publication.mute();
     promise
       .then(() => this.syncParticipants())

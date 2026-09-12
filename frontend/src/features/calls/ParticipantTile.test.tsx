@@ -319,13 +319,13 @@ describe('ParticipantTile', () => {
     it('appends the given className alongside the default aspect-video sizing', () => {
       const { container } = render(<ParticipantTile participant={participant()} className="h-full max-h-full" />);
 
-      expect(container.firstChild).toHaveClass('aspect-video', 'h-full', 'max-h-full');
+      expect(container.firstChild).toHaveClass('min-h-0', 'min-w-0', 'h-full', 'max-h-full');
     });
 
     it('defaults to no extra className', () => {
       const { container } = render(<ParticipantTile participant={participant()} />);
 
-      expect(container.firstChild).toHaveClass('aspect-video');
+      expect(container.firstChild).toHaveClass('min-h-0', 'min-w-0');
     });
   });
 });

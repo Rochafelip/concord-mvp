@@ -81,11 +81,11 @@ describe('VoiceConnectionBar', () => {
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
   });
 
-  it('shows a connecting placeholder while the channel/server names are not resolved yet', () => {
+  it('shows nothing when connecting (prevents screen share before connection)', () => {
     useVoiceStore.setState({ status: 'connecting', channelId: 'c1' });
     renderBar();
 
-    expect(screen.getByRole('link')).toHaveTextContent(/connecting/i);
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
   });
 
   it('shows the channel and server name and links to the call when connected', async () => {
@@ -99,7 +99,7 @@ describe('VoiceConnectionBar', () => {
   });
 
   it('does not show Mute/Deafen/Leave while there is no local participant yet', () => {
-    useVoiceStore.setState({ status: 'connecting', channelId: 'c1', participants: [] });
+    useVoiceStore.setState({ status: 'connected', channelId: 'c1', participants: [] });
     renderBar();
 
     expect(screen.queryByRole('button')).not.toBeInTheDocument();

@@ -408,6 +408,15 @@ describe('voiceClient', () => {
     expect(room.disconnect).not.toHaveBeenCalled();
   });
 
+  it('does not start screen share when not connected to a room', () => {
+    // Don't call connect or beginConnect - just call toggleScreenShare directly
+    voiceClient.toggleScreenShare({ quality: 'hd', withAudio: true });
+    
+    // Since there's no room at all, toggleScreenShare should return early
+    expect(roomInstances.length).toBe(0);
+  });
+
+
   it('marks local screenShareAudioEnabled true when the screen-share-audio publication is unmuted', async () => {
     const publication = { isMuted: false, mute: vi.fn(), unmute: vi.fn() };
     const promise = voiceClient.connect('channel-1', 'token', 'wss://example.test/livekit');

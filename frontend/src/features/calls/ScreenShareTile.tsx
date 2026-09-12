@@ -7,7 +7,7 @@ import { VolumeControl } from './VolumeControl';
 
 interface ScreenShareTileProps {
   participant: VoiceParticipant;
-  /** Extra classes appended alongside the tile's default w-full aspect-video sizing — used when
+  /** Extra classes appended alongside the tile's default w-full sizing — used when
    * this tile sits in FocusedCallView's tiered watched area instead of standing alone. */
   className?: string;
   /** When provided (and the participant isn't local — you can't "un-watch" your own share), the
@@ -125,7 +125,7 @@ export function ScreenShareTile({ participant, className = '', onWatchClick }: S
       className={
         isFullscreen
           ? 'fixed inset-0 z-50 flex items-center justify-center bg-gray-900'
-          : `relative flex w-full aspect-video items-center justify-center overflow-hidden rounded bg-gray-900 ${className}`
+          : `relative flex w-full items-center justify-center overflow-hidden rounded bg-gray-900 ${className}`
       }
     >
       <video ref={videoRef} muted autoPlay playsInline className="h-full w-full object-contain" />

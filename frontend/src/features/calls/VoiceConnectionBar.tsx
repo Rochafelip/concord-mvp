@@ -24,7 +24,7 @@ export function VoiceConnectionBar() {
   const localParticipant = useVoiceParticipants().find((participant) => participant.isLocal);
   const [isQualityModalOpen, setQualityModalOpen] = useState(false);
 
-  if (status === 'disconnected' || !channelId) return null;
+  if (status !== 'connected' || !channelId) return null;
 
   const quality = localParticipant && QUALITY_ICON[localParticipant.connectionQuality];
 
@@ -36,7 +36,7 @@ export function VoiceConnectionBar() {
       >
         <span className="flex items-center gap-1.5 truncate text-body font-medium text-ink">
           <Volume2 size={16} aria-hidden="true" />
-          {status === 'connecting' ? 'Connecting…' : (channel?.name ?? '…')}
+          {channel?.name ?? '…'}
           {quality && localParticipant && (
             <span
               title={localParticipant.connectionQuality}
