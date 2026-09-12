@@ -70,11 +70,12 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     throw new ApiError(message, response.status);
   }
 
-  if (response.status === 204) {
+  if (response.status === 204 || response.headers.get('content-length') === '0') {
     return undefined as T;
   }
 
-  return (await response.json()) as T;
+  const responseText = await response.text();
+  return responseText ? (JSON.parse(responseText) as T) : (undefined as T);
 }
 
 export const apiClient = {

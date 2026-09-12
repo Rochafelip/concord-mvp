@@ -48,7 +48,7 @@ export function ServerLayout() {
             </button>
             <span className="text-caption font-medium text-muted">Canais do servidor</span>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="min-h-0 flex-1 overflow-hidden">
             <Outlet />
           </div>
         </div>
@@ -67,7 +67,7 @@ export function ServerLayout() {
             className="w-1 flex-shrink-0 cursor-col-resize bg-border transition-colors hover:bg-brand/40 active:bg-brand/60"
           />
           <Panel id="server-content" className="min-w-0">
-            <div className="h-full overflow-y-auto">
+            <div className="h-full min-h-0 overflow-hidden">
               <Outlet />
             </div>
           </Panel>
