@@ -48,7 +48,7 @@ export function FocusedCallView({
   const { containerRef, containerClassName, tileClassName, style } = useGridLayout(watchTargets.length);
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden pb-20">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pb-20">
       <div data-testid="watched-area" className="group/camera-grid relative flex min-h-0 min-w-0 flex-1 overflow-hidden p-4">
         <div ref={containerRef} className={`min-h-0 min-w-0 flex-1 ${containerClassName}`} style={style}>
           {watchTargets.map((target) => {

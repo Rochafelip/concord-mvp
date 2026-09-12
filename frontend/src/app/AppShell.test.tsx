@@ -113,7 +113,9 @@ describe('AppShell', () => {
 
     renderShell('/app');
 
-    expect(screen.getByRole('status')).toHaveTextContent('Confirme seu e-mail');
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Verifique seu e-mail para criar ou entrar em servidores e usar o chat de voz.',
+    );
   });
 
   it('hides the email verification banner for a verified user', () => {
