@@ -58,6 +58,17 @@ public class ChannelService {
         this.channelReadStateService = channelReadStateService;
     }
 
+    // Constructor for backward compatibility with tests
+    public ChannelService(ChannelRepository channelRepository,
+                           ServerRepository serverRepository,
+                           ServerMemberRepository serverMemberRepository,
+                           MessageRepository messageRepository,
+                           AttachmentCleanupService attachmentCleanupService,
+                           RealtimeEventPublisher realtimeEventPublisher) {
+        this(channelRepository, serverRepository, serverMemberRepository, messageRepository,
+             attachmentCleanupService, realtimeEventPublisher, null);
+    }
+
     @Transactional
     public Channel createChannel(UUID serverId, String name, ChannelType type, UUID requesterId) {
         if (type == ChannelType.ONBOARDING) {

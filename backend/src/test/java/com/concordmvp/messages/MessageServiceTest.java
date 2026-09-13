@@ -19,6 +19,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import com.concordmvp.messages.ChannelReadStateService;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -59,12 +60,15 @@ class MessageServiceTest {
     @Mock
     private AttachmentCleanupService attachmentCleanupService;
 
+    @Mock
+    private ChannelReadStateService channelReadStateService;
+
     private MessageService messageService;
 
     @BeforeEach
     void setUp() {
         messageService = new MessageService(messageRepository, channelService, serverMemberRepository,
-                userRepository, realtimeEventPublisher, attachmentCleanupService);
+                userRepository, realtimeEventPublisher, attachmentCleanupService, null);
     }
 
     private Channel channel(UUID id, UUID serverId) {

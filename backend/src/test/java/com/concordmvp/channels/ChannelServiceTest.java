@@ -7,6 +7,7 @@ import com.concordmvp.common.exception.ForbiddenException;
 import com.concordmvp.common.exception.ResourceNotFoundException;
 import com.concordmvp.messages.MessageRepository;
 import com.concordmvp.messages.AttachmentCleanupService;
+import com.concordmvp.messages.ChannelReadStateService;
 import com.concordmvp.realtime.RealtimeEventPublisher;
 import com.concordmvp.realtime.WsEvent;
 import com.concordmvp.realtime.WsEventType;
@@ -56,12 +57,15 @@ class ChannelServiceTest {
     @Mock
     private AttachmentCleanupService attachmentCleanupService;
 
+    @Mock
+    private ChannelReadStateService channelReadStateService;
+
     private ChannelService channelService;
 
     @BeforeEach
     void setUp() {
         channelService = new ChannelService(channelRepository, serverRepository, serverMemberRepository,
-                messageRepository, attachmentCleanupService, realtimeEventPublisher);
+                messageRepository, attachmentCleanupService, realtimeEventPublisher, null);
     }
 
     private Server server(UUID id, UUID ownerId) {

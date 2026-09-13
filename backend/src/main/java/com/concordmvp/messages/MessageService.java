@@ -76,6 +76,17 @@ public class MessageService {
         this.channelReadStateService = channelReadStateService;
     }
 
+    // Constructor for backward compatibility with tests
+    public MessageService(MessageRepository messageRepository,
+                           ChannelService channelService,
+                           ServerMemberRepository serverMemberRepository,
+                           UserRepository userRepository,
+                           RealtimeEventPublisher realtimeEventPublisher,
+                           AttachmentCleanupService attachmentCleanupService) {
+        this(messageRepository, channelService, serverMemberRepository, userRepository,
+             realtimeEventPublisher, attachmentCleanupService, null);
+    }
+
     public static final UUID SYSTEM_USER_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
 
     @Transactional
