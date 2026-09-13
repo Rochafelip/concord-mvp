@@ -8,6 +8,7 @@ import com.concordmvp.common.exception.ForbiddenException;
 import com.concordmvp.common.exception.ResourceNotFoundException;
 import com.concordmvp.messages.MessageRepository;
 import com.concordmvp.messages.MessageService;
+import com.concordmvp.messages.ChannelReadStateService;
 import com.concordmvp.realtime.RealtimeEventPublisher;
 import com.concordmvp.realtime.WsEvent;
 import com.concordmvp.realtime.WsEventType;
@@ -68,12 +69,15 @@ class ServerServiceTest {
     @Mock
     private RealtimeEventPublisher realtimeEventPublisher;
 
+    @Mock
+    private ChannelReadStateService channelReadStateService;
+
     private ServerService serverService;
 
     @BeforeEach
     void setUp() {
         serverService = new ServerService(serverRepository, serverMemberRepository, serverInviteRepository,
-                channelRepository, messageRepository, messageService, userRepository, realtimeEventPublisher);
+                channelRepository, messageRepository, messageService, userRepository, realtimeEventPublisher, null);
     }
 
     /** Mimics JPA assigning an id on save/persist for a {@link Server} that doesn't already have one. */

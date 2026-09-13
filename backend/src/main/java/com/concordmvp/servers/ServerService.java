@@ -18,6 +18,7 @@ import com.concordmvp.servers.dto.ServerOwnerChangePayload;
 import com.concordmvp.servers.dto.ServerMemberUpdatePayload;
 import com.concordmvp.users.User;
 import com.concordmvp.users.UserRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -50,6 +51,7 @@ public class ServerService {
     private final ChannelReadStateService channelReadStateService;
     private final SecureRandom secureRandom = new SecureRandom();
 
+    @Autowired
     public ServerService(ServerRepository serverRepository,
                           ServerMemberRepository serverMemberRepository,
                           ServerInviteRepository serverInviteRepository,
