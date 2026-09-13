@@ -11,11 +11,13 @@ describe('useGridLayout', () => {
     expect(result.current.tileClassName).toContain('h-full');
   });
 
-  it('splits two tiles evenly, stacking under the sm breakpoint', () => {
+  it('splits two tiles evenly side-by-side for better space utilization', () => {
     const { result } = renderHook(() => useGridLayout(2));
 
-    expect(result.current.containerClassName).toContain('flex-col');
-    expect(result.current.containerClassName).toContain('sm:flex-row');
+    expect(result.current.containerClassName).toContain('flex');
+    expect(result.current.containerClassName).toContain('items-center');
+    expect(result.current.containerClassName).toContain('justify-center');
+    expect(result.current.tileClassName).toContain('flex-1');
   });
 
   it('arranges 3 tiles in a 2x2 grid with the third centered on its own row', () => {

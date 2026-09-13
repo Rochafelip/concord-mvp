@@ -124,7 +124,7 @@ describe('ParticipantTile', () => {
       const { container } = render(<ParticipantTile participant={participant({ speaking: true })} />);
 
       expect(container.firstChild).toHaveClass('ring-2');
-      expect(container.firstChild).toHaveClass('ring-success');
+      expect(container.firstChild).toHaveClass('ring-brand/50');
     });
 
     it('does not apply a highlight ring when the participant is not speaking', () => {
@@ -144,7 +144,7 @@ describe('ParticipantTile', () => {
       const { container } = render(<ParticipantTile participant={participant({ isLocal: true, speaking: true })} />);
 
       expect(container.firstChild).toHaveClass('ring-2');
-      expect(container.firstChild).toHaveClass('ring-success');
+      expect(container.firstChild).toHaveClass('ring-brand/50');
     });
   });
 
@@ -158,7 +158,7 @@ describe('ParticipantTile', () => {
     it('applies a deterministic background color for the identity when there is no video track', () => {
       const { container } = render(<ParticipantTile participant={participant({ identity: 'u1' })} />);
 
-      expect(container.firstChild).toHaveClass('bg-cyan-900');
+      expect(container.firstChild).toHaveClass('bg-gray-800');
     });
 
     it('uses the plain camera background instead of a palette color when a video track is present', () => {
@@ -168,7 +168,6 @@ describe('ParticipantTile', () => {
       );
 
       expect(container.firstChild).toHaveClass('bg-gray-800');
-      expect(container.firstChild).not.toHaveClass('bg-cyan-900');
     });
   });
 

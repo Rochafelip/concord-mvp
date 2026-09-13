@@ -6,7 +6,7 @@ import { voiceClient } from '../../services/voiceClient';
 import type { VoiceParticipant } from '../../types/voice';
 import { QUALITY_ICON } from './connectionQuality';
 import { MicStatusIcon } from './MicStatusIcon';
-import { tileColorFor } from './tileColor';
+
 import { VolumeControl } from './VolumeControl';
 
 interface ParticipantTileProps {
@@ -99,8 +99,8 @@ export function ParticipantTile({
   return (
     <div
       className={`relative flex min-h-0 min-w-0 items-center justify-center overflow-hidden rounded ${className} ${
-        showVideo ? 'bg-gray-800' : tileColorFor(participant.identity)
-      } ${participant.speaking ? 'ring-2 ring-success' : ''}`}
+        showVideo ? 'bg-gray-800' : 'bg-gray-800'
+      } ${participant.speaking ? 'ring-2 ring-brand/50' : ''}`}
       role={onWatchClick ? 'button' : undefined}
       tabIndex={onWatchClick ? 0 : undefined}
       aria-label={onWatchClick ? `Focus on ${participant.name}'s camera` : undefined}
@@ -129,7 +129,7 @@ export function ParticipantTile({
         </span>
       )}
 
-      <span className="absolute bottom-1 left-1 flex items-center gap-1 rounded bg-black/50 px-1.5 py-0.5 text-caption text-white">
+      <span className="absolute bottom-1 left-1 flex items-center gap-1 rounded bg-black/50 px-1.5 py-0.5 text-sm text-white">
         <MicStatusIcon micEnabled={participant.micEnabled} deafened={deafened} />
         {participant.name}
         {participant.isLocal ? ' (you)' : ''}

@@ -37,7 +37,7 @@ export function useGridLayout(count: number): GridLayout {
     return {
       containerRef,
       containerClassName: 'flex min-h-0 min-w-0 items-center justify-center',
-      tileClassName: 'h-full min-h-0 min-w-0 w-full max-w-4xl',
+      tileClassName: 'h-full min-h-0 min-w-0 w-full max-w-5xl max-h-[90vh]',
       style: {},
     };
   }
@@ -45,8 +45,8 @@ export function useGridLayout(count: number): GridLayout {
   if (count === 2) {
     return {
       containerRef,
-      containerClassName: 'flex min-h-0 min-w-0 flex-col items-center justify-center gap-2 sm:flex-row',
-      tileClassName: 'min-h-0 min-w-0 max-h-full max-w-full flex-1',
+      containerClassName: 'flex min-h-0 min-w-0 items-center justify-center gap-2',
+      tileClassName: 'h-full min-h-0 min-w-0 flex-1',
       style: {},
     };
   }
