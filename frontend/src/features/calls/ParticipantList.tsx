@@ -1,8 +1,14 @@
 import { useMemo } from 'react';
+
 import { Spinner } from '../../components/Spinner';
+
+import { FocusableStrip } from './FocusableStrip';
 import { FocusedCallView } from './FocusedCallView';
+
 import { useVoiceParticipants, useVoicePresence } from './hooks';
+
 import { ParticipantGrid } from './ParticipantGrid';
+
 import { useWatchTargets } from './useWatchTargets';
 
 interface ParticipantListProps {
@@ -11,38 +17,65 @@ interface ParticipantListProps {
 }
 
 /**
- * Per docs/superpowers/specs/2026-09-09-call-grid-unification-multiwatch-design.md: whenever
- * useWatchTargets resolves at least one watched target (a manual pin/add, or the automatic
- * share default), renders FocusedCallView. With nothing watched, renders ParticipantGrid alone —
- * every connected participant, camera on or off.
+ * Per docs/superpowers/specs/2026-09-09-call-grid-unification-multiwatch-design.md:
+ * whenever useWatchTargets resolves at least one watched target (a manual
+ * pin/add, or the automatic share default), renders FocusedCallView.
+ *
+ * With nothing watched, renders ParticipantGrid.
+ *
+ * FocusableStrip is rendered independently from the focused/grid view so
+ * available cameras and screen shares remain visible even when there are
+ * no current watch targets.
  */
 export function ParticipantList({ serverId }: ParticipantListProps) {
   const participants = useVoiceParticipants();
-  const { data: presence } = useVoicePresence(serverId);
-  const { watchTargets, isManual, addWatch, removeWatch, clearManual } = useWatchTargets(participants);
 
-  // participant.identity is LiveKit's identifier, but the backend mints LiveKit tokens with the
-  // app's user UUID as the JWT `sub` claim (MediaService), so it's safe to compare directly
-  // against VoicePresenceEntry.userId here — no separate lookup table exists or is needed.
+  const { data: presence } = useVoicePresence(serverId);
+
+  const {
+    watchTargets,
+    isManual,
+    addWatch,
+    removeWatch,
+    clearManual,
+  } = useWatchTargets(participants);
+
+  // participant.identity is LiveKit's identifier, but the backend mints
+  // LiveKit tokens with the app's user UUID as the JWT `sub` claim
+  // (MediaService), so it's safe to compare directly against
+  // VoicePresenceEntry.userId here — no separate lookup table exists
+  // or is needed.
   const deafenedByUserId = useMemo(() => {
     const map = new Map<string, boolean>();
-    (presence ?? []).forEach((entry) => map.set(entry.userId, entry.deafened));
+
+    (presence ?? []).forEach((entry) => {
+      map.set(entry.userId, entry.deafened);
+    });
+
     return map;
   }, [presence]);
 
   const avatarUrlByUserId = useMemo(() => {
     const map = new Map<string, string | null>();
-    (presence ?? []).forEach((entry) => map.set(entry.userId, entry.avatarUrl));
+
+    (presence ?? []).forEach((entry) => {
+      map.set(entry.userId, entry.avatarUrl);
+    });
+
     return map;
   }, [presence]);
 
   const participantsWithCurrentNames = useMemo(
-    () => participants.map((participant) => {
-      const currentName = presence?.find((entry) => entry.userId === participant.identity)?.displayName;
-      return currentName && currentName !== participant.name
-        ? { ...participant, name: currentName }
-        : participant;
-    }),
+    () =>
+      participants.map((participant) => {
+        const currentName = presence?.find(
+          (entry) => entry.userId === participant.identity,
+        )?.displayName;
+
+        return currentName && currentName !== participant.name
+          ? { ...participant, name: currentName }
+          : participant;
+      }),
     [participants, presence],
   );
 
@@ -55,28 +88,34 @@ export function ParticipantList({ serverId }: ParticipantListProps) {
     );
   }
 
-  if (watchTargets.length > 0) {
-    return (
-      <FocusedCallView
+  return (
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pb-20">
+      {watchTargets.length > 0 ? (
+        <FocusedCallView
+          participants={participantsWithCurrentNames}
+          watchTargets={watchTargets}
+          isManual={isManual}
+          onAddWatch={addWatch}
+          onRemoveWatch={removeWatch}
+          onReturnToAutomatic={clearManual}
+          avatarUrlByUserId={avatarUrlByUserId}
+          deafenedByUserId={deafenedByUserId}
+        />
+      ) : (
+        <ParticipantGrid
+          participants={participantsWithCurrentNames}
+          avatarUrlByUserId={avatarUrlByUserId}
+          deafenedByUserId={deafenedByUserId}
+          onWatch={addWatch}
+        />
+      )}
+
+      <FocusableStrip
         participants={participantsWithCurrentNames}
         watchTargets={watchTargets}
-        isManual={isManual}
         onAddWatch={addWatch}
-        onRemoveWatch={removeWatch}
-        onReturnToAutomatic={clearManual}
         avatarUrlByUserId={avatarUrlByUserId}
         deafenedByUserId={deafenedByUserId}
-      />
-    );
-  }
-
-  return (
-    <div className="flex flex-1 flex-col overflow-hidden pb-20">
-      <ParticipantGrid
-        participants={participantsWithCurrentNames}
-        avatarUrlByUserId={avatarUrlByUserId}
-        deafenedByUserId={deafenedByUserId}
-        onWatch={addWatch}
       />
     </div>
   );
