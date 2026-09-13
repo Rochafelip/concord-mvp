@@ -89,6 +89,10 @@ public class ChannelReadStateService {
      */
     @Transactional
     public ChannelReadState markChannelAsRead(UUID userId, UUID channelId, UUID lastReadMessageId) {
+        if (lastReadMessageId == null) {
+            return markChannelAsReadWithoutMessage(userId, channelId);
+        }
+
         ChannelReadState state = channelReadStateRepository.findByUserIdAndChannelId(userId, channelId)
                 .orElseGet(() -> initializeReadState(userId, channelId));
 

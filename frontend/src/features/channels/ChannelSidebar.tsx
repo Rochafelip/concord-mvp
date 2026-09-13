@@ -45,12 +45,12 @@ export function ChannelSidebar({ onNavigate }: ChannelSidebarProps) {
 
   function handleChannelClick(channel: Channel) {
     // Mark channel as read when clicked if it has unread messages
+    // We don't have the latest message ID readily available, so we pass undefined
+    // The backend will handle marking as read without a specific message ID
     if (channel.unreadCount && channel.unreadCount > 0) {
-      // For now, we'll use a placeholder message ID since we don't have the latest message ID
-      // In a real implementation, you'd get the latest message ID from the channel
       markChannelAsRead.mutate({
         channelId: channel.id,
-        lastReadMessageId: '00000000-0000-0000-0000-000000000000', // Placeholder
+        lastReadMessageId: undefined, // Backend handles null/undefined case
       });
     }
     onNavigate?.();

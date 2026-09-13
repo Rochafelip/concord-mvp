@@ -39,14 +39,18 @@ public class ChannelReadStateController {
     @PostMapping("/{channelId}/read")
     public ResponseEntity<Void> markChannelAsRead(
             @PathVariable UUID channelId,
-            @Valid @RequestBody MarkChannelReadRequest request) {
+            @RequestBody MarkChannelReadRequest request) {
         UUID userId = CurrentUser.id();
 
         // Verify the user has access to this channel
         Channel channel = channelService.getChannel(channelId, userId);
 
         // Mark the channel as read
-        channelReadStateService.markChannelAsRead(userId, channelId, request.lastReadMessageId());
+        if (request.lastReadMessageId() != null) {
+            channelReadStateService.markChannelAsRead(userId, channelId, request.lastReadMessageId());
+        } else {
+            channelReadStateService.markChannelAsReadWithoutMessage(userId, channelId);
+        }
 
         return ResponseEntity.noContent().build();
     }

@@ -7,7 +7,7 @@ export interface CreateChannelPayload {
 }
 
 export interface MarkChannelReadRequest {
-  lastReadMessageId: string;
+  lastReadMessageId?: string;
 }
 
 export interface ChannelReadStateResponse {

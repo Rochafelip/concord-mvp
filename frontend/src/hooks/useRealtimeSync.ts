@@ -106,6 +106,25 @@ export function useRealtimeSync(): void {
               markServerUnread(serverId);
             }
           }
+
+          // Increment unread count for the channel if it's not the current channel
+          if (message.channelId !== currentChannelIdRef.current) {
+            // Update the specific channel in all channel list queries
+            queryClient.setQueryData<Channel[]>(['servers', currentServerIdRef.current, 'channels'], (old) => {
+              if (!old) return old;
+              return old.map((ch) =>
+                ch.id === message.channelId
+                  ? { ...ch, unreadCount: (ch.unreadCount || 0) + 1 }
+                  : ch
+              );
+            });
+
+            // Also update the single channel cache if it exists
+            queryClient.setQueryData<Channel>(['channels', message.channelId], (old) => {
+              if (!old) return old;
+              return { ...old, unreadCount: (old.unreadCount || 0) + 1 };
+            });
+          }
         }
       }),
 

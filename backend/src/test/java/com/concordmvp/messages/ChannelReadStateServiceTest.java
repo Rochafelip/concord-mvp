@@ -36,8 +36,17 @@ class ChannelReadStateServiceTest {
     @Mock
     private MessageRepository messageRepository;
 
-    @InjectMocks
     private ChannelReadStateService channelReadStateService;
+
+    @BeforeEach
+    void setUp() {
+        channelReadStateService = new ChannelReadStateService(
+                channelReadStateRepository,
+                serverMemberRepository,
+                channelRepository,
+                messageRepository
+        );
+    }
 
     private UUID userId;
     private UUID channelId;

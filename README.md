@@ -16,6 +16,9 @@ The MVP provides four main capabilities:
 * Text channels
 * Real-time messaging
 * Message persistence
+* Unread message tracking per channel
+* Visual indicators for channels with unread messages
+* Mark channels as read functionality
 
 ### 🎤 Voice
 

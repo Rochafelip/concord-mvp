@@ -74,6 +74,9 @@ Each application must remain independently buildable.
   other file type (50 MB limit, no content restriction, rendered as a
   downloadable file chip — served with a forced download so it can never
   execute in the browser)
+* Unread message tracking per channel
+* Visual indicators for channels with unread messages
+* Mark channels as read functionality
 
 ### Voice
 
@@ -380,7 +383,20 @@ Example:
 V1__create_users.sql
 V2__create_servers.sql
 V3__create_channels.sql
+V16__create_channel_read_states.sql
 ```
+
+### Channel Read States
+
+The system includes a `channel_read_states` table (migration V16) that tracks:
+- Which channels each user has read
+- The last message each user has read in each channel
+- Unread message counts per user per channel
+
+This table is automatically maintained when:
+- Users join servers (initializes read states for all channels)
+- Messages are sent (increments unread count for channel members)
+- Users mark channels as read (resets unread count)
 
 Do not introduce another database technology without explicit approval.
 
