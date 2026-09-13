@@ -33,7 +33,7 @@ export function deleteChannel(channelId: string): Promise<void> {
   return apiClient.delete<void>(`channels/${channelId}`);
 }
 
-export function markChannelAsRead(channelId: string, lastReadMessageId: string): Promise<void> {
+export function markChannelAsRead(channelId: string, lastReadMessageId: string | null): Promise<void> {
   return apiClient.post<void>(`channels/${channelId}/read`, { lastReadMessageId });
 }
 

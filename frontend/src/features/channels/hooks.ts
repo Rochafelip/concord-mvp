@@ -52,8 +52,8 @@ export function useMarkChannelAsRead() {
 
   return useMutation({
     mutationFn: ({ channelId, lastReadMessageId }: { channelId: string; lastReadMessageId?: string }) =>
-      api.markChannelAsRead(channelId, lastReadMessageId),
-    onSuccess: (_, { channelId }) => {
+      api.markChannelAsRead(channelId, lastReadMessageId || null),
+    onSuccess: (_, _variables) => {
       // Invalidate channels query to refresh unread counts
       queryClient.invalidateQueries({ queryKey: ['channels'] });
       // Also invalidate server-specific channels queries
