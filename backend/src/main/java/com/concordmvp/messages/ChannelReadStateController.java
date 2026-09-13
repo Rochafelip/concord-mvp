@@ -1,20 +1,14 @@
 package com.concordmvp.messages;
 
-import com.concordmvp.channels.Channel;
 import com.concordmvp.channels.ChannelService;
-import com.concordmvp.common.CurrentUser;
 import com.concordmvp.common.exception.ForbiddenException;
 import com.concordmvp.common.exception.ResourceNotFoundException;
 import com.concordmvp.messages.dto.ChannelReadStateResponse;
 import com.concordmvp.messages.dto.MarkChannelReadRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
 
@@ -25,59 +19,56 @@ public class ChannelReadStateController {
     private final ChannelReadStateService channelReadStateService;
     private final ChannelService channelService;
 
-    public ChannelReadStateController(
-            ChannelReadStateService channelReadStateService,
-            ChannelService channelService) {
+    public ChannelReadStateController(ChannelReadStateService channelReadStateService,
+                                        ChannelService channelService) {
         this.channelReadStateService = channelReadStateService;
         this.channelService = channelService;
     }
 
-    /**
-     * Mark a channel as read for the current user.
-     * Resets the unread count to zero and updates the last read message ID.
-     */
     @PostMapping("/{channelId}/read")
     public ResponseEntity<Void> markChannelAsRead(
             @PathVariable UUID channelId,
-            @RequestBody MarkChannelReadRequest request) {
-        UUID userId = CurrentUser.id();
-
-        // Verify the user has access to this channel
-        Channel channel = channelService.getChannel(channelId, userId);
-
-        // Mark the channel as read
-        if (request.lastReadMessageId() != null) {
-            channelReadStateService.markChannelAsRead(userId, channelId, request.lastReadMessageId());
-        } else {
-            channelReadStateService.markChannelAsReadWithoutMessage(userId, channelId);
+            @AuthenticationPrincipal UUID userId,
+            @Valid @RequestBody MarkChannelReadRequest request) {
+        // Verify user is a member of the channel's server
+        try {
+            channelService.getChannel(channelId, userId);
+        } catch (ResourceNotFoundException | ForbiddenException e) {
+            throw new ForbiddenException("You don't have permission to access this channel");
         }
 
-        return ResponseEntity.noContent().build();
+        channelReadStateService.markChannelAsRead(userId, channelId, request.lastReadMessageId());
+        return ResponseEntity.ok().build();
     }
 
-    /**
-     * Get the read state for a specific channel for the current user.
-     * Returns the unread count and last read information.
-     */
     @GetMapping("/{channelId}/read-state")
-    public ChannelReadStateResponse getReadState(@PathVariable UUID channelId) {
-        UUID userId = CurrentUser.id();
+    public ResponseEntity<ChannelReadStateResponse> getChannelReadState(
+            @PathVariable UUID channelId,
+            @AuthenticationPrincipal UUID userId) {
+        // Verify user is a member of the channel's server
+        try {
+            channelService.getChannel(channelId, userId);
+        } catch (ResourceNotFoundException | ForbiddenException e) {
+            throw new ForbiddenException("You don't have permission to access this channel");
+        }
 
-        // Verify the user has access to this channel
-        channelService.getChannel(channelId, userId);
+        ChannelReadState state = channelReadStateService.getReadState(userId, channelId);
+        if (state == null) {
+            // Initialize read state if it doesn't exist
+            state = channelReadStateService.initializeReadState(userId, channelId);
+        }
 
-        return channelReadStateService.getReadState(userId, channelId)
-                .map(state -> new ChannelReadStateResponse(
-                        state.getChannelId(),
-                        state.getLastReadMessageId(),
-                        state.getLastReadAt(),
-                        state.getUnreadCount()
-                ))
-                .orElse(new ChannelReadStateResponse(
-                        channelId,
-                        null,
-                        java.time.Instant.now(),
-                        0
-                ));
+        ChannelReadStateResponse response = new ChannelReadStateResponse(
+            state.getId(),
+            state.getUserId(),
+            state.getChannelId(),
+            state.getLastReadMessageId(),
+            state.getLastReadAt(),
+            state.getUnreadCount(),
+            state.getCreatedAt(),
+            state.getUpdatedAt()
+        );
+
+        return ResponseEntity.ok(response);
     }
 }

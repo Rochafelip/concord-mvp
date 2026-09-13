@@ -7,6 +7,7 @@ import com.concordmvp.common.exception.ForbiddenException;
 import com.concordmvp.common.exception.ResourceNotFoundException;
 import com.concordmvp.messages.MessageRepository;
 import com.concordmvp.messages.AttachmentCleanupService;
+import com.concordmvp.messages.ChannelReadStateService;
 import com.concordmvp.realtime.RealtimeEventPublisher;
 import com.concordmvp.realtime.WsEvent;
 import com.concordmvp.realtime.WsEventType;

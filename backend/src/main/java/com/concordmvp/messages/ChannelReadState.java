@@ -1,19 +1,17 @@
 package com.concordmvp.messages;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.PreUpdate;
-import jakarta.persistence.Table;
-
+import jakarta.persistence.*;
 import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(name = "channel_read_states")
+@Table(name = "channel_read_states", 
+       uniqueConstraints = @UniqueConstraint(columnNames = {"user_id", "channel_id"}),
+       indexes = {
+           @Index(name = "idx_channel_read_states_user", columnList = "user_id"),
+           @Index(name = "idx_channel_read_states_channel", columnList = "channel_id"),
+           @Index(name = "idx_channel_read_states_user_channel", columnList = "user_id, channel_id")
+       })
 public class ChannelReadState {
 
     @Id
@@ -35,31 +33,21 @@ public class ChannelReadState {
     @Column(name = "unread_count", nullable = false)
     private Integer unreadCount;
 
-    @Column(name = "created_at", nullable = false)
+    @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
-    public ChannelReadState() {
-    }
-
     @PrePersist
     protected void onCreate() {
-        Instant now = Instant.now();
-        this.createdAt = now;
-        this.updatedAt = now;
-        if (this.lastReadAt == null) {
-            this.lastReadAt = now;
-        }
-        if (this.unreadCount == null) {
-            this.unreadCount = 0;
-        }
+        createdAt = Instant.now();
+        updatedAt = Instant.now();
     }
 
     @PreUpdate
     protected void onUpdate() {
-        this.updatedAt = Instant.now();
+        updatedAt = Instant.now();
     }
 
     public UUID getId() {

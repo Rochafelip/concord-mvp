@@ -54,6 +54,6 @@ public class ChannelController {
 
     private ChannelResponse toResponse(Channel channel) {
         return new ChannelResponse(channel.getId(), channel.getServerId(), channel.getName(),
-                channel.getType(), channel.getCreatedAt(), channel.getUpdatedAt());
+                channel.getType(), channel.getCreatedAt(), channel.getUpdatedAt(), null);
     }
 }

@@ -149,21 +149,23 @@ public class MessageService {
         message.setFileSize(fileSize);
         Message saved = messageRepository.save(message);
 
+        Set<UUID> recipients = currentMemberIds(serverId);
+
         // Increment unread count for all channel members except the author
         if (!authorId.equals(SYSTEM_USER_ID)) {
             try {
-                channelReadStateService.incrementUnreadForChannelMembers(channelId, authorId);
+                List<UUID> memberIds = recipients.stream().toList();
+                channelReadStateService.incrementUnreadForChannelMembers(channelId, memberIds, authorId);
             } catch (Exception e) {
                 // Log but don't fail the message send if unread tracking fails
                 // This ensures message delivery is not impacted by read state tracking issues
-                log.error("Failed to increment unread count for channel {}", channelId, e);
+                System.err.println("Failed to increment unread count for channel " + channelId + ": " + e.getMessage());
             }
         }
 
         User author = userRepository.findById(authorId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + authorId));
 
-        Set<UUID> recipients = currentMemberIds(serverId);
         MessageResponse payload = toResponse(saved, author);
         // WARNING: MESSAGE_CREATE is broadcast here, before this @Transactional method returns
         // and the transaction commits (docs/DATABASE.md §34 specifies persist -> commit ->
