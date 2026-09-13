@@ -17,6 +17,7 @@ import com.concordmvp.users.User;
 import com.concordmvp.users.UserRepository;
 import com.concordmvp.users.UserAvatarUrls;
 import com.concordmvp.users.dto.UserSummaryResponse;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -58,6 +59,7 @@ public class MessageService {
     private final AttachmentCleanupService attachmentCleanupService;
     private final ChannelReadStateService channelReadStateService;
 
+    @Autowired
     public MessageService(MessageRepository messageRepository,
                            ChannelService channelService,
                            ServerMemberRepository serverMemberRepository,
@@ -72,17 +74,6 @@ public class MessageService {
         this.realtimeEventPublisher = realtimeEventPublisher;
         this.attachmentCleanupService = attachmentCleanupService;
         this.channelReadStateService = channelReadStateService;
-    }
-
-    // Constructor for backward compatibility with tests
-    public MessageService(MessageRepository messageRepository,
-                           ChannelService channelService,
-                           ServerMemberRepository serverMemberRepository,
-                           UserRepository userRepository,
-                           RealtimeEventPublisher realtimeEventPublisher,
-                           AttachmentCleanupService attachmentCleanupService) {
-        this(messageRepository, channelService, serverMemberRepository, userRepository,
-             realtimeEventPublisher, attachmentCleanupService, null);
     }
 
     public static final UUID SYSTEM_USER_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");

@@ -15,6 +15,7 @@ import com.concordmvp.servers.Server;
 import com.concordmvp.servers.ServerMember;
 import com.concordmvp.servers.ServerMemberRepository;
 import com.concordmvp.servers.ServerRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,6 +41,7 @@ public class ChannelService {
     private final RealtimeEventPublisher realtimeEventPublisher;
     private final ChannelReadStateService channelReadStateService;
 
+    @Autowired
     public ChannelService(ChannelRepository channelRepository,
                            ServerRepository serverRepository,
                            ServerMemberRepository serverMemberRepository,
@@ -54,17 +56,6 @@ public class ChannelService {
         this.attachmentCleanupService = attachmentCleanupService;
         this.realtimeEventPublisher = realtimeEventPublisher;
         this.channelReadStateService = channelReadStateService;
-    }
-
-    // Constructor for backward compatibility with tests
-    public ChannelService(ChannelRepository channelRepository,
-                           ServerRepository serverRepository,
-                           ServerMemberRepository serverMemberRepository,
-                           MessageRepository messageRepository,
-                           AttachmentCleanupService attachmentCleanupService,
-                           RealtimeEventPublisher realtimeEventPublisher) {
-        this(channelRepository, serverRepository, serverMemberRepository, messageRepository,
-             attachmentCleanupService, realtimeEventPublisher, null);
     }
 
     @Transactional
