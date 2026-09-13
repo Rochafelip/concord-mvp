@@ -46,3 +46,26 @@ export function useDeleteChannel(serverId: string | undefined) {
     },
   });
 }
+
+export function useMarkChannelAsRead() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ channelId, lastReadMessageId }: { channelId: string; lastReadMessageId: string }) =>
+      api.markChannelAsRead(channelId, lastReadMessageId),
+    onSuccess: () => {
+      // Invalidate channels query to refresh unread counts
+      queryClient.invalidateQueries({ queryKey: ['channels'] });
+      // Also invalidate server-specific channels queries
+      queryClient.invalidateQueries({ queryKey: ['servers'] });
+    },
+  });
+}
+
+export function useChannelReadState(channelId: string | undefined) {
+  return useQuery({
+    queryKey: ['channels', channelId, 'read-state'],
+    queryFn: () => api.getChannelReadState(channelId!),
+    enabled: channelId != null,
+  });
+}

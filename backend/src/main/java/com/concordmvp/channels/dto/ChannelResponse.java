@@ -16,6 +16,7 @@ public record ChannelResponse(
         String name,
         ChannelType type,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        Integer unreadCount
 ) {
 }

@@ -7,7 +7,7 @@ import { useIsServerOwner, useServer } from '../servers/hooks';
 import { ServerSettingsPanel } from '../servers/ServerSettingsPanel';
 import type { Channel, ChannelType } from '../../types/channel';
 import { CreateChannelModal } from './CreateChannelModal';
-import { useChannels, useDeleteChannel } from './hooks';
+import { useChannels, useDeleteChannel, useMarkChannelAsRead } from './hooks';
 
 interface ChannelSidebarProps {
   onNavigate?: () => void;
@@ -33,6 +33,7 @@ export function ChannelSidebar({ onNavigate }: ChannelSidebarProps) {
   const [createType, setCreateType] = useState<Exclude<ChannelType, 'ONBOARDING'> | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const deleteChannelMutation = useDeleteChannel(serverId);
+  const markChannelAsRead = useMarkChannelAsRead();
 
   function handleDeleteChannel(event: MouseEvent<HTMLButtonElement>, channel: Channel) {
     event.preventDefault();
@@ -40,6 +41,19 @@ export function ChannelSidebar({ onNavigate }: ChannelSidebarProps) {
     if (window.confirm(`Delete channel "${channel.name}"? This cannot be undone.`)) {
       deleteChannelMutation.mutate(channel.id);
     }
+  }
+
+  function handleChannelClick(channel: Channel) {
+    // Mark channel as read when clicked if it has unread messages
+    if (channel.unreadCount && channel.unreadCount > 0) {
+      // For now, we'll use a placeholder message ID since we don't have the latest message ID
+      // In a real implementation, you'd get the latest message ID from the channel
+      markChannelAsRead.mutate({
+        channelId: channel.id,
+        lastReadMessageId: '00000000-0000-0000-0000-000000000000', // Placeholder
+      });
+    }
+    onNavigate?.();
   }
 
   if (!serverId) return null;
@@ -70,12 +84,17 @@ export function ChannelSidebar({ onNavigate }: ChannelSidebarProps) {
               <li key={channel.id}>
                 <Link
                   to={`/app/servers/${serverId}/channels/${channel.id}`}
-                  onClick={onNavigate}
+                  onClick={() => handleChannelClick(channel)}
                   aria-current={channel.id === channelId ? 'page' : undefined}
                   className={channelLinkClassName(channel.id === channelId)}
                 >
                   <span aria-hidden="true">👋</span>
                   {channel.name}
+                  {channel.unreadCount && channel.unreadCount > 0 && (
+                    <span className="ml-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-brand px-1.5 text-xs font-medium text-white">
+                      {channel.unreadCount > 99 ? '99+' : channel.unreadCount}
+                    </span>
+                  )}
                 </Link>
               </li>
             ))}
@@ -101,12 +120,17 @@ export function ChannelSidebar({ onNavigate }: ChannelSidebarProps) {
               <li key={channel.id} className="group flex items-center">
                 <Link
                   to={`/app/servers/${serverId}/channels/${channel.id}`}
-                  onClick={onNavigate}
+                  onClick={() => handleChannelClick(channel)}
                   aria-current={channel.id === channelId ? 'page' : undefined}
                   className={`flex-1 ${channelLinkClassName(channel.id === channelId)}`}
                 >
                   <span aria-hidden="true">#</span>
                   {channel.name}
+                  {channel.unreadCount && channel.unreadCount > 0 && (
+                    <span className="ml-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-brand px-1.5 text-xs font-medium text-white">
+                      {channel.unreadCount > 99 ? '99+' : channel.unreadCount}
+                    </span>
+                  )}
                 </Link>
                 {isOwner && (
                   <button

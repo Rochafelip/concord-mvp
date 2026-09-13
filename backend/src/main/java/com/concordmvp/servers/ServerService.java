@@ -8,6 +8,7 @@ import com.concordmvp.common.exception.ForbiddenException;
 import com.concordmvp.common.exception.ResourceNotFoundException;
 import com.concordmvp.messages.MessageRepository;
 import com.concordmvp.messages.MessageService;
+import com.concordmvp.messages.ChannelReadStateService;
 import com.concordmvp.realtime.RealtimeEventPublisher;
 import com.concordmvp.realtime.WsEvent;
 import com.concordmvp.realtime.WsEventType;
@@ -46,6 +47,7 @@ public class ServerService {
     private final MessageService messageService;
     private final UserRepository userRepository;
     private final RealtimeEventPublisher realtimeEventPublisher;
+    private final ChannelReadStateService channelReadStateService;
     private final SecureRandom secureRandom = new SecureRandom();
 
     public ServerService(ServerRepository serverRepository,
@@ -55,7 +57,8 @@ public class ServerService {
                           MessageRepository messageRepository,
                           MessageService messageService,
                           UserRepository userRepository,
-                          RealtimeEventPublisher realtimeEventPublisher) {
+                          RealtimeEventPublisher realtimeEventPublisher,
+                          ChannelReadStateService channelReadStateService) {
         this.serverRepository = serverRepository;
         this.serverMemberRepository = serverMemberRepository;
         this.serverInviteRepository = serverInviteRepository;
@@ -64,6 +67,20 @@ public class ServerService {
         this.messageService = messageService;
         this.userRepository = userRepository;
         this.realtimeEventPublisher = realtimeEventPublisher;
+        this.channelReadStateService = channelReadStateService;
+    }
+
+    // Constructor for backward compatibility with tests
+    public ServerService(ServerRepository serverRepository,
+                          ServerMemberRepository serverMemberRepository,
+                          ServerInviteRepository serverInviteRepository,
+                          ChannelRepository channelRepository,
+                          MessageRepository messageRepository,
+                          MessageService messageService,
+                          UserRepository userRepository,
+                          RealtimeEventPublisher realtimeEventPublisher) {
+        this(serverRepository, serverMemberRepository, serverInviteRepository, channelRepository,
+             messageRepository, messageService, userRepository, realtimeEventPublisher, null);
     }
 
     @Transactional
@@ -153,6 +170,18 @@ public class ServerService {
         member.setServerId(serverId);
         member.setUserId(userId);
         serverMemberRepository.save(member);
+
+        // Initialize read states for all channels in the server for the new member
+        if (channelReadStateService != null) {
+            try {
+                channelReadStateService.initializeReadStatesForServer(userId, serverId);
+            } catch (Exception e) {
+                // Log but don't fail the join if read state initialization fails
+                // This ensures server join is not impacted by read state tracking issues
+                // The error is logged for debugging purposes
+                System.err.println("Failed to initialize read states for user " + userId + " in server " + serverId + ": " + e.getMessage());
+            }
+        }
 
         Set<UUID> recipients = currentMemberIds(serverId);
         realtimeEventPublisher.broadcast(recipients,

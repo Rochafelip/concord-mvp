@@ -36,4 +36,6 @@ public interface MessageRepository extends JpaRepository<Message, UUID> {
     long deleteByChannelIdIn(Collection<UUID> channelIds);
 
     List<Message> findByChannelIdIn(Collection<UUID> channelIds);
+
+    long countByChannelIdAndCreatedAtAfter(UUID channelId, Instant timestamp);
 }

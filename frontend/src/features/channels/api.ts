@@ -6,6 +6,17 @@ export interface CreateChannelPayload {
   type: ChannelType;
 }
 
+export interface MarkChannelReadRequest {
+  lastReadMessageId: string;
+}
+
+export interface ChannelReadStateResponse {
+  channelId: string;
+  lastReadMessageId: string | null;
+  lastReadAt: string;
+  unreadCount: number;
+}
+
 export function listChannels(serverId: string): Promise<Channel[]> {
   return apiClient.get<Channel[]>(`servers/${serverId}/channels`);
 }
@@ -20,4 +31,12 @@ export function getChannel(channelId: string): Promise<Channel> {
 
 export function deleteChannel(channelId: string): Promise<void> {
   return apiClient.delete<void>(`channels/${channelId}`);
+}
+
+export function markChannelAsRead(channelId: string, lastReadMessageId: string): Promise<void> {
+  return apiClient.post<void>(`channels/${channelId}/read`, { lastReadMessageId });
+}
+
+export function getChannelReadState(channelId: string): Promise<ChannelReadStateResponse> {
+  return apiClient.get<ChannelReadStateResponse>(`channels/${channelId}/read-state`);
 }

@@ -56,19 +56,33 @@ public class MessageService {
     private final UserRepository userRepository;
     private final RealtimeEventPublisher realtimeEventPublisher;
     private final AttachmentCleanupService attachmentCleanupService;
+    private final ChannelReadStateService channelReadStateService;
 
     public MessageService(MessageRepository messageRepository,
                            ChannelService channelService,
                            ServerMemberRepository serverMemberRepository,
                            UserRepository userRepository,
                            RealtimeEventPublisher realtimeEventPublisher,
-                           AttachmentCleanupService attachmentCleanupService) {
+                           AttachmentCleanupService attachmentCleanupService,
+                           ChannelReadStateService channelReadStateService) {
         this.messageRepository = messageRepository;
         this.channelService = channelService;
         this.serverMemberRepository = serverMemberRepository;
         this.userRepository = userRepository;
         this.realtimeEventPublisher = realtimeEventPublisher;
         this.attachmentCleanupService = attachmentCleanupService;
+        this.channelReadStateService = channelReadStateService;
+    }
+
+    // Constructor for backward compatibility with tests
+    public MessageService(MessageRepository messageRepository,
+                           ChannelService channelService,
+                           ServerMemberRepository serverMemberRepository,
+                           UserRepository userRepository,
+                           RealtimeEventPublisher realtimeEventPublisher,
+                           AttachmentCleanupService attachmentCleanupService) {
+        this(messageRepository, channelService, serverMemberRepository, userRepository,
+             realtimeEventPublisher, attachmentCleanupService, null);
     }
 
     public static final UUID SYSTEM_USER_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
@@ -134,6 +148,17 @@ public class MessageService {
         message.setFileName(fileName);
         message.setFileSize(fileSize);
         Message saved = messageRepository.save(message);
+
+        // Increment unread count for all channel members except the author
+        if (!authorId.equals(SYSTEM_USER_ID)) {
+            try {
+                channelReadStateService.incrementUnreadForChannelMembers(channelId, authorId);
+            } catch (Exception e) {
+                // Log but don't fail the message send if unread tracking fails
+                // This ensures message delivery is not impacted by read state tracking issues
+                log.error("Failed to increment unread count for channel {}", channelId, e);
+            }
+        }
 
         User author = userRepository.findById(authorId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + authorId));

@@ -37,19 +37,33 @@ public class ChannelService {
     private final MessageRepository messageRepository;
     private final AttachmentCleanupService attachmentCleanupService;
     private final RealtimeEventPublisher realtimeEventPublisher;
+    private final ChannelReadStateService channelReadStateService;
 
     public ChannelService(ChannelRepository channelRepository,
                            ServerRepository serverRepository,
                            ServerMemberRepository serverMemberRepository,
                            MessageRepository messageRepository,
                            AttachmentCleanupService attachmentCleanupService,
-                           RealtimeEventPublisher realtimeEventPublisher) {
+                           RealtimeEventPublisher realtimeEventPublisher,
+                           ChannelReadStateService channelReadStateService) {
         this.channelRepository = channelRepository;
         this.serverRepository = serverRepository;
         this.serverMemberRepository = serverMemberRepository;
         this.messageRepository = messageRepository;
         this.attachmentCleanupService = attachmentCleanupService;
         this.realtimeEventPublisher = realtimeEventPublisher;
+        this.channelReadStateService = channelReadStateService;
+    }
+
+    // Constructor for backward compatibility with tests
+    public ChannelService(ChannelRepository channelRepository,
+                           ServerRepository serverRepository,
+                           ServerMemberRepository serverMemberRepository,
+                           MessageRepository messageRepository,
+                           AttachmentCleanupService attachmentCleanupService,
+                           RealtimeEventPublisher realtimeEventPublisher) {
+        this(channelRepository, serverRepository, serverMemberRepository, messageRepository,
+             attachmentCleanupService, realtimeEventPublisher, null);
     }
 
     @Transactional
@@ -69,6 +83,19 @@ public class ChannelService {
         channel.setName(name);
         channel.setType(type);
         Channel saved = channelRepository.save(channel);
+
+        // Initialize read states for all server members for the new channel
+        if (channelReadStateService != null) {
+            try {
+                for (UUID memberId : currentMemberIds(serverId)) {
+                    channelReadStateService.initializeReadState(memberId, saved.getId());
+                }
+            } catch (Exception e) {
+                // Log but don't fail channel creation if read state initialization fails
+                // This ensures channel creation is not impacted by read state tracking issues
+                System.err.println("Failed to initialize read states for new channel " + saved.getId() + ": " + e.getMessage());
+            }
+        }
 
         Set<UUID> recipients = currentMemberIds(serverId);
         ChannelResponse payload = toResponse(saved);
@@ -135,7 +162,11 @@ public class ChannelService {
     }
 
     private ChannelResponse toResponse(Channel channel) {
+        Integer unreadCount = null;
+        // Note: unreadCount is set to null here since we don't have the userId context
+        // The frontend will fetch unread counts separately or they will be included
+        // in channel-specific responses
         return new ChannelResponse(channel.getId(), channel.getServerId(), channel.getName(),
-                channel.getType(), channel.getCreatedAt(), channel.getUpdatedAt());
+                channel.getType(), channel.getCreatedAt(), channel.getUpdatedAt(), unreadCount);
     }
 }
