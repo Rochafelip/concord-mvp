@@ -7,6 +7,7 @@ import { MessageList } from './MessageList';
 
 vi.mock('./hooks', () => ({
   useMessageHistory: vi.fn(),
+  useMarkChannelAsRead: vi.fn(() => ({ mutate: vi.fn() })),
 }));
 
 function makeMessage(

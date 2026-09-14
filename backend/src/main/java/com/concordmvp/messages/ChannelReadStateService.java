@@ -2,13 +2,19 @@ package com.concordmvp.messages;
 
 import com.concordmvp.channels.Channel;
 import com.concordmvp.channels.ChannelRepository;
+import com.concordmvp.channels.ChannelService;
 import com.concordmvp.servers.ServerMember;
 import com.concordmvp.servers.ServerMemberRepository;
+import com.concordmvp.realtime.RealtimeEventPublisher;
+import com.concordmvp.realtime.WsEvent;
+import com.concordmvp.realtime.WsEventType;
+import com.concordmvp.realtime.dto.ChannelReadPayload;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -19,15 +25,21 @@ public class ChannelReadStateService {
     private final ChannelRepository channelRepository;
     private final ServerMemberRepository serverMemberRepository;
     private final MessageRepository messageRepository;
+    private final RealtimeEventPublisher realtimeEventPublisher;
+    private final ChannelService channelService;
 
     public ChannelReadStateService(ChannelReadStateRepository channelReadStateRepository,
                                     ChannelRepository channelRepository,
                                     ServerMemberRepository serverMemberRepository,
-                                    MessageRepository messageRepository) {
+                                    MessageRepository messageRepository,
+                                    RealtimeEventPublisher realtimeEventPublisher,
+                                    ChannelService channelService) {
         this.channelReadStateRepository = channelReadStateRepository;
         this.channelRepository = channelRepository;
         this.serverMemberRepository = serverMemberRepository;
         this.messageRepository = messageRepository;
+        this.realtimeEventPublisher = realtimeEventPublisher;
+        this.channelService = channelService;
     }
 
     @Transactional
@@ -49,7 +61,6 @@ public class ChannelReadStateService {
             return;
         }
 
-        // Exclude the author from unread increment
         List<UUID> recipientIds = memberIds.stream()
                 .filter(id -> !id.equals(authorId))
                 .collect(Collectors.toList());
@@ -66,6 +77,8 @@ public class ChannelReadStateService {
         } else {
             channelReadStateRepository.markAsReadWithoutMessage(userId, channelId);
         }
+        
+        broadcastChannelRead(userId, channelId, lastReadMessageId);
     }
 
     @Transactional
@@ -102,12 +115,10 @@ public class ChannelReadStateService {
 
         Integer unreadCount;
         if (lastReadMessageId != null) {
-            // Find the message to get its timestamp
             Message lastReadMessage = messageRepository.findById(lastReadMessageId).orElse(null);
             if (lastReadMessage != null) {
                 unreadCount = (int) messageRepository.countByChannelIdAndCreatedAtAfter(channelId, lastReadMessage.getCreatedAt());
             } else {
-                // Message was deleted, fall back to lastReadAt
                 unreadCount = (int) messageRepository.countByChannelIdAndCreatedAtAfter(channelId, lastReadAt);
             }
         } else {
@@ -123,6 +134,23 @@ public class ChannelReadStateService {
         List<Channel> channels = channelRepository.findByServerId(serverId);
         for (Channel channel : channels) {
             initializeReadState(userId, channel.getId());
+        }
+    }
+    
+    private void broadcastChannelRead(UUID userId, UUID channelId, UUID lastReadMessageId) {
+        try {
+            Channel channel = channelService.getChannel(channelId, userId);
+            Set<UUID> recipients = serverMemberRepository.findByServerId(channel.getServerId()).stream()
+                    .map(ServerMember::getUserId)
+                    .collect(Collectors.toSet());
+            
+            ChannelReadState state = getReadState(userId, channelId);
+            Integer unreadCount = state != null ? state.getUnreadCount() : 0;
+            
+            realtimeEventPublisher.broadcast(recipients, new WsEvent(WsEventType.CHANNEL_READ,
+                    new ChannelReadPayload(channelId, userId, lastReadMessageId, unreadCount)));
+        } catch (Exception e) {
+            System.err.println("Failed to broadcast CHANNEL_READ event: " + e.getMessage());
         }
     }
 }

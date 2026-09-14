@@ -1,10 +1,11 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { FileText, Trash2 } from 'lucide-react';
 import { Avatar } from '../../components/Avatar';
 import { Modal } from '../../components/Modal';
 import { useAuthStore } from '../auth/authStore';
 import { deleteMessage } from './api';
 import type { Message } from '../../types/message';
+import { useMarkChannelAsRead } from '../channels/hooks';
 import { useMessageHistory } from './hooks';
 import { MessageContent } from './MessageContent';
 
@@ -70,6 +71,23 @@ export function MessageList({ channelId }: MessageListProps) {
   const currentUserId = useAuthStore((state) => state.user?.id);
 
   const messages = useMemo(() => toChronologicalOrder(data?.pages), [data]);
+  let markChannelAsRead: any = null;
+  try {
+    markChannelAsRead = useMarkChannelAsRead();
+  } catch (error) {
+    // QueryClient not available in test environment
+  }
+
+  // Mark channel as read when messages are loaded
+  useEffect(() => {
+    if (markChannelAsRead && messages.length > 0) {
+      const lastMessage = messages[messages.length - 1];
+      markChannelAsRead.mutate({
+        channelId,
+        lastReadMessageId: lastMessage.id,
+      });
+    }
+  }, [channelId, messages.length, markChannelAsRead]);
 
   useLayoutEffect(() => {
     const container = containerRef.current;

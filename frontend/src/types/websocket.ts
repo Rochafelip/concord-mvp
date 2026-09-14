@@ -12,6 +12,7 @@ export type WsEventType =
   | 'CHANNEL_CREATE'
   | 'CHANNEL_UPDATE'
   | 'CHANNEL_DELETE'
+  | 'CHANNEL_READ'
   | 'SERVER_MEMBER_JOIN'
   | 'SERVER_MEMBER_LEAVE'
   | 'SERVER_MEMBER_UPDATE'
@@ -87,4 +88,10 @@ export interface UserProfileUpdatePayload {
     displayName: string;
     avatarUrl: string | null;
   };
+}
+export interface ChannelReadPayload {
+  channelId: string;
+  userId: string;
+  lastReadMessageId: string | null;
+  unreadCount: number;
 }

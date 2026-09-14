@@ -1,3 +1,4 @@
+import type { Channel } from "../../types/channel";
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
 import * as api from './api';
@@ -49,15 +50,27 @@ export function useDeleteChannel(serverId: string | undefined) {
 
 export function useMarkChannelAsRead() {
   const queryClient = useQueryClient();
+  const { serverId } = useParams<{ serverId?: string }>();
 
   return useMutation({
     mutationFn: ({ channelId, lastReadMessageId }: { channelId: string; lastReadMessageId?: string }) =>
       api.markChannelAsRead(channelId, lastReadMessageId || null),
-    onSuccess: (_, _variables) => {
-      // Invalidate channels query to refresh unread counts
-      queryClient.invalidateQueries({ queryKey: ['channels'] });
-      // Also invalidate server-specific channels queries
-      queryClient.invalidateQueries({ queryKey: ['servers'] });
+    onSuccess: (_, variables) => {
+      const { channelId } = variables;
+      
+      // Update the channel's unread count to 0 immediately in the cache
+      queryClient.setQueryData<Channel[]>(['servers', serverId, 'channels'], (old) => {
+        if (!old) return old;
+        return old.map((ch) =>
+          ch.id === channelId ? { ...ch, unreadCount: 0 } : ch
+        );
+      });
+
+      // Also update the single channel cache if it exists
+      queryClient.setQueryData<Channel>(['channels', channelId], (old) => {
+        if (!old) return old;
+        return { ...old, unreadCount: 0 };
+      });
     },
   });
 }

@@ -23,6 +23,7 @@ import type {
   VoicePresenceLeavePayload,
   VoicePresencePayload,
   UserProfileUpdatePayload,
+  ChannelReadPayload,
 } from '../types/websocket';
 
 /**
@@ -281,6 +282,23 @@ export function useRealtimeSync(): void {
             return { ...data, pages: pages.pages.map(replace) };
           }
           return data;
+        });
+      }),
+
+      websocketClient.subscribe('CHANNEL_READ', (payload) => {
+        const { channelId, userId, unreadCount } = payload as ChannelReadPayload;
+        // Update the channel's unread count in all relevant caches
+        queryClient.setQueryData<Channel[]>(['servers', currentServerIdRef.current, 'channels'], (old) => {
+          if (!old) return old;
+          return old.map((ch) =>
+            ch.id === channelId ? { ...ch, unreadCount } : ch
+          );
+        });
+
+        // Also update the single channel cache if it exists
+        queryClient.setQueryData<Channel>(['channels', channelId], (old) => {
+          if (!old) return old;
+          return { ...old, unreadCount };
         });
       }),
     ];
