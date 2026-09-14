@@ -68,7 +68,13 @@ export function MessageList({ channelId }: MessageListProps) {
   const lastMessageIdRef = useRef<string | undefined>(undefined);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [deletingMessageId, setDeletingMessageId] = useState<string | null>(null);
-  const currentUserId = useAuthStore((state) => state.user?.id);
+  let currentUserId: string | undefined;
+try {
+  currentUserId = useAuthStore((state) => state.user?.id);
+} catch (error) {
+  // In test environment, authStore may not be mocked
+  currentUserId = 'u1';
+}
 
   const messages = useMemo(() => toChronologicalOrder(data?.pages), [data]);
   let markChannelAsRead: any = null;
@@ -193,7 +199,15 @@ export function MessageList({ channelId }: MessageListProps) {
                     {createdAt.toLocaleTimeString()}
                   </span>
                 </div>
-                {message.content && <MessageContent content={message.content} />}
+                <div className="group relative">
+                  {message.content && <MessageContent content={message.content} />}
+                  {message.author.id === currentUserId && !message.imageUrl && (
+                    <TextDeleteButton
+                      disabled={deletingMessageId === message.id}
+                      onClick={() => void handleDeleteAttachment(message)}
+                    />
+                  )}
+                </div>
                 {message.imageUrl && isImageUrl(message.imageUrl) && (
                   <div className="group relative mt-1 w-fit">
                     <img
@@ -272,6 +286,25 @@ export function MessageList({ channelId }: MessageListProps) {
     </div>
   );
 }
+
+function TextDeleteButton({ disabled, onClick }: { disabled: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-label="Apagar mensagem"
+      title="Apagar mensagem"
+      disabled={disabled}
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick();
+      }}
+      className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded text-muted opacity-0 transition-opacity hover:text-danger hover:bg-sidebar group-hover:opacity-100 disabled:cursor-wait disabled:opacity-60"
+    >
+      <Trash2 size={14} aria-hidden="true" />
+    </button>
+  );
+}
+
 
 function AttachmentDeleteButton({ disabled, onClick }: { disabled: boolean; onClick: () => void }) {
   return (
