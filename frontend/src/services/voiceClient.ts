@@ -267,6 +267,35 @@ class VoiceClient {
     void this.setNoiseSuppressionEnabled(getNoiseSuppressionPreference());
   }
 
+  isInCall(): boolean {
+    return this.room !== null;
+  }
+
+  async setMicrophoneDevice(deviceId: string): Promise<void> {
+    await this.room?.switchActiveDevice('audioinput', deviceId);
+  }
+
+  async setSpeakerDevice(deviceId: string): Promise<void> {
+    await this.room?.switchActiveDevice('audiooutput', deviceId);
+  }
+
+  async setCameraDevice(deviceId: string): Promise<void> {
+    await this.room?.switchActiveDevice('videoinput', deviceId);
+  }
+
+  // Toggles the mobile front/back camera. `setCameraEnabled` only mutes/unmutes an already
+  // published track, it doesn't change its capture constraints — restarting the published video
+  // track directly with a new `facingMode` is the API LiveKit provides for this (confirmed
+  // against the installed livekit-client's LocalVideoTrack.restartTrack typings).
+  private cameraFacing: 'user' | 'environment' = 'environment';
+
+  async flipCamera(): Promise<void> {
+    const videoTrack = this.room?.localParticipant.getTrackPublication(Track.Source.Camera)?.videoTrack;
+    if (!videoTrack) return;
+    this.cameraFacing = this.cameraFacing === 'environment' ? 'user' : 'environment';
+    await videoTrack.restartTrack({ facingMode: this.cameraFacing });
+  }
+
   // Off by default, same reasoning as the camera — starting a share is always an explicit user
   // action (PRODUCT.md §12.1). A rejection here covers both an OS/browser permission denial and
   // the user dismissing the screen/window picker without selecting anything — both surface as a

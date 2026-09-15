@@ -8,6 +8,7 @@ import * as lastVisitedChannel from '../features/channels/lastVisitedChannel';
 
 vi.mock('../features/channels/hooks', () => ({
   useChannel: vi.fn(),
+  useMarkChannelAsRead: vi.fn(() => ({ mutate: vi.fn() })),
 }));
 
 vi.mock('../features/channels/lastVisitedChannel', () => ({
