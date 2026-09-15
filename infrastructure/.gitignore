@@ -6,7 +6,9 @@ nginx/certs/
 
 # acme.sh state for the DuckDNS-issued cert (infrastructure/DUCKDNS.md) — holds real private
 # keys and Let's Encrypt/ZeroSSL account keys, generated locally per deployment, never committed.
-duckdns/
+# Scoped to acme-state/ specifically, not the whole duckdns/ directory: renew.sh lives alongside
+# it and is the renewal automation itself, which every deployment needs and must be versioned.
+duckdns/acme-state/
 
 # Real deployment values (public IP, DuckDNS domain) filled in from the livekit.yaml template —
 # see that file's header comment and infrastructure/HOME_DEPLOY.md.

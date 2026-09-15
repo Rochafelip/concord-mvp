@@ -33,6 +33,12 @@ spring:
       mail.smtp.timeout: 5000
       mail.smtp.writetimeout: 5000
 
+      # Without this, JavaMail derives Message-ID from the local hostname, which inside a
+      # container is a random Docker id -- a header that looks like throwaway infrastructure.
+      # Point it at the sending mailbox instead. This only feeds Message-ID generation; the
+      # From header is set explicitly by MailService.
+      mail.from: ${MAIL_FROM:${MAIL_USERNAME}}
+
 jwt:
   secret: ${JWT_SECRET}
   expiration-days: 30
@@ -49,6 +55,11 @@ app:
 
   mail:
     from: ${MAIL_FROM:${MAIL_USERNAME}}
+    # Display name shown by mail clients. A blank one means recipients see a bare address, which
+    # reads as bulk mail -- see infrastructure/EMAIL.md.
+    from-name: ${MAIL_FROM_NAME:Concord}
+    # Optional. Left empty, replies go to the From address.
+    reply-to: ${MAIL_REPLY_TO:}
     enabled: ${MAIL_ENABLED:true}
 
   base-url: ${APP_BASE_URL:http://localhost:5173}
