@@ -5,6 +5,7 @@ import com.concordmvp.channels.ChannelService;
 import com.concordmvp.channels.ChannelType;
 import com.concordmvp.common.exception.BadRequestException;
 import com.concordmvp.common.exception.ForbiddenException;
+import com.concordmvp.messages.dto.AttachmentRequest;
 import com.concordmvp.messages.dto.MessageResponse;
 import com.concordmvp.realtime.RealtimeEventPublisher;
 import com.concordmvp.realtime.WsEvent;
@@ -35,6 +36,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -44,6 +46,9 @@ class MessageServiceTest {
 
     @Mock
     private MessageRepository messageRepository;
+
+    @Mock
+    private MessageAttachmentRepository messageAttachmentRepository;
 
     @Mock
     private ChannelService channelService;
@@ -67,8 +72,8 @@ class MessageServiceTest {
 
     @BeforeEach
     void setUp() {
-        messageService = new MessageService(messageRepository, channelService, serverMemberRepository,
-                userRepository, realtimeEventPublisher, attachmentCleanupService, null);
+        messageService = new MessageService(messageRepository, messageAttachmentRepository, channelService,
+                serverMemberRepository, userRepository, realtimeEventPublisher, attachmentCleanupService, null);
     }
 
     private Channel channel(UUID id, UUID serverId) {
@@ -108,6 +113,20 @@ class MessageServiceTest {
         });
     }
 
+    private void stubAttachmentSaveAssignsId() {
+        when(messageAttachmentRepository.save(any(MessageAttachment.class))).thenAnswer(invocation -> {
+            MessageAttachment attachment = invocation.getArgument(0);
+            if (attachment.getId() == null) {
+                attachment.setId(UUID.randomUUID());
+            }
+            return attachment;
+        });
+    }
+
+    private AttachmentRequest attachment(String url) {
+        return new AttachmentRequest(url, null, null);
+    }
+
     // --- sendMessage ---
 
     @Test
@@ -117,7 +136,7 @@ class MessageServiceTest {
         UUID authorId = UUID.randomUUID();
         when(channelService.getChannel(channelId, authorId)).thenReturn(channel(channelId, serverId));
 
-        assertThatThrownBy(() -> messageService.sendMessage(channelId, "   ", null, null, null, authorId))
+        assertThatThrownBy(() -> messageService.sendMessage(channelId, "   ", null, authorId))
                 .isInstanceOf(BadRequestException.class);
 
         verify(messageRepository, never()).save(any());
@@ -125,13 +144,13 @@ class MessageServiceTest {
     }
 
     @Test
-    void sendMessage_blankContentAndBlankImageUrl_throwsBadRequest_andDoesNotSave() {
+    void sendMessage_blankContentAndBlankAttachmentUrl_throwsBadRequest_andDoesNotSave() {
         UUID channelId = UUID.randomUUID();
         UUID serverId = UUID.randomUUID();
         UUID authorId = UUID.randomUUID();
         when(channelService.getChannel(channelId, authorId)).thenReturn(channel(channelId, serverId));
 
-        assertThatThrownBy(() -> messageService.sendMessage(channelId, "", "   ", null, null, authorId))
+        assertThatThrownBy(() -> messageService.sendMessage(channelId, "", List.of(attachment("   ")), authorId))
                 .isInstanceOf(BadRequestException.class);
 
         verify(messageRepository, never()).save(any());
@@ -146,7 +165,7 @@ class MessageServiceTest {
         when(channelService.getChannel(channelId, authorId)).thenReturn(channel(channelId, serverId));
         String tooLong = "a".repeat(4001);
 
-        assertThatThrownBy(() -> messageService.sendMessage(channelId, tooLong, null, null, null, authorId))
+        assertThatThrownBy(() -> messageService.sendMessage(channelId, tooLong, null, authorId))
                 .isInstanceOf(BadRequestException.class);
 
         verify(messageRepository, never()).save(any());
@@ -160,7 +179,7 @@ class MessageServiceTest {
         when(channelService.getChannel(channelId, authorId))
                 .thenThrow(new ForbiddenException("Not a member of this server"));
 
-        assertThatThrownBy(() -> messageService.sendMessage(channelId, "hello", null, null, null, authorId))
+        assertThatThrownBy(() -> messageService.sendMessage(channelId, "hello", null, authorId))
                 .isInstanceOf(ForbiddenException.class);
 
         verify(messageRepository, never()).save(any());
@@ -176,7 +195,7 @@ class MessageServiceTest {
         onboardingChannel.setType(ChannelType.ONBOARDING);
         when(channelService.getChannel(channelId, authorId)).thenReturn(onboardingChannel);
 
-        assertThatThrownBy(() -> messageService.sendMessage(channelId, "hello", null, null, null, authorId))
+        assertThatThrownBy(() -> messageService.sendMessage(channelId, "hello", null, authorId))
                 .isInstanceOf(ForbiddenException.class);
 
         verify(messageRepository, never()).save(any());
@@ -197,10 +216,9 @@ class MessageServiceTest {
         when(userRepository.findById(authorId)).thenReturn(Optional.of(author));
         stubMessageSaveAssignsId();
 
-        Message result = messageService.sendMessage(channelId, "  hello world  ", null, null, null, authorId);
+        Message result = messageService.sendMessage(channelId, "  hello world  ", null, authorId);
 
         assertThat(result.getContent()).isEqualTo("hello world");
-        assertThat(result.getImageUrl()).isNull();
         assertThat(result.getChannelId()).isEqualTo(channelId);
         assertThat(result.getAuthorId()).isEqualTo(authorId);
 
@@ -217,14 +235,14 @@ class MessageServiceTest {
         assertThat(payload.id()).isEqualTo(result.getId());
         assertThat(payload.channelId()).isEqualTo(channelId);
         assertThat(payload.content()).isEqualTo("hello world");
-        assertThat(payload.imageUrl()).isNull();
+        assertThat(payload.attachments()).isEmpty();
         assertThat(payload.author().id()).isEqualTo(authorId);
         assertThat(payload.author().username()).isEqualTo("alice");
         assertThat(payload.author().displayName()).isEqualTo("Alice");
     }
 
     @Test
-    void sendMessage_imageOnly_persistsEmptyContentAndImageUrl() {
+    void sendMessage_attachmentOnly_persistsEmptyContentAndTheAttachment() {
         UUID channelId = UUID.randomUUID();
         UUID serverId = UUID.randomUUID();
         UUID authorId = UUID.randomUUID();
@@ -234,21 +252,23 @@ class MessageServiceTest {
         when(serverMemberRepository.findByServerId(serverId)).thenReturn(List.of(member(serverId, authorId)));
         when(userRepository.findById(authorId)).thenReturn(Optional.of(author));
         stubMessageSaveAssignsId();
+        stubAttachmentSaveAssignsId();
 
-        Message result = messageService.sendMessage(channelId, "", "/api/v1/uploads/abc.png", null, null, authorId);
+        Message result = messageService.sendMessage(
+                channelId, "", List.of(attachment("/api/v1/uploads/abc.png")), authorId);
 
         assertThat(result.getContent()).isEmpty();
-        assertThat(result.getImageUrl()).isEqualTo("/api/v1/uploads/abc.png");
 
         ArgumentCaptor<WsEvent> eventCaptor = ArgumentCaptor.forClass(WsEvent.class);
         verify(realtimeEventPublisher).broadcast(eq(Set.of(authorId)), eventCaptor.capture());
         MessageResponse payload = (MessageResponse) eventCaptor.getValue().payload();
-        assertThat(payload.imageUrl()).isEqualTo("/api/v1/uploads/abc.png");
         assertThat(payload.content()).isEmpty();
+        assertThat(payload.attachments()).hasSize(1);
+        assertThat(payload.attachments().get(0).url()).isEqualTo("/api/v1/uploads/abc.png");
     }
 
     @Test
-    void sendMessage_imageWithCaption_persistsBoth() {
+    void sendMessage_severalAttachments_persistsEachWithItsRequestPosition() {
         UUID channelId = UUID.randomUUID();
         UUID serverId = UUID.randomUUID();
         UUID authorId = UUID.randomUUID();
@@ -258,21 +278,105 @@ class MessageServiceTest {
         when(serverMemberRepository.findByServerId(serverId)).thenReturn(List.of(member(serverId, authorId)));
         when(userRepository.findById(authorId)).thenReturn(Optional.of(author));
         stubMessageSaveAssignsId();
+        stubAttachmentSaveAssignsId();
 
-        Message result = messageService.sendMessage(channelId, "check this out", "/api/v1/uploads/abc.png", null, null, authorId);
+        Message result = messageService.sendMessage(channelId, "three shots", List.of(
+                new AttachmentRequest("/api/v1/uploads/a.png", "a.png", 1L),
+                new AttachmentRequest("/api/v1/uploads/b.png", "b.png", 2L),
+                new AttachmentRequest("/api/v1/uploads/c.png", "c.png", 3L)), authorId);
 
-        assertThat(result.getContent()).isEqualTo("check this out");
-        assertThat(result.getImageUrl()).isEqualTo("/api/v1/uploads/abc.png");
+        ArgumentCaptor<MessageAttachment> attachmentCaptor = ArgumentCaptor.forClass(MessageAttachment.class);
+        verify(messageAttachmentRepository, times(3)).save(attachmentCaptor.capture());
+        assertThat(attachmentCaptor.getAllValues())
+                .extracting(MessageAttachment::getUrl, MessageAttachment::getPosition,
+                        MessageAttachment::getMessageId)
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple("/api/v1/uploads/a.png", 0, result.getId()),
+                        org.assertj.core.groups.Tuple.tuple("/api/v1/uploads/b.png", 1, result.getId()),
+                        org.assertj.core.groups.Tuple.tuple("/api/v1/uploads/c.png", 2, result.getId()));
+
+        ArgumentCaptor<WsEvent> eventCaptor = ArgumentCaptor.forClass(WsEvent.class);
+        verify(realtimeEventPublisher).broadcast(eq(Set.of(authorId)), eventCaptor.capture());
+        MessageResponse payload = (MessageResponse) eventCaptor.getValue().payload();
+        // The broadcast carries the attachments in the sender's order, so a client rendering
+        // straight from the event shows the same order as one that reloads the history.
+        assertThat(payload.attachments())
+                .extracting(a -> a.url())
+                .containsExactly("/api/v1/uploads/a.png", "/api/v1/uploads/b.png", "/api/v1/uploads/c.png");
+        assertThat(payload.content()).isEqualTo("three shots");
     }
 
     @Test
-    void sendMessage_imageUrlNotFromUploadsPath_throwsBadRequest() {
+    void sendMessage_moreThanTenAttachments_throwsBadRequest_andDoesNotSave() {
         UUID channelId = UUID.randomUUID();
         UUID serverId = UUID.randomUUID();
         UUID authorId = UUID.randomUUID();
         when(channelService.getChannel(channelId, authorId)).thenReturn(channel(channelId, serverId));
 
-        assertThatThrownBy(() -> messageService.sendMessage(channelId, "", "https://evil.example/tracker.png", null, null, authorId))
+        List<AttachmentRequest> eleven = new ArrayList<>();
+        for (int i = 0; i < 11; i++) {
+            eleven.add(attachment("/api/v1/uploads/file" + i + ".png"));
+        }
+
+        assertThatThrownBy(() -> messageService.sendMessage(channelId, "", eleven, authorId))
+                .isInstanceOf(BadRequestException.class);
+
+        verify(messageRepository, never()).save(any());
+        verifyNoInteractions(messageAttachmentRepository);
+        verifyNoInteractions(realtimeEventPublisher);
+    }
+
+    @Test
+    void sendMessage_exactlyTenAttachments_isAccepted() {
+        UUID channelId = UUID.randomUUID();
+        UUID serverId = UUID.randomUUID();
+        UUID authorId = UUID.randomUUID();
+        User author = user(authorId, "alice", "Alice");
+        when(channelService.getChannel(channelId, authorId)).thenReturn(channel(channelId, serverId));
+        when(serverMemberRepository.findByServerId(serverId)).thenReturn(List.of(member(serverId, authorId)));
+        when(userRepository.findById(authorId)).thenReturn(Optional.of(author));
+        stubMessageSaveAssignsId();
+        stubAttachmentSaveAssignsId();
+
+        List<AttachmentRequest> ten = new ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            ten.add(attachment("/api/v1/uploads/file" + i + ".png"));
+        }
+
+        messageService.sendMessage(channelId, "", ten, authorId);
+
+        verify(messageAttachmentRepository, times(10)).save(any(MessageAttachment.class));
+    }
+
+    @Test
+    void sendMessage_attachmentWithCaption_persistsBoth() {
+        UUID channelId = UUID.randomUUID();
+        UUID serverId = UUID.randomUUID();
+        UUID authorId = UUID.randomUUID();
+        User author = user(authorId, "alice", "Alice");
+
+        when(channelService.getChannel(channelId, authorId)).thenReturn(channel(channelId, serverId));
+        when(serverMemberRepository.findByServerId(serverId)).thenReturn(List.of(member(serverId, authorId)));
+        when(userRepository.findById(authorId)).thenReturn(Optional.of(author));
+        stubMessageSaveAssignsId();
+        stubAttachmentSaveAssignsId();
+
+        Message result = messageService.sendMessage(
+                channelId, "check this out", List.of(attachment("/api/v1/uploads/abc.png")), authorId);
+
+        assertThat(result.getContent()).isEqualTo("check this out");
+        verify(messageAttachmentRepository).save(any(MessageAttachment.class));
+    }
+
+    @Test
+    void sendMessage_attachmentUrlNotFromUploadsPath_throwsBadRequest() {
+        UUID channelId = UUID.randomUUID();
+        UUID serverId = UUID.randomUUID();
+        UUID authorId = UUID.randomUUID();
+        when(channelService.getChannel(channelId, authorId)).thenReturn(channel(channelId, serverId));
+
+        assertThatThrownBy(() -> messageService.sendMessage(
+                channelId, "", List.of(attachment("https://evil.example/tracker.png")), authorId))
                 .isInstanceOf(BadRequestException.class);
 
         verify(messageRepository, never()).save(any());
@@ -280,7 +384,25 @@ class MessageServiceTest {
     }
 
     @Test
-    void sendMessage_imageUrlWithSurroundingWhitespace_trimmedBeforePersisting() {
+    void sendMessage_oneBadUrlAmongGoodOnes_rejectsTheWholeMessage() {
+        UUID channelId = UUID.randomUUID();
+        UUID serverId = UUID.randomUUID();
+        UUID authorId = UUID.randomUUID();
+        when(channelService.getChannel(channelId, authorId)).thenReturn(channel(channelId, serverId));
+
+        // Validation runs over the whole list before anything is persisted, so a single bad URL
+        // can't sneak through alongside valid ones or leave a half-saved message behind.
+        assertThatThrownBy(() -> messageService.sendMessage(channelId, "", List.of(
+                attachment("/api/v1/uploads/ok.png"),
+                attachment("/api/v1/uploads/../../etc/passwd")), authorId))
+                .isInstanceOf(BadRequestException.class);
+
+        verify(messageRepository, never()).save(any());
+        verifyNoInteractions(messageAttachmentRepository);
+    }
+
+    @Test
+    void sendMessage_attachmentUrlWithSurroundingWhitespace_trimmedBeforePersisting() {
         UUID channelId = UUID.randomUUID();
         UUID serverId = UUID.randomUUID();
         UUID authorId = UUID.randomUUID();
@@ -289,10 +411,14 @@ class MessageServiceTest {
         when(serverMemberRepository.findByServerId(serverId)).thenReturn(List.of(member(serverId, authorId)));
         when(userRepository.findById(authorId)).thenReturn(Optional.of(author));
         stubMessageSaveAssignsId();
+        stubAttachmentSaveAssignsId();
 
-        Message result = messageService.sendMessage(channelId, "", "  /api/v1/uploads/abc.png  ", null, null, authorId);
+        messageService.sendMessage(
+                channelId, "", List.of(attachment("  /api/v1/uploads/abc.png  ")), authorId);
 
-        assertThat(result.getImageUrl()).isEqualTo("/api/v1/uploads/abc.png");
+        ArgumentCaptor<MessageAttachment> captor = ArgumentCaptor.forClass(MessageAttachment.class);
+        verify(messageAttachmentRepository).save(captor.capture());
+        assertThat(captor.getValue().getUrl()).isEqualTo("/api/v1/uploads/abc.png");
     }
 
     @Test
@@ -305,17 +431,16 @@ class MessageServiceTest {
         when(serverMemberRepository.findByServerId(serverId)).thenReturn(List.of(member(serverId, authorId)));
         when(userRepository.findById(authorId)).thenReturn(Optional.of(author));
         stubMessageSaveAssignsId();
+        stubAttachmentSaveAssignsId();
 
-        Message result = messageService.sendMessage(channelId, "", "/api/v1/uploads/abc.pdf", "report.pdf", 12345L, authorId);
-
-        assertThat(result.getFileName()).isEqualTo("report.pdf");
-        assertThat(result.getFileSize()).isEqualTo(12345L);
+        messageService.sendMessage(channelId, "", List.of(
+                new AttachmentRequest("/api/v1/uploads/abc.pdf", "report.pdf", 12345L)), authorId);
 
         ArgumentCaptor<WsEvent> eventCaptor = ArgumentCaptor.forClass(WsEvent.class);
         verify(realtimeEventPublisher).broadcast(eq(Set.of(authorId)), eventCaptor.capture());
         MessageResponse payload = (MessageResponse) eventCaptor.getValue().payload();
-        assertThat(payload.fileName()).isEqualTo("report.pdf");
-        assertThat(payload.fileSize()).isEqualTo(12345L);
+        assertThat(payload.attachments().get(0).fileName()).isEqualTo("report.pdf");
+        assertThat(payload.attachments().get(0).fileSize()).isEqualTo(12345L);
     }
 
     @Test
@@ -326,7 +451,8 @@ class MessageServiceTest {
         when(channelService.getChannel(channelId, authorId)).thenReturn(channel(channelId, serverId));
         String tooLongFileName = "a".repeat(256);
 
-        assertThatThrownBy(() -> messageService.sendMessage(channelId, "", "/api/v1/uploads/abc.pdf", tooLongFileName, 100L, authorId))
+        assertThatThrownBy(() -> messageService.sendMessage(channelId, "", List.of(
+                new AttachmentRequest("/api/v1/uploads/abc.pdf", tooLongFileName, 100L)), authorId))
                 .isInstanceOf(BadRequestException.class);
 
         verify(messageRepository, never()).save(any());
@@ -334,7 +460,7 @@ class MessageServiceTest {
     }
 
     @Test
-    void sendMessage_fileNameProvidedWithoutImageUrl_isDiscarded() {
+    void sendMessage_attachmentEntryWithoutUrl_isDiscarded() {
         UUID channelId = UUID.randomUUID();
         UUID serverId = UUID.randomUUID();
         UUID authorId = UUID.randomUUID();
@@ -344,13 +470,12 @@ class MessageServiceTest {
         when(userRepository.findById(authorId)).thenReturn(Optional.of(author));
         stubMessageSaveAssignsId();
 
-        // fileName/fileSize with no imageUrl at all is a nonsensical combination (a "file" with
-        // no URL to fetch it from) — hasAttachment is false here, so sendMessage's own logic
-        // discards fileName/fileSize rather than persisting orphaned metadata.
-        Message result = messageService.sendMessage(channelId, "just text", null, "orphan.pdf", 999L, authorId);
+        // File metadata with no URL to fetch the bytes from is a nonsensical combination; the
+        // entry is dropped rather than persisted as an attachment row pointing nowhere.
+        messageService.sendMessage(channelId, "just text", List.of(
+                new AttachmentRequest(null, "orphan.pdf", 999L)), authorId);
 
-        assertThat(result.getFileName()).isNull();
-        assertThat(result.getFileSize()).isNull();
+        verifyNoInteractions(messageAttachmentRepository);
     }
 
     // --- getHistory ---
@@ -530,9 +655,7 @@ class MessageServiceTest {
         assertThat(payload.author().id()).isEqualTo(MessageService.SYSTEM_USER_ID);
         assertThat(payload.author().displayName()).isEqualTo("System");
         assertThat(payload.content()).isEqualTo("Alice entrou no servidor");
-        assertThat(payload.imageUrl()).isNull();
-        assertThat(payload.fileName()).isNull();
-        assertThat(payload.fileSize()).isNull();
+        assertThat(payload.attachments()).isEmpty();
     }
 
     private Message newMessage(UUID channelId, UUID authorId, String content, Instant createdAt) {

@@ -1,3 +1,9 @@
+export interface Attachment {
+  url: string;
+  fileName: string | null;
+  fileSize: number | null;
+}
+
 export interface Message {
   id: string;
   channelId: string;
@@ -8,8 +14,7 @@ export interface Message {
     avatarUrl: string | null;
   };
   content: string;
-  imageUrl: string | null;
-  fileName: string | null;
-  fileSize: number | null;
+  /** Always present, ordered as the sender arranged them; empty for a text-only message. */
+  attachments: Attachment[];
   createdAt: string;
 }

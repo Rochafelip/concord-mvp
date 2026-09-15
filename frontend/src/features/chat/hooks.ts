@@ -1,5 +1,6 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { websocketClient } from '../../services/websocketClient';
+import type { Attachment } from '../../types/message';
 import * as api from './api';
 
 const PAGE_SIZE = 50;
@@ -36,9 +37,7 @@ export function useMessageHistory(channelId: string | undefined) {
 export function sendMessage(
   channelId: string,
   content: string,
-  imageUrl?: string,
-  fileName?: string,
-  fileSize?: number,
+  attachments: Attachment[] = [],
 ): void {
-  websocketClient.send({ type: 'MESSAGE_CREATE', payload: { channelId, content, imageUrl, fileName, fileSize } });
+  websocketClient.send({ type: 'MESSAGE_CREATE', payload: { channelId, content, attachments } });
 }

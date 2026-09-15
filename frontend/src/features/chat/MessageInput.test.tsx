@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useWsConnectionStore } from '../../stores/wsConnectionStore';
@@ -11,6 +11,26 @@ vi.mock('./hooks', () => ({
 }));
 
 vi.mock('./api', () => ({ uploadAttachment: vi.fn() }));
+
+/**
+ * userEvent has no API for pasting files, and jsdom's ClipboardEvent carries no `clipboardData`,
+ * so the event is built by hand with the `items` shape the composer reads. Returns the event so a
+ * test can assert whether the composer called preventDefault on it.
+ */
+function pasteFiles(target: Element, files: File[]): Event {
+  const event = new Event('paste', { bubbles: true, cancelable: true });
+  Object.defineProperty(event, 'clipboardData', {
+    value: {
+      items: files.map((file) => ({
+        kind: 'file' as const,
+        type: file.type,
+        getAsFile: () => file,
+      })),
+    },
+  });
+  fireEvent(target, event);
+  return event;
+}
 
 describe('MessageInput', () => {
   beforeEach(() => {
@@ -107,7 +127,21 @@ describe('MessageInput', () => {
     expect(screen.getByLabelText(/attach file/i, { selector: 'input' })).toBeDisabled();
   });
 
-  it('uploads a picked image and sends the message with the returned attachment info', async () => {
+  it('stages a picked file as a preview without uploading it yet', async () => {
+    const user = userEvent.setup();
+    render(<MessageInput channelId="c1" />);
+
+    const file = new File(['fake-image-bytes'], 'photo.png', { type: 'image/png' });
+    await user.upload(screen.getByLabelText(/attach file/i, { selector: 'input' }), file);
+
+    // Nothing is uploaded until the user actually sends: removing the preview must not leave an
+    // orphaned file on the server.
+    expect(apiModule.uploadAttachment).not.toHaveBeenCalled();
+    expect(hooksModule.sendMessage).not.toHaveBeenCalled();
+    expect(screen.getByAltText('photo.png')).toBeInTheDocument();
+  });
+
+  it('uploads on send and passes the returned attachment list to sendMessage', async () => {
     vi.mocked(apiModule.uploadAttachment).mockResolvedValue({
       url: '/api/v1/uploads/abc.png',
       fileName: 'photo.png',
@@ -118,10 +152,38 @@ describe('MessageInput', () => {
 
     const file = new File(['fake-image-bytes'], 'photo.png', { type: 'image/png' });
     await user.upload(screen.getByLabelText(/attach file/i, { selector: 'input' }), file);
+    await user.click(screen.getByRole('button', { name: /send/i }));
 
     expect(apiModule.uploadAttachment).toHaveBeenCalledWith('c1', file);
-    await screen.findByRole('button', { name: /send/i });
-    expect(hooksModule.sendMessage).toHaveBeenCalledWith('c1', '', '/api/v1/uploads/abc.png', 'photo.png', 2048);
+    await waitFor(() =>
+      expect(hooksModule.sendMessage).toHaveBeenCalledWith('c1', '', [
+        { url: '/api/v1/uploads/abc.png', fileName: 'photo.png', fileSize: 2048 },
+      ]),
+    );
+  });
+
+  it('sends several attachments in one message, preserving the order they were staged in', async () => {
+    vi.mocked(apiModule.uploadAttachment).mockImplementation(async (_channelId, file) => ({
+      url: `/api/v1/uploads/${file.name}`,
+      fileName: file.name,
+      fileSize: file.size,
+    }));
+    const user = userEvent.setup();
+    render(<MessageInput channelId="c1" />);
+
+    const input = screen.getByLabelText(/attach file/i, { selector: 'input' });
+    await user.upload(input, [
+      new File(['a'], 'a.png', { type: 'image/png' }),
+      new File(['b'], 'b.png', { type: 'image/png' }),
+    ]);
+    await user.click(screen.getByRole('button', { name: /send/i }));
+
+    await waitFor(() => expect(hooksModule.sendMessage).toHaveBeenCalled());
+    const [, , attachments] = vi.mocked(hooksModule.sendMessage).mock.calls[0];
+    expect(attachments?.map((attachment) => attachment.url)).toEqual([
+      '/api/v1/uploads/a.png',
+      '/api/v1/uploads/b.png',
+    ]);
   });
 
   it('uses the currently typed text as the caption when sending an attachment', async () => {
@@ -136,11 +198,118 @@ describe('MessageInput', () => {
     await user.type(screen.getByLabelText(/message/i), 'check this out');
     const file = new File(['fake-image-bytes'], 'photo.png', { type: 'image/png' });
     await user.upload(screen.getByLabelText(/attach file/i, { selector: 'input' }), file);
+    await user.click(screen.getByRole('button', { name: /send/i }));
 
-    expect(hooksModule.sendMessage).toHaveBeenCalledWith('c1', 'check this out', '/api/v1/uploads/abc.png', 'photo.png', 2048);
+    await waitFor(() =>
+      expect(hooksModule.sendMessage).toHaveBeenCalledWith('c1', 'check this out', [
+        { url: '/api/v1/uploads/abc.png', fileName: 'photo.png', fileSize: 2048 },
+      ]),
+    );
   });
 
-  it('rejects an oversized image client-side without uploading', async () => {
+  it('enables the send button for an attachment with no text at all', async () => {
+    const user = userEvent.setup();
+    render(<MessageInput channelId="c1" />);
+
+    expect(screen.getByRole('button', { name: /send/i })).toBeDisabled();
+
+    await user.upload(
+      screen.getByLabelText(/attach file/i, { selector: 'input' }),
+      new File(['bytes'], 'photo.png', { type: 'image/png' }),
+    );
+
+    expect(screen.getByRole('button', { name: /send/i })).toBeEnabled();
+  });
+
+  it('stages an image pasted from the clipboard (Win + Shift + S screenshot)', async () => {
+    render(<MessageInput channelId="c1" />);
+
+    // A fresh screenshot arrives as a nameless/generic image file with no filename of its own.
+    pasteFiles(screen.getByLabelText(/message/i), [
+      new File(['screenshot-bytes'], 'image.png', { type: 'image/png' }),
+    ]);
+
+    const preview = await screen.findByRole('img');
+    expect(preview.getAttribute('alt')).toMatch(/^pasted-image-\d+\.png$/);
+    expect(screen.getByRole('button', { name: /send/i })).toBeEnabled();
+  });
+
+  it('keeps a pasted image file name when the clipboard provides a real one', async () => {
+    render(<MessageInput channelId="c1" />);
+
+    pasteFiles(screen.getByLabelText(/message/i), [
+      new File(['bytes'], 'diagram.webp', { type: 'image/webp' }),
+    ]);
+
+    expect(await screen.findByAltText('diagram.webp')).toBeInTheDocument();
+  });
+
+  it('does not intercept a plain text paste', async () => {
+    render(<MessageInput channelId="c1" />);
+    const input = screen.getByLabelText(/message/i);
+
+    const event = pasteFiles(input, []);
+
+    // preventDefault would swallow ordinary Ctrl+V and stop the text reaching the input.
+    expect(event.defaultPrevented).toBe(false);
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+  });
+
+  it('stages files dropped onto the composer', async () => {
+    render(<MessageInput channelId="c1" />);
+
+    const file = new File(['bytes'], 'dropped.png', { type: 'image/png' });
+    fireEvent.drop(screen.getByTestId('message-composer'), {
+      dataTransfer: { files: [file], types: ['Files'] },
+    });
+
+    expect(await screen.findByAltText('dropped.png')).toBeInTheDocument();
+    expect(apiModule.uploadAttachment).not.toHaveBeenCalled();
+  });
+
+  it('removes a single pending attachment without touching the others', async () => {
+    const user = userEvent.setup();
+    render(<MessageInput channelId="c1" />);
+
+    await user.upload(screen.getByLabelText(/attach file/i, { selector: 'input' }), [
+      new File(['a'], 'a.png', { type: 'image/png' }),
+      new File(['b'], 'b.png', { type: 'image/png' }),
+    ]);
+    await user.click(screen.getByRole('button', { name: /remove a\.png/i }));
+
+    expect(screen.queryByAltText('a.png')).not.toBeInTheDocument();
+    expect(screen.getByAltText('b.png')).toBeInTheDocument();
+  });
+
+  it('leaves the composer sendable-by-text-only after the last attachment is removed', async () => {
+    const user = userEvent.setup();
+    render(<MessageInput channelId="c1" />);
+
+    await user.upload(
+      screen.getByLabelText(/attach file/i, { selector: 'input' }),
+      new File(['a'], 'a.png', { type: 'image/png' }),
+    );
+    await user.click(screen.getByRole('button', { name: /remove a\.png/i }));
+
+    expect(screen.getByRole('button', { name: /send/i })).toBeDisabled();
+    expect(screen.queryByLabelText(/pending attachments/i)).not.toBeInTheDocument();
+  });
+
+  it('caps the composer at ten attachments and says so', async () => {
+    const user = userEvent.setup();
+    render(<MessageInput channelId="c1" />);
+
+    const eleven = Array.from({ length: 11 }, (_unused, index) =>
+      new File(['bytes'], `file${index}.png`, { type: 'image/png' }),
+    );
+    await user.upload(screen.getByLabelText(/attach file/i, { selector: 'input' }), eleven);
+
+    expect(screen.getAllByRole('img')).toHaveLength(10);
+    expect(screen.getByText(/at most 10 attachments/i)).toBeInTheDocument();
+    expect(screen.queryByAltText('file10.png')).not.toBeInTheDocument();
+  });
+
+  it('rejects an oversized image client-side without staging or uploading it', async () => {
     const user = userEvent.setup();
     render(<MessageInput channelId="c1" />);
 
@@ -149,26 +318,8 @@ describe('MessageInput', () => {
 
     expect(apiModule.uploadAttachment).not.toHaveBeenCalled();
     expect(hooksModule.sendMessage).not.toHaveBeenCalled();
+    expect(screen.queryByAltText('huge.png')).not.toBeInTheDocument();
     expect(screen.getByText(/150 mb limit/i)).toBeInTheDocument();
-  });
-
-  it('uploads a large non-image file under 150MB successfully', async () => {
-    vi.mocked(apiModule.uploadAttachment).mockResolvedValue({
-      url: '/api/v1/uploads/abc.pdf',
-      fileName: 'report.pdf',
-      fileSize: 100 * 1024 * 1024,
-    });
-    const user = userEvent.setup();
-    render(<MessageInput channelId="c1" />);
-
-    const file = new File([new Uint8Array(100 * 1024 * 1024)], 'report.pdf', { type: 'application/pdf' });
-    await user.upload(screen.getByLabelText(/attach file/i, { selector: 'input' }), file);
-
-    expect(apiModule.uploadAttachment).toHaveBeenCalledWith('c1', file);
-    await screen.findByRole('button', { name: /send/i });
-    expect(hooksModule.sendMessage).toHaveBeenCalledWith(
-      'c1', '', '/api/v1/uploads/abc.pdf', 'report.pdf', 100 * 1024 * 1024,
-    );
   });
 
   it('rejects a non-image file over 150MB client-side without uploading', async () => {
@@ -183,36 +334,68 @@ describe('MessageInput', () => {
     expect(screen.getByText(/150 mb limit/i)).toBeInTheDocument();
   });
 
-  it('shows an error and does not send when the upload fails', async () => {
+  it('sends a large non-image file under 150MB as a chip preview', async () => {
+    vi.mocked(apiModule.uploadAttachment).mockResolvedValue({
+      url: '/api/v1/uploads/abc.pdf',
+      fileName: 'report.pdf',
+      fileSize: 100 * 1024 * 1024,
+    });
+    const user = userEvent.setup();
+    render(<MessageInput channelId="c1" />);
+
+    const file = new File([new Uint8Array(100 * 1024 * 1024)], 'report.pdf', { type: 'application/pdf' });
+    await user.upload(screen.getByLabelText(/attach file/i, { selector: 'input' }), file);
+
+    // A non-image has no thumbnail to show, so it is previewed as a named chip instead.
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    expect(screen.getByText('report.pdf')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /send/i }));
+
+    expect(apiModule.uploadAttachment).toHaveBeenCalledWith('c1', file);
+    await waitFor(() =>
+      expect(hooksModule.sendMessage).toHaveBeenCalledWith('c1', '', [
+        { url: '/api/v1/uploads/abc.pdf', fileName: 'report.pdf', fileSize: 100 * 1024 * 1024 },
+      ]),
+    );
+  });
+
+  it('keeps the previews and the typed text when the upload fails, so the user can retry', async () => {
     vi.mocked(apiModule.uploadAttachment).mockRejectedValue(new Error('Network error'));
     const user = userEvent.setup();
     render(<MessageInput channelId="c1" />);
 
-    const file = new File(['fake-bytes'], 'photo.png', { type: 'image/png' });
-    await user.upload(screen.getByLabelText(/attach file/i, { selector: 'input' }), file);
+    await user.type(screen.getByLabelText(/message/i), 'here you go');
+    await user.upload(
+      screen.getByLabelText(/attach file/i, { selector: 'input' }),
+      new File(['fake-bytes'], 'photo.png', { type: 'image/png' }),
+    );
+    await user.click(screen.getByRole('button', { name: /send/i }));
 
     await screen.findByText(/failed to upload file/i);
     expect(hooksModule.sendMessage).not.toHaveBeenCalled();
+    expect(screen.getByAltText('photo.png')).toBeInTheDocument();
+    expect((screen.getByLabelText(/message/i) as HTMLInputElement).value).toBe('here you go');
   });
 
-  it('does not block sending a plain text message while an upload is in flight', async () => {
-    let resolveUpload: (value: { url: string; fileName: string; fileSize: number }) => void = () => {};
-    vi.mocked(apiModule.uploadAttachment).mockReturnValue(
-      new Promise((resolve) => {
-        resolveUpload = resolve;
-      }),
-    );
+  it('does not send anything if one upload of several fails', async () => {
+    vi.mocked(apiModule.uploadAttachment).mockImplementation(async (_channelId, file) => {
+      if (file.name === 'b.png') throw new Error('Network error');
+      return { url: `/api/v1/uploads/${file.name}`, fileName: file.name, fileSize: file.size };
+    });
     const user = userEvent.setup();
     render(<MessageInput channelId="c1" />);
 
-    const file = new File(['fake-bytes'], 'photo.png', { type: 'image/png' });
-    await user.upload(screen.getByLabelText(/attach file/i, { selector: 'input' }), file);
-
-    await user.type(screen.getByLabelText(/message/i), 'hello');
+    await user.upload(screen.getByLabelText(/attach file/i, { selector: 'input' }), [
+      new File(['a'], 'a.png', { type: 'image/png' }),
+      new File(['b'], 'b.png', { type: 'image/png' }),
+    ]);
     await user.click(screen.getByRole('button', { name: /send/i }));
-    expect(hooksModule.sendMessage).toHaveBeenCalledWith('c1', 'hello');
 
-    resolveUpload({ url: '/api/v1/uploads/abc.png', fileName: 'photo.png', fileSize: 100 });
+    // All or nothing: a half-sent message would either drop an attachment silently or post
+    // without the one that failed.
+    await screen.findByText(/failed to upload file/i);
+    expect(hooksModule.sendMessage).not.toHaveBeenCalled();
   });
 
   it('does not silently drop the message if the connection drops mid-upload', async () => {
@@ -225,8 +408,11 @@ describe('MessageInput', () => {
     const user = userEvent.setup();
     render(<MessageInput channelId="c1" />);
 
-    const file = new File(['fake-bytes'], 'photo.png', { type: 'image/png' });
-    await user.upload(screen.getByLabelText(/attach file/i, { selector: 'input' }), file);
+    await user.upload(
+      screen.getByLabelText(/attach file/i, { selector: 'input' }),
+      new File(['fake-bytes'], 'photo.png', { type: 'image/png' }),
+    );
+    await user.click(screen.getByRole('button', { name: /send/i }));
 
     // The upload succeeded, but the socket dropped while it was in flight — sendMessage would
     // silently no-op (see websocketClient.ts), so the user must be told explicitly rather than

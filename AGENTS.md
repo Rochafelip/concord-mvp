@@ -69,11 +69,16 @@ Each application must remain independently buildable.
 * Receive messages in real time
 * Persist messages
 * Load message history
-* File attachments on messages: images (JPEG/PNG/GIF/WebP, detected by real
-  file content, 8 MB limit, rendered inline with a full-size lightbox) or any
-  other file type (50 MB limit, no content restriction, rendered as a
-  downloadable file chip — served with a forced download so it can never
-  execute in the browser)
+* File attachments on messages: up to 10 per message, 150 MB each. An upload
+  whose real file content matches a known image signature (JPEG/PNG/GIF/WebP/
+  BMP/AVIF — magic bytes, not the declared type) is rendered inline with a
+  full-size lightbox; any other file type is allowed and rendered as a
+  downloadable file chip, served with a forced download so it can never
+  execute in the browser
+* Attaching files to a message: the paperclip button, drag & drop onto the
+  composer, or pasting an image from the clipboard (Ctrl+V, including a
+  Win+Shift+S screenshot). All three stage a preview that can be removed
+  before sending; the upload happens on send
 * Unread message tracking per channel
 * Visual indicators for channels with unread messages
 * Mark channels as read functionality
