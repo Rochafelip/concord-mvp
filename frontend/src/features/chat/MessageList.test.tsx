@@ -7,6 +7,12 @@ import { MessageList } from './MessageList';
 
 vi.mock('./hooks', () => ({
   useMessageHistory: vi.fn(),
+}));
+
+// MessageList imports useMarkChannelAsRead from the channels feature, not from ./hooks — mocking
+// it on ./hooks left the real one in place, which needs a QueryClientProvider these tests don't
+// set up.
+vi.mock('../channels/hooks', () => ({
   useMarkChannelAsRead: vi.fn(() => ({ mutate: vi.fn() })),
 }));
 
