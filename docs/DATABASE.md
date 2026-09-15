@@ -474,19 +474,32 @@ id
 channel_id
 author_id
 content
-image_url
-file_name
-file_size
 created_at
 updated_at
 ```
 
-`image_url`, `file_name`, and `file_size` are all nullable — set together
-when the message has a file attachment (`image_url` historically named for
-images but may point to any file type; `file_name`/`file_size` describe it),
-and all `NULL` for a plain text message. `image_url` is restricted at the
-application layer (`MessageService`) to match `/api/v1/uploads/...`, the
-backend's own upload-serving path — see `docs/OPEN_QUESTIONS.md` §21.
+Attachments live in their own table (see below), so a message can carry
+several. Migration V17 moved them out of `messages`, where a single one used
+to sit inline as `image_url`/`file_name`/`file_size`.
+
+```text
+message_attachments
+--------------------------------
+id
+message_id  → messages(id) ON DELETE CASCADE
+url
+file_name
+file_size
+position
+```
+
+`url` is restricted at the application layer (`MessageService`) to match
+`/api/v1/uploads/...`, the backend's own upload-serving path — see
+`docs/OPEN_QUESTIONS.md` §21. `position` is the sender's ordering, unique per
+message, and a message may have at most 10 attachments (enforced in
+`MessageService`, not by a constraint). The rows go with the message via the
+cascade; the stored files are deleted separately by
+`AttachmentCleanupService`, which must therefore run BEFORE the message.
 
 ---
 
@@ -521,10 +534,10 @@ author_id
 created_at
 ```
 
-`content` is optional (may be an empty string) when the message has a file
-attachment (`image_url` set) — a message must have non-empty `content`, a
-non-null `image_url`, or both. This is enforced in `MessageService`, not by
-a database constraint.
+`content` is optional (may be an empty string) when the message has at least
+one attachment — a message must have non-empty `content`, at least one
+attachment, or both. This is enforced in `MessageService`, not by a database
+constraint.
 
 The exact content-length constraint should be aligned with the API contract.
 

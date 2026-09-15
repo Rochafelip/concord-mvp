@@ -91,8 +91,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         try {
             SendMessageRequest request = objectMapper.treeToValue(payloadNode, SendMessageRequest.class);
             UUID userId = userId(session);
-            messageService.sendMessage(request.channelId(), request.content(), request.imageUrl(),
-                    request.fileName(), request.fileSize(), userId);
+            messageService.sendMessage(request.channelId(), request.content(), request.attachments(), userId);
             // No ack: MessageService.sendMessage already broadcasts MESSAGE_CREATE to every
             // server member, including the sender.
         } catch (ResourceNotFoundException | ForbiddenException | BadRequestException e) {

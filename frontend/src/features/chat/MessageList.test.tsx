@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import type { Message } from '../../types/message';
+import type { Attachment, Message } from '../../types/message';
 import * as hooksModule from './hooks';
 import { MessageList } from './MessageList';
 
@@ -10,22 +10,26 @@ vi.mock('./hooks', () => ({
   useMarkChannelAsRead: vi.fn(() => ({ mutate: vi.fn() })),
 }));
 
+function attachment(
+  url: string,
+  fileName: string | null = null,
+  fileSize: number | null = null,
+): Attachment {
+  return { url, fileName, fileSize };
+}
+
 function makeMessage(
   id: string,
   content: string,
   createdAt: string,
-  imageUrl: string | null = null,
-  fileName: string | null = null,
-  fileSize: number | null = null,
+  attachments: Attachment[] = [],
 ): Message {
   return {
     id,
     channelId: 'c1',
     author: { id: 'u1', username: 'alice', displayName: 'Alice', avatarUrl: null },
     content,
-    imageUrl,
-    fileName,
-    fileSize,
+    attachments,
     createdAt,
   };
 }
@@ -147,10 +151,10 @@ describe('MessageList', () => {
     expect(screen.getAllByTestId('date-divider')).toHaveLength(1);
   });
 
-  it('renders an image inline when the message has an imageUrl pointing to a known image extension', () => {
+  it('renders an image inline when an attachment URL has a known image extension', () => {
     mockHistory({
       data: {
-        pages: [[makeMessage('m1', '', '2026-01-01T00:00:00Z', '/api/v1/uploads/abc.png')]],
+        pages: [[makeMessage('m1', '', '2026-01-01T00:00:00Z', [attachment('/api/v1/uploads/abc.png')])]],
         pageParams: [undefined],
       },
     });
@@ -163,7 +167,7 @@ describe('MessageList', () => {
   it('opens a full-size lightbox when the image is clicked, and closes it on Escape', async () => {
     mockHistory({
       data: {
-        pages: [[makeMessage('m1', '', '2026-01-01T00:00:00Z', '/api/v1/uploads/abc.png')]],
+        pages: [[makeMessage('m1', '', '2026-01-01T00:00:00Z', [attachment('/api/v1/uploads/abc.png')])]],
         pageParams: [undefined],
       },
     });
@@ -181,7 +185,7 @@ describe('MessageList', () => {
   it('renders a PDF preview and download link (not an <img>)', () => {
     mockHistory({
       data: {
-        pages: [[makeMessage('m1', '', '2026-01-01T00:00:00Z', '/api/v1/uploads/abc.pdf', 'report.pdf', 20480)]],
+        pages: [[makeMessage('m1', '', '2026-01-01T00:00:00Z', [attachment('/api/v1/uploads/abc.pdf', 'report.pdf', 20480)])]],
         pageParams: [undefined],
       },
     });
@@ -211,5 +215,68 @@ describe('MessageList', () => {
 
     expect(screen.queryByRole('img')).not.toBeInTheDocument();
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('message-attachments')).not.toBeInTheDocument();
+  });
+
+  it('renders every attachment of a multi-attachment message, in order', () => {
+    mockHistory({
+      data: {
+        pages: [[makeMessage('m1', 'three shots', '2026-01-01T00:00:00Z', [
+          attachment('/api/v1/uploads/a.png', 'a.png'),
+          attachment('/api/v1/uploads/b.png', 'b.png'),
+          attachment('/api/v1/uploads/c.webp', 'c.webp'),
+        ])]],
+        pageParams: [undefined],
+      },
+    });
+
+    render(<MessageList channelId="c1" />);
+
+    expect(screen.getAllByRole('img').map((img) => img.getAttribute('src'))).toEqual([
+      '/api/v1/uploads/a.png',
+      '/api/v1/uploads/b.png',
+      '/api/v1/uploads/c.webp',
+    ]);
+    expect(screen.getByText('three shots')).toBeInTheDocument();
+  });
+
+  it('renders a mix of image and non-image attachments on the same message', () => {
+    mockHistory({
+      data: {
+        pages: [[makeMessage('m1', '', '2026-01-01T00:00:00Z', [
+          attachment('/api/v1/uploads/shot.png', 'shot.png'),
+          attachment('/api/v1/uploads/notes.zip', 'notes.zip', 2048),
+        ])]],
+        pageParams: [undefined],
+      },
+    });
+
+    render(<MessageList channelId="c1" />);
+
+    expect(screen.getByRole('img')).toHaveAttribute('src', '/api/v1/uploads/shot.png');
+    const link = screen.getByRole('link', { name: /notes\.zip/i });
+    expect(link).toHaveAttribute('href', '/api/v1/uploads/notes.zip');
+    expect(link).toHaveAttribute('download', 'notes.zip');
+  });
+
+  it('opens the clicked image in the lightbox, not the first one of the message', async () => {
+    mockHistory({
+      data: {
+        pages: [[makeMessage('m1', '', '2026-01-01T00:00:00Z', [
+          attachment('/api/v1/uploads/first.png'),
+          attachment('/api/v1/uploads/second.png'),
+        ])]],
+        pageParams: [undefined],
+      },
+    });
+    const user = userEvent.setup();
+
+    render(<MessageList channelId="c1" />);
+    await user.click(screen.getAllByRole('img')[1]);
+
+    expect(screen.getByAltText('Full-size attachment')).toHaveAttribute(
+      'src',
+      '/api/v1/uploads/second.png',
+    );
   });
 });

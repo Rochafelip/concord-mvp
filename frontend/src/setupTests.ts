@@ -20,3 +20,12 @@ if (typeof ResizeObserver === 'undefined') {
     disconnect() {}
   } as unknown as typeof ResizeObserver
 }
+
+// jsdom implements neither half of the object-URL API. The chat composer creates one per staged
+// attachment to render its thumbnail and revokes it when the attachment is dropped, so both need
+// to exist; the counter keeps the returned URLs distinct so a test can tell two previews apart.
+if (typeof URL.createObjectURL === 'undefined') {
+  let objectUrlCount = 0
+  URL.createObjectURL = () => `blob:mock-${++objectUrlCount}`
+  URL.revokeObjectURL = () => {}
+}

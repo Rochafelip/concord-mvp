@@ -122,8 +122,10 @@ public class ChannelService {
             throw new ForbiddenException("Only the server owner can delete channels");
         }
 
-        List<com.concordmvp.messages.Message> messages = messageRepository.findByChannelIdIn(List.of(channelId));
-        attachmentCleanupService.deleteForMessages(messages);
+        List<UUID> messageIds = messageRepository.findByChannelIdIn(List.of(channelId)).stream()
+                .map(com.concordmvp.messages.Message::getId)
+                .toList();
+        attachmentCleanupService.deleteForMessages(messageIds);
         messageRepository.deleteByChannelIdIn(List.of(channelId));
         channelRepository.delete(channel);
 

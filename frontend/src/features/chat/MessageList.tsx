@@ -4,7 +4,7 @@ import { Avatar } from '../../components/Avatar';
 import { Modal } from '../../components/Modal';
 import { useAuthStore } from '../auth/authStore';
 import { deleteMessage } from './api';
-import type { Message } from '../../types/message';
+import type { Attachment, Message } from '../../types/message';
 import { useMarkChannelAsRead } from '../channels/hooks';
 import { useMessageHistory } from './hooks';
 import { MessageContent } from './MessageContent';
@@ -134,8 +134,8 @@ try {
   }
 
   async function handleDeleteMessage(message: Message) {
-    const confirmText = message.imageUrl
-      ? 'Apagar este anexo e a mensagem?'
+    const confirmText = message.attachments.length > 0
+      ? 'Apagar esta mensagem e seus anexos?'
       : 'Apagar esta mensagem?';
     if (!window.confirm(confirmText)) return;
 
@@ -143,8 +143,8 @@ try {
     try {
       await deleteMessage(message.id);
     } catch {
-      const errorText = message.imageUrl
-        ? 'Não foi possível apagar o anexo. Tente novamente.'
+      const errorText = message.attachments.length > 0
+        ? 'Não foi possível apagar a mensagem e seus anexos. Tente novamente.'
         : 'Não foi possível apagar a mensagem. Tente novamente.';
       window.alert(errorText);
     } finally {
@@ -207,78 +207,31 @@ try {
                 </div>
                 <div className="group relative">
                   {message.content && <MessageContent content={message.content} />}
-                  {message.author.id === currentUserId && !message.imageUrl && (
+                  {message.author.id === currentUserId && (
                     <TextDeleteButton
                       disabled={deletingMessageId === message.id}
                       onClick={() => void handleDeleteMessage(message)}
                     />
                   )}
                 </div>
-                {message.imageUrl && isImageUrl(message.imageUrl) && (
-                  <div className="group relative mt-1 w-fit">
-                    <img
-                      src={message.imageUrl}
-                      alt={message.fileName ?? 'Attached image'}
-                      className="max-h-80 max-w-md cursor-pointer rounded"
-                      onClick={() => setLightboxUrl(message.imageUrl)}
-                    />
-                    {message.author.id === currentUserId && (
-                      <AttachmentDeleteButton
-                        disabled={deletingMessageId === message.id}
-                        onClick={() => void handleDeleteMessage(message)}
+                {message.attachments.length > 0 && (
+                  <div
+                    data-testid="message-attachments"
+                    className={
+                      message.attachments.length > 1
+                        ? 'mt-1 grid max-w-xl grid-cols-2 gap-2'
+                        : 'mt-1'
+                    }
+                  >
+                    {message.attachments.map((attachment, attachmentIndex) => (
+                      <MessageAttachment
+                        key={`${message.id}-${attachmentIndex}`}
+                        attachment={attachment}
+                        isGrouped={message.attachments.length > 1}
+                        onOpenImage={setLightboxUrl}
                       />
-                    )}
+                    ))}
                   </div>
-                )}
-                {message.imageUrl && isPdfUrl(message.imageUrl) && (
-                  <div className="group relative mt-1 w-full max-w-xl">
-                    <iframe
-                      src={message.imageUrl}
-                      title={message.fileName ?? 'PDF attachment'}
-                      className="h-96 w-full rounded border border-line bg-white"
-                    />
-                    <div className="mt-2 flex items-center gap-2">
-                      <FileText size={16} className="text-danger" aria-hidden="true" />
-                      <a href={message.imageUrl} download={message.fileName ?? 'document.pdf'} className="min-w-0 flex-1 truncate text-small text-brand hover:underline">
-                        {message.fileName ?? 'Abrir PDF'}
-                      </a>
-                      {message.fileSize != null && (
-                        <span className="flex-shrink-0 text-caption text-muted">
-                          {formatFileSize(message.fileSize)}
-                        </span>
-                      )}
-                      {message.author.id === currentUserId && (
-                        <AttachmentDeleteButton
-                          disabled={deletingMessageId === message.id}
-                          onClick={() => void handleDeleteMessage(message)}
-                        />
-                      )}
-                    </div>
-                  </div>
-                )}
-                {message.imageUrl && !isImageUrl(message.imageUrl) && (
-                  !isPdfUrl(message.imageUrl) && (
-                    <div className="group relative mt-1 w-fit">
-                      <a
-                        href={message.imageUrl}
-                        download={message.fileName ?? undefined}
-                        className="flex max-w-xs items-center gap-2 rounded border p-2 pr-11 text-body text-ink hover:bg-sidebar"
-                      >
-                        <span className="min-w-0 flex-1 truncate">{message.fileName ?? 'File'}</span>
-                        {message.fileSize != null && (
-                          <span className="flex-shrink-0 text-caption text-muted">
-                            {formatFileSize(message.fileSize)}
-                          </span>
-                        )}
-                      </a>
-                      {message.author.id === currentUserId && (
-                        <AttachmentDeleteButton
-                          disabled={deletingMessageId === message.id}
-                          onClick={() => void handleDeleteMessage(message)}
-                        />
-                      )}
-                    </div>
-                  )
                 )}
               </div>
             </div>
@@ -312,20 +265,75 @@ function TextDeleteButton({ disabled, onClick }: { disabled: boolean; onClick: (
 }
 
 
-function AttachmentDeleteButton({ disabled, onClick }: { disabled: boolean; onClick: () => void }) {
+/**
+ * One attachment inside a message. The backend only ever deletes a whole message, so there is no
+ * per-attachment delete here — the message-level button above covers it.
+ */
+function MessageAttachment({
+  attachment,
+  isGrouped,
+  onOpenImage,
+}: {
+  attachment: Attachment;
+  isGrouped: boolean;
+  onOpenImage: (url: string) => void;
+}) {
+  if (isImageUrl(attachment.url)) {
+    return (
+      <img
+        src={attachment.url}
+        alt={attachment.fileName ?? 'Attached image'}
+        // Grouped images are boxed to a uniform tile so a mixed set of aspect ratios still reads
+        // as one grid; a lone image keeps its natural shape.
+        className={
+          isGrouped
+            ? 'h-40 w-full cursor-pointer rounded object-cover'
+            : 'max-h-80 max-w-md cursor-pointer rounded'
+        }
+        onClick={() => onOpenImage(attachment.url)}
+      />
+    );
+  }
+
+  if (isPdfUrl(attachment.url)) {
+    return (
+      <div className="w-full">
+        <iframe
+          src={attachment.url}
+          title={attachment.fileName ?? 'PDF attachment'}
+          className={`w-full rounded border border-line bg-white ${isGrouped ? 'h-40' : 'h-96'}`}
+        />
+        <div className="mt-2 flex items-center gap-2">
+          <FileText size={16} className="text-danger" aria-hidden="true" />
+          <a
+            href={attachment.url}
+            download={attachment.fileName ?? 'document.pdf'}
+            className="min-w-0 flex-1 truncate text-small text-brand hover:underline"
+          >
+            {attachment.fileName ?? 'Abrir PDF'}
+          </a>
+          {attachment.fileSize != null && (
+            <span className="flex-shrink-0 text-caption text-muted">
+              {formatFileSize(attachment.fileSize)}
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <button
-      type="button"
-      aria-label="Apagar anexo"
-      title="Apagar anexo"
-      disabled={disabled}
-      onClick={(event) => {
-        event.stopPropagation();
-        onClick();
-      }}
-      className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-lg bg-black/65 text-white opacity-0 transition-opacity hover:bg-danger group-hover:opacity-100 disabled:cursor-wait disabled:opacity-60"
+    <a
+      href={attachment.url}
+      download={attachment.fileName ?? undefined}
+      className="flex max-w-xs items-center gap-2 rounded border p-2 text-body text-ink hover:bg-sidebar"
     >
-      <Trash2 size={15} aria-hidden="true" />
-    </button>
+      <span className="min-w-0 flex-1 truncate">{attachment.fileName ?? 'File'}</span>
+      {attachment.fileSize != null && (
+        <span className="flex-shrink-0 text-caption text-muted">
+          {formatFileSize(attachment.fileSize)}
+        </span>
+      )}
+    </a>
   );
 }
