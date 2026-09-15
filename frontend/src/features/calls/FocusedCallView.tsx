@@ -18,6 +18,8 @@ interface FocusedCallViewProps {
   onReturnToAutomatic: () => void;
   avatarUrlByUserId: Map<string, string | null | undefined>;
   deafenedByUserId: Map<string, boolean>;
+  canDisconnect?: boolean;
+  channelId?: string | null;
 }
 
 /**
@@ -37,6 +39,8 @@ export function FocusedCallView({
   onReturnToAutomatic,
   avatarUrlByUserId,
   deafenedByUserId,
+         canDisconnect,
+         channelId,
 }: FocusedCallViewProps) {
   const offCamera = participants.filter(
     (participant) =>
@@ -76,6 +80,8 @@ export function FocusedCallView({
                 participant={watched}
                 className={tileClassName}
                 onWatchClick={() => onRemoveWatch(target)}
+                      canDisconnect={canDisconnect}
+                      channelId={channelId}
               />
             ) : (
               <ParticipantTile
@@ -87,6 +93,8 @@ export function FocusedCallView({
                 }
                 className={tileClassName}
                 onWatchClick={() => onRemoveWatch(target)}
+                canDisconnect={canDisconnect}
+                channelId={channelId}
               />
             );
           })}

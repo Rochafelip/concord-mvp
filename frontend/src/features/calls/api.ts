@@ -30,3 +30,7 @@ export function getVoicePresence(serverId: string): Promise<VoicePresenceEntry[]
     .get<VoicePresencePayload[]>(`servers/${serverId}/voice-presence`)
     .then((entries) => entries.map(toVoicePresenceEntry));
 }
+
+export function disconnectVoiceParticipant(channelId: string, userId: string): Promise<void> {
+  return apiClient.post(`channels/${channelId}/voice/kick/${userId}`);
+}

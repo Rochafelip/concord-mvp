@@ -1,6 +1,7 @@
 import { Maximize2, Mic, MicOff, Minimize2, MonitorUp, PhoneOff } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import { voiceClient } from '../../services/voiceClient';
+import { disconnectVoiceParticipant } from './api';
 import type { VoiceParticipant } from '../../types/voice';
 import { useVoiceParticipants } from './hooks';
 import { VolumeControl } from './VolumeControl';
@@ -15,6 +16,8 @@ interface ScreenShareTileProps {
    * share from the call's watched set. Only wired on the non-fullscreen layout — see
    * docs/superpowers/specs/2026-09-09-call-grid-unification-multiwatch-design.md §5. */
   onWatchClick?: () => void;
+  canDisconnect?: boolean;
+  channelId?: string | null;
 }
 
 /**
@@ -46,10 +49,12 @@ interface ScreenShareTileProps {
  * alone in the "top layer." onWatchClick is deliberately not wired while fullscreen — exiting the
  * watched set would abruptly kill an active fullscreen session.
  */
-export function ScreenShareTile({ participant, className = '', onWatchClick }: ScreenShareTileProps) {
+export function ScreenShareTile({ participant, className = '', onWatchClick, canDisconnect = false, channelId = null }: ScreenShareTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [contextMenuOpen, setContextMenuOpen] = useState(false);
   const { screenShareTrack } = participant;
   const localParticipant = useVoiceParticipants().find((candidate) => candidate.isLocal);
 
@@ -88,6 +93,31 @@ export function ScreenShareTile({ participant, className = '', onWatchClick }: S
     event.stopPropagation();
   }
 
+  function handleContextMenu(event: MouseEvent<HTMLDivElement>) {
+    if (participant.isLocal || !canDisconnect || !channelId) return;
+    event.preventDefault();
+    setContextMenuOpen(true);
+  }
+
+  useEffect(() => {
+    if (!contextMenuOpen) return;
+
+    function handlePointerDown(event: PointerEvent) {
+      if (!contextMenuRef.current?.contains(event.target as Node)) setContextMenuOpen(false);
+    }
+
+    function handleKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key === 'Escape') setContextMenuOpen(false);
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [contextMenuOpen]);
+
   async function handleEnterFullscreen(event: MouseEvent) {
     stopPropagation(event);
     try {
@@ -122,10 +152,11 @@ export function ScreenShareTile({ participant, className = '', onWatchClick }: S
       aria-label={clickToRemove ? `Stop watching ${participant.name}'s screen` : undefined}
       onClick={clickToRemove ? onWatchClick : undefined}
       onKeyDown={handleKeyDown}
+      onContextMenu={handleContextMenu}
       className={
         isFullscreen
           ? 'fixed inset-0 z-50 flex items-center justify-center bg-gray-900'
-          : `relative flex w-full items-center justify-center overflow-hidden rounded bg-gray-900 ${className}`
+          : `group/participant-tile relative flex w-full items-center justify-center overflow-hidden rounded bg-gray-900 ${className}`
       }
     >
       <video ref={videoRef} muted autoPlay playsInline className="h-full w-full object-contain" />
@@ -147,7 +178,7 @@ export function ScreenShareTile({ participant, className = '', onWatchClick }: S
           </button>
           {!participant.isLocal && participant.screenShareHasAudio && participant.screenShareAudioEnabled && (
             <div
-              className="absolute right-1 top-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover/camera-grid:opacity-100"
+              className="pointer-events-none absolute right-1 top-1 opacity-0 transition-opacity group-hover/participant-tile:pointer-events-auto group-hover/participant-tile:opacity-100 group-focus-within/participant-tile:pointer-events-auto group-focus-within/participant-tile:opacity-100"
               onClick={stopPropagation}
               onKeyDown={stopPropagation}
             >
@@ -198,6 +229,20 @@ export function ScreenShareTile({ participant, className = '', onWatchClick }: S
             className="flex h-9 w-9 items-center justify-center rounded-full text-white hover:bg-danger/80"
           >
             <PhoneOff size={18} aria-hidden="true" />
+          </button>
+        </div>
+      )}
+      {contextMenuOpen && canDisconnect && !participant.isLocal && channelId && !isFullscreen && (
+        <div ref={contextMenuRef} className="absolute right-2 top-2 z-20 min-w-44 rounded border border-border bg-surface p-1 shadow-lg" onClick={stopPropagation}>
+          <button
+            type="button"
+            className="w-full rounded px-2 py-1.5 text-left text-caption text-danger hover:bg-danger/10"
+            onClick={() => {
+              void disconnectVoiceParticipant(channelId, participant.identity);
+              setContextMenuOpen(false);
+            }}
+          >
+            Disconnect from voice
           </button>
         </div>
       )}

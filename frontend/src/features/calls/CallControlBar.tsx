@@ -30,10 +30,11 @@ export function CallControlBar({ onLeave }: CallControlBarProps) {
 
   return (
     <>
-      <div className="absolute inset-x-2 bottom-[max(0.75rem,env(safe-area-inset-bottom))] flex flex-wrap items-center justify-center gap-1.5 rounded-2xl bg-black/70 px-2 py-1.5 sm:inset-x-0 sm:bottom-4 sm:rounded-full">
+      <div className="pointer-events-none absolute inset-x-2 bottom-[max(0.75rem,env(safe-area-inset-bottom))] flex flex-wrap items-center justify-center gap-1.5 rounded-2xl bg-black/70 px-2 py-1.5 opacity-0 transition-opacity group-hover/call-area:pointer-events-auto group-hover/call-area:opacity-100 group-focus-within/call-area:pointer-events-auto group-focus-within/call-area:opacity-100 sm:inset-x-0 sm:bottom-4 sm:rounded-full">
       <button
         type="button"
         aria-label={localParticipant.micEnabled ? 'Mute' : 'Unmute'}
+        title={localParticipant.micEnabled ? 'Mute' : 'Unmute'}
         onClick={() => voiceClient.toggleMute()}
         className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
       >
@@ -46,6 +47,7 @@ export function CallControlBar({ onLeave }: CallControlBarProps) {
       <button
         type="button"
         aria-label={suppressionEnabled ? 'Disable noise suppression' : 'Enable noise suppression'}
+        title={suppressionEnabled ? 'Disable noise suppression' : 'Enable noise suppression'}
         onClick={handleToggleNoiseSuppression}
         className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
       >
@@ -58,6 +60,7 @@ export function CallControlBar({ onLeave }: CallControlBarProps) {
       <button
         type="button"
         aria-label="Selecionar dispositivos de áudio"
+        title="Select audio devices"
         onClick={() => setShowDeviceSelector(true)}
         className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
       >
@@ -66,6 +69,7 @@ export function CallControlBar({ onLeave }: CallControlBarProps) {
       <button
         type="button"
         aria-label={localParticipant.cameraEnabled ? 'Camera off' : 'Camera on'}
+        title={localParticipant.cameraEnabled ? 'Turn camera off' : 'Turn camera on'}
         onClick={() => voiceClient.toggleCamera()}
         className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
       >
@@ -81,6 +85,7 @@ export function CallControlBar({ onLeave }: CallControlBarProps) {
           aria-label={
             localParticipant.screenShareAudioEnabled ? 'Mute shared screen audio' : 'Unmute shared screen audio'
           }
+          title={localParticipant.screenShareAudioEnabled ? 'Mute shared screen audio' : 'Unmute shared screen audio'}
           onClick={() => voiceClient.toggleScreenShareAudio()}
           className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
         >
@@ -94,6 +99,7 @@ export function CallControlBar({ onLeave }: CallControlBarProps) {
       <button
         type="button"
         aria-label="Leave call"
+        title="Leave call"
         onClick={onLeave}
         className="flex h-10 w-10 items-center justify-center rounded-full bg-danger/80 text-white hover:bg-danger"
       >

@@ -55,7 +55,7 @@ describe('FocusedCallView', () => {
     expect(screen.getByText(/Felipe/)).toBeInTheDocument();
   });
 
-  it('reveals a watched camera tile\'s volume control on hover over the whole watched area, not the tile', () => {
+  it('keeps a watched camera tile\'s volume control scoped to its own icon', () => {
     render(
       <FocusedCallView
         participants={[participant({ identity: 'u1', name: 'Felipe', isLocal: false, cameraEnabled: true })]}
@@ -70,9 +70,9 @@ describe('FocusedCallView', () => {
     );
 
     expect(screen.getByTestId('watched-area')).toHaveClass('group/camera-grid');
-    const wrapper = screen.getByRole('slider', { name: 'Volume for Felipe' }).parentElement?.parentElement;
-    expect(wrapper).toHaveClass('group-hover/camera-grid:opacity-100');
-    expect(wrapper).not.toHaveClass('group-hover:opacity-100');
+    const control = screen.getByRole('slider', { name: 'Volume for Felipe' }).parentElement;
+    expect(control).toHaveClass('group/volume-control');
+    expect(control).not.toHaveClass('group/camera-grid');
   });
 
   it('reveals a watched share tile\'s fullscreen button on hover over the whole watched area', () => {

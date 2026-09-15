@@ -1,8 +1,9 @@
 import { ConnectionQuality } from 'livekit-client';
-import { useEffect, useRef, type KeyboardEvent, type MouseEvent } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import { Avatar } from '../../components/Avatar';
 import { Spinner } from '../../components/Spinner';
 import { voiceClient } from '../../services/voiceClient';
+import { disconnectVoiceParticipant } from './api';
 import type { VoiceParticipant } from '../../types/voice';
 import { QUALITY_ICON } from './connectionQuality';
 import { MicStatusIcon } from './MicStatusIcon';
@@ -28,6 +29,8 @@ interface ParticipantTileProps {
    * adds this camera to the call's watched set. See
    * docs/superpowers/specs/2026-09-09-call-grid-unification-multiwatch-design.md §2. */
   onWatchClick?: () => void;
+  canDisconnect?: boolean;
+  channelId?: string | null;
 }
 
 const CONNECTION_ISSUE_QUALITIES: ConnectionQuality[] = [ConnectionQuality.Poor, ConnectionQuality.Lost];
@@ -47,14 +50,8 @@ const CONNECTION_ISSUE_QUALITIES: ConnectionQuality[] = [ConnectionQuality.Poor,
  * The tile background and control-bar chrome (black/white overlays) stay literal colors
  * rather than tokens — they sit on top of live video and must read the same in both themes.
  *
- * The volume-control overlay is hidden until the mouse enters the surrounding call area, which
- * is why it reveals on `group-hover/camera-grid` rather than this tile's own hover: the trigger
- * is one zone per call area — ParticipantGrid's container and FocusedCallView's watched area,
- * both of which carry Tailwind's named `group/camera-grid` class — so hovering anywhere in it
- * reveals every visible tile's control at once instead of one card at a time. See
- * docs/superpowers/specs/2026-09-09-call-grid-controls-hover-design.md. Any future caller must
- * render this tile inside such a container, or the control stays reachable by Tab only
- * (focus-within), never by mouse.
+ * Remote volume controls are scoped to each participant tile: hovering a tile reveals its volume
+ * icon, and VolumeControl reveals the slider only when the pointer is over that icon.
  */
 export function ParticipantTile({
   participant,
@@ -63,8 +60,12 @@ export function ParticipantTile({
   className = '',
   showVolumeControl = true,
   onWatchClick,
+  canDisconnect = false,
+  channelId = null,
 }: ParticipantTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
+  const [contextMenuOpen, setContextMenuOpen] = useState(false);
   const { videoTrack } = participant;
   // livekit-client mutes the camera publication rather than unpublishing it when the camera is
   // turned off, so `videoTrack` stays non-null after that — `cameraEnabled` (isMuted-aware) is
@@ -96,9 +97,34 @@ export function ParticipantTile({
     event.stopPropagation();
   }
 
+  function handleContextMenu(event: MouseEvent<HTMLDivElement>) {
+    if (participant.isLocal || !canDisconnect || !channelId) return;
+    event.preventDefault();
+    setContextMenuOpen(true);
+  }
+
+  useEffect(() => {
+    if (!contextMenuOpen) return;
+
+    function handlePointerDown(event: PointerEvent) {
+      if (!contextMenuRef.current?.contains(event.target as Node)) setContextMenuOpen(false);
+    }
+
+    function handleKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key === 'Escape') setContextMenuOpen(false);
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [contextMenuOpen]);
+
   return (
     <div
-      className={`relative flex min-h-0 min-w-0 items-center justify-center overflow-hidden rounded ${className} ${
+      className={`group/participant-tile relative flex min-h-0 min-w-0 items-center justify-center overflow-hidden rounded ${className} ${
         showVideo ? 'bg-gray-800' : 'bg-gray-800'
       } ${participant.speaking ? 'ring-2 ring-brand/50' : ''}`}
       role={onWatchClick ? 'button' : undefined}
@@ -106,6 +132,7 @@ export function ParticipantTile({
       aria-label={onWatchClick ? `Focus on ${participant.name}'s camera` : undefined}
       onClick={onWatchClick}
       onKeyDown={handleKeyDown}
+      onContextMenu={handleContextMenu}
     >
       {showVideo ? (
         <video ref={videoRef} muted autoPlay playsInline className="block h-full w-full object-cover" />
@@ -137,7 +164,7 @@ export function ParticipantTile({
 
       {!participant.isLocal && showVolumeControl && (
         <div
-          className="absolute right-1 top-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover/camera-grid:opacity-100"
+          className="pointer-events-none absolute right-1 top-1 opacity-0 transition-opacity group-hover/participant-tile:pointer-events-auto group-hover/participant-tile:opacity-100 group-focus-within/participant-tile:pointer-events-auto group-focus-within/participant-tile:opacity-100"
           onClick={stopPropagation}
           onKeyDown={stopPropagation}
         >
@@ -145,6 +172,20 @@ export function ParticipantTile({
             label={participant.name}
             onVolumeChange={(volume) => voiceClient.setParticipantVolume(participant.identity, volume)}
           />
+        </div>
+      )}
+      {contextMenuOpen && canDisconnect && !participant.isLocal && channelId && (
+        <div ref={contextMenuRef} className="absolute right-2 top-2 z-20 min-w-44 rounded border border-border bg-surface p-1 shadow-lg" onClick={stopPropagation}>
+          <button
+            type="button"
+            className="w-full rounded px-2 py-1.5 text-left text-caption text-danger hover:bg-danger/10"
+            onClick={() => {
+              void disconnectVoiceParticipant(channelId, participant.identity);
+              setContextMenuOpen(false);
+            }}
+          >
+            Disconnect from voice
+          </button>
         </div>
       )}
     </div>

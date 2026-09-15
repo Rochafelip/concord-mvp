@@ -1,3 +1,4 @@
+import { Volume2, VolumeX } from 'lucide-react';
 import { useState, type ChangeEvent } from 'react';
 
 interface VolumeControlProps {
@@ -36,14 +37,14 @@ export function VolumeControl({ label, onVolumeChange, defaultMuted = false }: V
   }
 
   return (
-    <div className="flex items-center gap-1 rounded bg-black/60 px-1.5 py-1">
+    <div className="group/volume-control relative flex items-center rounded bg-black/60 px-1.5 py-1">
       <button
         type="button"
         aria-label={muted ? `Unmute ${label} for you` : `Mute ${label} for you`}
         onClick={handleMuteToggle}
-        className="text-caption leading-none text-white"
+        className="flex h-5 w-5 items-center justify-center rounded text-white hover:bg-white/10"
       >
-        {muted ? '🔇' : '🔊'}
+        {muted ? <VolumeX size={14} aria-hidden="true" /> : <Volume2 size={14} aria-hidden="true" />}
       </button>
       <input
         type="range"
@@ -52,7 +53,7 @@ export function VolumeControl({ label, onVolumeChange, defaultMuted = false }: V
         max={100}
         value={muted ? 0 : Math.round(volume * 100)}
         onChange={handleSliderChange}
-        className="h-1 w-16"
+        className="pointer-events-none absolute right-full mr-1 h-1 w-16 origin-right opacity-0 transition-opacity group-hover/volume-control:pointer-events-auto group-hover/volume-control:opacity-100 group-focus-within/volume-control:pointer-events-auto group-focus-within/volume-control:opacity-100"
       />
     </div>
   );

@@ -190,14 +190,12 @@ describe('ScreenShareTile', () => {
       expect(button).not.toHaveClass('group-hover:opacity-100');
     });
 
-    it('reveals the volume control on hover over the surrounding call area, not this tile', () => {
+    it('reveals the volume icon when this share tile is hovered', () => {
       render(<ScreenShareTile participant={sharingParticipant({ screenShareHasAudio: true })} />);
 
       const wrapper = screen.getByRole('slider', { name: "Volume for Felipe's screen" }).parentElement?.parentElement;
       expect(wrapper).toHaveClass('opacity-0');
-      expect(wrapper).toHaveClass('group-hover/camera-grid:opacity-100');
-      expect(wrapper).toHaveClass('focus-within:opacity-100');
-      expect(wrapper).not.toHaveClass('group-hover:opacity-100');
+      expect(wrapper).toHaveClass('group-hover/participant-tile:opacity-100');
     });
   });
 

@@ -47,7 +47,7 @@ export function CallView({ channel }: CallViewProps) {
         <Volume2 size={16} className="text-muted" aria-hidden="true" />
         <span className="text-heading font-semibold text-ink">{channel.name}</span>
       </div>
-      <div className="relative flex flex-1 flex-col overflow-hidden bg-gray-950">
+      <div className="group/call-area relative flex flex-1 flex-col overflow-hidden bg-gray-950">
         {joinVoiceMutation.error && (
           <div className="absolute left-4 right-4 top-4 z-10 rounded border border-warning/40 bg-warning/15 p-3 text-body text-ink">
             {joinVoiceMutation.error instanceof ApiError
