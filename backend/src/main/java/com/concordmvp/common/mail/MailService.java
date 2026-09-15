@@ -11,6 +11,11 @@ import org.springframework.stereotype.Service;
 /**
  * The two transactional emails this application sends.
  *
+ * The sender identity (address, display name, optional Reply-To) is configuration rather than
+ * constants: the address has to track whatever mailbox the deployment actually authenticates as,
+ * and a blank display name is what makes a message show up as a bare address in a client, which
+ * reads as bulk mail. See infrastructure/EMAIL.md.
+ *
  * Every send is async and every failure is swallowed after logging. A signup or a reset request
  * must never fail because SMTP was unreachable -- the user's account works either way and there
  * is a resend button, so surfacing a delivery error would only invite them to retry a request
@@ -23,15 +28,21 @@ public class MailService {
 
     private final JavaMailSender sender;
     private final String from;
+    private final String fromName;
+    private final String replyTo;
     private final boolean enabled;
 
     public MailService(
             JavaMailSender sender,
             @Value("${app.mail.from:}") String from,
+            @Value("${app.mail.from-name:}") String fromName,
+            @Value("${app.mail.reply-to:}") String replyTo,
             @Value("${app.mail.enabled:true}") boolean enabled
     ) {
         this.sender = sender;
         this.from = from;
+        this.fromName = fromName;
+        this.replyTo = replyTo;
         this.enabled = enabled;
     }
 
@@ -57,11 +68,22 @@ public class MailService {
         try {
             var message = sender.createMimeMessage();
             var helper = new MimeMessageHelper(message, true, "UTF-8");
-            helper.setFrom(from);
+            if (fromName.isBlank()) {
+                helper.setFrom(from);
+            } else {
+                helper.setFrom(from, fromName);
+            }
+            if (!replyTo.isBlank()) {
+                helper.setReplyTo(replyTo);
+            }
             helper.setTo(to);
             helper.setSubject(subject);
             helper.setText(plainText(displayName, link, expiryMessage),
                     html(displayName, link, buttonLabel, expiryMessage));
+            // RFC 3834: says outright that a machine sent this and that nobody is waiting for a
+            // reply. Receivers use it to suppress autoresponders, and its absence on obviously
+            // automated mail is one of the small signals filters weigh.
+            message.setHeader("Auto-Submitted", "auto-generated");
             sender.send(message);
         } catch (Exception e) {
             log.error("Failed to send '{}' to {}", subject, to, e);

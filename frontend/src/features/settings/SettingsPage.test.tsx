@@ -8,6 +8,12 @@ import * as api from './api';
 import { SettingsPage } from './SettingsPage';
 
 vi.mock('./api');
+vi.mock('../../services/deviceManager', () => ({
+  refreshDevices: vi.fn().mockResolvedValue({ cameras: [], microphones: [], speakers: [], error: null }),
+  getPreferred: vi.fn(() => null),
+  setPreferred: vi.fn(),
+  watchDeviceChanges: vi.fn(() => () => {}),
+}));
 
 function renderSettingsPage() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });

@@ -8,6 +8,13 @@ see [`DEPLOY.md`](./DEPLOY.md). For a quick, no-router-config-required
 review deployment behind a Cloudflare Quick Tunnel, see
 [`VM_REVIEW.md`](./VM_REVIEW.md).
 
+> **Este deploy evoluiu desde que o documento foi escrito.** Ele não usa mais o
+> IP público cru nem o certificado self-signed dos passos 7-8: hoje roda com um
+> hostname DuckDNS e um certificado Let's Encrypt real, descritos em
+> [`DUCKDNS.md`](./DUCKDNS.md). Roteador, firewall e portas (passos 2, 4 e 5)
+> continuam valendo exatamente como estão aqui, e é por isso que este documento
+> segue sendo a referência para eles.
+
 This path uses the base `docker-compose.yml` unmodified — the same
 self-signed-TLS, self-hosted-LiveKit design documented in
 `docs/DECISIONS.md` D16 ("no domain yet"), which already assumes "some
@@ -196,6 +203,11 @@ placeholders for anything reachable from the internet:
 
 ## 7. Generate the self-signed certificate
 
+> Pule os passos 7 e 8 se estiver seguindo [`DUCKDNS.md`](./DUCKDNS.md), que é o
+> que este deploy usa. Ele emite um certificado Let's Encrypt de verdade — sem o
+> aviso de segurança do navegador — e preenche os mesmos
+> `nginx/certs/selfsigned.{crt,key}` que os passos abaixo gerariam.
+
 ```bash
 mkdir -p nginx/certs
 openssl req -x509 -nodes -newkey rsa:2048 \
@@ -254,7 +266,14 @@ workaround applies to you.
 ## If your public IP changes
 
 Residential PPPoE connections can get a new public IP on reconnect.
-When that happens, three places need updating, then a restart:
+Com [`DUCKDNS.md`](./DUCKDNS.md), o serviço `duckdns` do `docker-compose.yml`
+mantém o registro A apontado para o IP atual sozinho, e o certificado é emitido
+para o hostname, não para o IP — então `turn.domain` e `LIVEKIT_PUBLIC_URL` são
+ajustados **uma vez** para o hostname DuckDNS e nada mais precisa mudar quando o
+IP trocar.
+
+No caminho original com IP cru, três lugares precisam ser atualizados a cada
+troca, seguidos de um restart:
 
 1. Regenerate the self-signed cert (step 7) with the new IP in
    `-subj "/CN=..."`.
@@ -298,4 +317,5 @@ covered here — see `docs/OPEN_QUESTIONS.md` Q32 and
 `docs/DATABASE.md` §40. Dynamic DNS is also out of scope — this runbook
 uses the raw public IP and documents the manual update procedure above;
 if IP changes turn out to be frequent enough to be annoying, adding a
-DDNS hostname later is a reasonable follow-up.
+DDNS hostname later is a reasonable follow-up. Foi exatamente o que
+aconteceu — veja [`DUCKDNS.md`](./DUCKDNS.md).

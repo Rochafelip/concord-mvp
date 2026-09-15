@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { ConnectionQuality } from 'livekit-client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { voiceClient } from '../../services/voiceClient';
+import { useDeviceStore } from '../../stores/deviceStore';
 import { useVoiceStore } from '../../stores/voiceStore';
 import type { VoiceParticipant } from '../../types/voice';
 import * as preference from '../settings/audio/noiseSuppressionPreference';
@@ -14,9 +15,25 @@ vi.mock('../../services/voiceClient', () => ({
     toggleCamera: vi.fn(),
     toggleScreenShareAudio: vi.fn(),
     setNoiseSuppressionEnabled: vi.fn().mockResolvedValue(undefined),
+    flipCamera: vi.fn().mockResolvedValue(undefined),
   },
 }));
 vi.mock('../settings/audio/noiseSuppressionPreference');
+vi.mock('../../services/deviceManager', () => ({
+  refreshDevices: vi.fn().mockResolvedValue({ cameras: [], microphones: [], speakers: [], error: null }),
+  getPreferred: vi.fn(() => null),
+  setPreferred: vi.fn(),
+  watchDeviceChanges: vi.fn(() => () => {}),
+}));
+
+function mockMatchMedia(matches: boolean) {
+  window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+    matches,
+    media: query,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  })) as unknown as typeof window.matchMedia;
+}
 
 function localParticipant(overrides: Partial<VoiceParticipant> = {}): VoiceParticipant {
   return {
@@ -42,9 +59,11 @@ describe('CallControlBar', () => {
     vi.mocked(voiceClient.toggleCamera).mockClear();
     vi.mocked(voiceClient.toggleScreenShareAudio).mockClear();
     vi.mocked(voiceClient.setNoiseSuppressionEnabled).mockClear();
+    vi.mocked(voiceClient.flipCamera).mockReset().mockResolvedValue(undefined);
     vi.mocked(preference.getNoiseSuppressionPreference).mockReturnValue(true);
     vi.mocked(preference.setNoiseSuppressionPreference).mockReset();
     useVoiceStore.setState({ participants: [] });
+    useDeviceStore.setState({ selectedCameraId: null });
   });
 
   it('renders nothing when there is no local participant yet', () => {
@@ -144,6 +163,45 @@ describe('CallControlBar', () => {
     await user.click(screen.getByRole('button', { name: 'Mute shared screen audio' }));
 
     expect(voiceClient.toggleScreenShareAudio).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not render the flip-camera button on desktop widths, even with the camera on', () => {
+    mockMatchMedia(false);
+    useVoiceStore.setState({ participants: [localParticipant({ cameraEnabled: true })] });
+    render(<CallControlBar onLeave={vi.fn()} />);
+
+    expect(screen.queryByRole('button', { name: 'Flip camera' })).not.toBeInTheDocument();
+  });
+
+  it('does not render the flip-camera button on mobile when the camera is off', () => {
+    mockMatchMedia(true);
+    useVoiceStore.setState({ participants: [localParticipant({ cameraEnabled: false })] });
+    render(<CallControlBar onLeave={vi.fn()} />);
+
+    expect(screen.queryByRole('button', { name: 'Flip camera' })).not.toBeInTheDocument();
+  });
+
+  it('renders the flip-camera button on mobile with the camera on, and clicking it calls voiceClient.flipCamera', async () => {
+    const user = userEvent.setup();
+    mockMatchMedia(true);
+    useVoiceStore.setState({ participants: [localParticipant({ cameraEnabled: true })] });
+    render(<CallControlBar onLeave={vi.fn()} />);
+
+    await user.click(screen.getByRole('button', { name: 'Flip camera' }));
+
+    expect(voiceClient.flipCamera).toHaveBeenCalledTimes(1);
+  });
+
+  it('syncs the device store selection to whatever camera flipCamera actually activated', async () => {
+    const user = userEvent.setup();
+    mockMatchMedia(true);
+    vi.mocked(voiceClient.flipCamera).mockResolvedValue('front-cam');
+    useVoiceStore.setState({ participants: [localParticipant({ cameraEnabled: true })] });
+    render(<CallControlBar onLeave={vi.fn()} />);
+
+    await user.click(screen.getByRole('button', { name: 'Flip camera' }));
+
+    expect(useDeviceStore.getState().selectedCameraId).toBe('front-cam');
   });
 
   it('clicking Leave call calls the passed-in onLeave handler', async () => {

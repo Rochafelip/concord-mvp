@@ -1,9 +1,28 @@
-import { AudioLines, AudioLinesOff, Mic, MicOff, PhoneOff, Settings, Video, VideoOff, Volume2, VolumeX } from 'lucide-react';
-import { useState } from 'react';
+import { AudioLines, AudioLinesOff, Mic, MicOff, PhoneOff, RefreshCw, Settings, Video, VideoOff, Volume2, VolumeX } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { voiceClient } from '../../services/voiceClient';
+import { useDeviceStore } from '../../stores/deviceStore';
 import { getNoiseSuppressionPreference, setNoiseSuppressionPreference } from '../settings/audio/noiseSuppressionPreference';
-import { AudioDeviceSelector } from './AudioDeviceSelector';
+import { DeviceSettingsPanel } from './DeviceSettingsPanel';
 import { useVoiceParticipants } from './hooks';
+
+const MOBILE_QUERY = '(max-width: 640px)';
+
+/** Same guarded-matchMedia pattern as ServerLayout's mobile check — jsdom has no matchMedia. */
+function useIsMobile(): boolean {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return;
+    const mediaQuery = window.matchMedia(MOBILE_QUERY);
+    const update = () => setIsMobile(mediaQuery.matches);
+    update();
+    mediaQuery.addEventListener('change', update);
+    return () => mediaQuery.removeEventListener('change', update);
+  }, []);
+
+  return isMobile;
+}
 
 interface CallControlBarProps {
   onLeave: () => void;
@@ -18,6 +37,7 @@ export function CallControlBar({ onLeave }: CallControlBarProps) {
   const localParticipant = useVoiceParticipants().find((participant) => participant.isLocal);
   const [suppressionEnabled, setSuppressionEnabled] = useState(getNoiseSuppressionPreference);
   const [showDeviceSelector, setShowDeviceSelector] = useState(false);
+  const isMobile = useIsMobile();
 
   if (!localParticipant) return null;
 
@@ -26,6 +46,11 @@ export function CallControlBar({ onLeave }: CallControlBarProps) {
     setSuppressionEnabled(next);
     setNoiseSuppressionPreference(next);
     void voiceClient.setNoiseSuppressionEnabled(next);
+  }
+
+  async function handleFlipCamera() {
+    const deviceId = await voiceClient.flipCamera();
+    if (deviceId) useDeviceStore.getState().syncActiveCamera(deviceId);
   }
 
   return (
@@ -59,8 +84,8 @@ export function CallControlBar({ onLeave }: CallControlBarProps) {
       </button>
       <button
         type="button"
-        aria-label="Selecionar dispositivos de áudio"
-        title="Select audio devices"
+        aria-label="Selecionar dispositivos"
+        title="Select devices"
         onClick={() => setShowDeviceSelector(true)}
         className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
       >
@@ -79,6 +104,17 @@ export function CallControlBar({ onLeave }: CallControlBarProps) {
           <VideoOff size={16} aria-hidden="true" />
         )}
       </button>
+      {isMobile && localParticipant.cameraEnabled && (
+        <button
+          type="button"
+          aria-label="Flip camera"
+          title="Flip camera"
+          onClick={() => void handleFlipCamera()}
+          className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
+        >
+          <RefreshCw size={16} aria-hidden="true" />
+        </button>
+      )}
       {localParticipant.screenShareEnabled && localParticipant.screenShareHasAudio && (
         <button
           type="button"
@@ -106,7 +142,7 @@ export function CallControlBar({ onLeave }: CallControlBarProps) {
         <PhoneOff size={16} aria-hidden="true" />
       </button>
     </div>
-    <AudioDeviceSelector isOpen={showDeviceSelector} onClose={() => setShowDeviceSelector(false)} />
+    <DeviceSettingsPanel isOpen={showDeviceSelector} onClose={() => setShowDeviceSelector(false)} />
   </>
   );
 }

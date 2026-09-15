@@ -365,3 +365,51 @@ verify against beyond local `docker compose up`. Branch protection (PR, 1 approv
 and passing CI) applies to both `dev` and `master`. If a second physical environment
 is ever added, a real "deploy DEV" stage can be introduced without changing the
 production path.
+
+---
+
+## D19 — Ficar no DuckDNS: SPF/DKIM/DMARC próprios não são possíveis, entregabilidade melhora só parcialmente
+
+Date: 2026-09-15
+
+**Context**: O card "Atualizar Certificado e Ajustar Entrega de E-mails" pedia
+SPF, DKIM e DMARC configurados no domínio oficial e um remetente alinhado a ele.
+O levantamento do estado atual mostrou três coisas.
+
+Primeiro, o certificado em si estava válido (Let's Encrypt, `notAfter`
+2026-12-03), mas a renovação estava duplamente quebrada: não havia entrada de
+cron nenhuma, e `duckdns/renew.sh` falhava ao ser executado, porque o
+`acme-state/` fora criado por uma execução como root enquanto o script roda com
+o uid do usuário. O script também recarregava o nginx e reiniciava o LiveKit a
+cada execução, o que sob um cron diário derrubaria as chamadas de voz ativas uma
+vez por dia. E `infrastructure/.gitignore` ignorava `duckdns/` inteiro, de forma
+que o próprio script de renovação nunca esteve versionado.
+
+Segundo, a autenticação do e-mail **não** estava quebrada. O envio sai do SMTP do
+Gmail com `From` `@gmail.com`, então SPF, DKIM e DMARC já passam e já alinham.
+
+Terceiro, e decisivo: a API do DuckDNS escreve apenas A/AAAA e **um** TXT no
+ápice do subdomínio — consumido pelo desafio DNS-01 da renovação. Ela não cria
+labels filhos, e DKIM exige `<seletor>._domainkey.` e DMARC exige `_dmarc.`.
+Publicar esses registros em `concordmvp.duckdns.org` é impossível.
+
+**Decision**: Permanecer em `concordmvp.duckdns.org` com o Gmail gratuito, em vez
+de registrar um domínio (~R$40-60/ano). Consertar a renovação do certificado por
+completo e aplicar a higiene de remetente que independe do domínio: nome de
+exibição, `Reply-To` opcional, `Auto-Submitted: auto-generated` e `Message-ID` que
+não vaza o id do container.
+
+**Consequences**: Quatro critérios de aceite do card ficam **não atendidos** e não
+são atendíveis nesta configuração: SPF próprio, DKIM próprio, DMARC próprio e
+remetente no domínio oficial. A redução de spam é parcial por um motivo concreto:
+os e-mails continuam carregando links para `https://concordmvp.duckdns.org:45678`,
+um host de DNS dinâmico em porta não-padrão, que é o sinal de maior peso contra a
+entrega — `duckdns.org` é amplamente usado em phishing e aparece em blocklists de
+URI. Nenhuma mudança de código altera isso.
+
+Registrar um domínio destrava os quatro critérios de uma vez e é a única rota que
+os atende; `infrastructure/EMAIL.md` traz os registros DNS exatos e o
+procedimento, para que a migração seja mecânica quando for decidida. Um `From` no
+domínio novo exige também trocar o Gmail gratuito por um serviço que assine DKIM
+com esse domínio — manter o Gmail faria o DMARC **falhar**, resultado pior que o
+atual.
