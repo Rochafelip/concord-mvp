@@ -94,6 +94,24 @@ antes/depois da execução. Assim, uma execução anterior que renovou mas falho
 meio da cópia é corrigida na execução seguinte, em vez de deixar o nginx servindo
 um certificado velho até a próxima janela de renovação.
 
+### O acme.sh se auto-atualiza a cada execução
+
+A imagem `neilpang/acme.sh` vem com auto-upgrade ligado, então toda execução
+consulta o GitHub e, quando há versão nova, baixa e instala o acme.sh master
+dentro de `acme-state/` antes de renovar:
+
+```
+[...] Downloading https://github.com/acmesh-official/acme.sh/archive/master.tar.gz
+[...] Automatically upgraded to: 3.1.5
+```
+
+Nas execuções seguintes isso vira `Already up to date!` e nada é baixado. Duas
+consequências práticas: a renovação depende do GitHub estar acessível, e a versão
+do acme.sh usada não é a fixada na tag da imagem, mas a atual do repositório
+upstream. Para um deploy entre amigos isso é aceitável e é o padrão da imagem;
+se algum dia incomodar, `--auto-upgrade 0` congela a versão — ao custo de ter que
+atualizar manualmente quando o protocolo ACME mudar.
+
 ### Agendamento
 
 O script é idempotente e barato, então roda todo dia:
