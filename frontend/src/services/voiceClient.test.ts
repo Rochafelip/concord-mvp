@@ -823,6 +823,26 @@ describe('voiceClient', () => {
     expect(micElement.volume).toBe(1); // untouched default — the setter found nothing to act on
   });
 
+  it('does not carry a volume set in one call over into the next one', async () => {
+    await connectVoice('channel-1', 'token-a', 'wss://example.test/livekit');
+    voiceClient.setParticipantVolume('bob', 0.4);
+
+    await connectVoice('channel-2', 'token-b', 'wss://example.test/livekit');
+    const micElement = document.createElement('audio');
+    const track = {
+      kind: 'audio',
+      sid: 'track-mic',
+      source: 'microphone',
+      attach: vi.fn().mockReturnValue(micElement),
+      detach: vi.fn(),
+    };
+    handlerFor(roomInstances[1], 'trackSubscribed')(track, {}, { identity: 'bob', name: 'Bob' });
+
+    // Saved levels are restored on re-subscribe within a call, but the switch cleared them, so
+    // Bob's track comes up at the default rather than at channel-1's 0.4.
+    expect(micElement.volume).toBe(1);
+  });
+
   it('turning the mic on while deafened clears deafened state and unmutes remote audio', async () => {
     await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
     const room = roomInstances[0];

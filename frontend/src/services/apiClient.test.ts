@@ -2,12 +2,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAuthStore } from '../features/auth/authStore';
 import { ApiError, apiClient } from './apiClient';
 
+// `headers` and `text` are part of the shape request() actually consumes on the success path:
+// since 2108062 it checks content-length and parses response.text() rather than response.json().
+// A real Response always has both; a stub without them throws before the assertion runs.
 function mockFetchResponse(body: unknown, init: { status: number; ok: boolean }) {
   return {
     ok: init.ok,
     status: init.status,
     statusText: 'Error',
+    headers: new Headers(),
     json: () => Promise.resolve(body),
+    text: () => Promise.resolve(body === undefined ? '' : JSON.stringify(body)),
   } as Response;
 }
 

@@ -177,6 +177,12 @@ class VoiceClient {
     // round-trip — routine on every channel switch, not just a final "leave".
     this.audioElements.forEach((element) => element.remove());
     this.audioElements.clear();
+    // Per-listener volume choices are scoped to the call they were made in — 262415b's own commit
+    // message says these are "cleared on disconnect", but it only ever added the saving side, so
+    // without this they outlive the room: handleTrackSubscribed would reapply a level set in a
+    // different channel to a freshly subscribed track, and the maps grew for the whole session.
+    this.participantVolumes.clear();
+    this.screenShareVolumes.clear();
     useVoiceStore.getState().reset();
   }
 
