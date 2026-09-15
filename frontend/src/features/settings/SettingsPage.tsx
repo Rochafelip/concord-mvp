@@ -10,6 +10,7 @@ import { useNotificationStore } from '../../stores/notificationStore';
 import { PasswordRequirements } from '../auth/PasswordRequirements';
 import { isPasswordValid } from '../auth/passwordPolicy';
 import { AudioSettingsSection } from './audio/AudioSettingsSection';
+import { VideoVoiceSettingsSection } from './audio/VideoVoiceSettingsSection';
 import { useChangePassword, useRemoveAvatar, useUpdateProfile, useUploadAvatar } from './hooks';
 
 const NEW_PASSWORD_REQUIREMENTS_ID = 'new-password-requirements';
@@ -257,6 +258,7 @@ export function SettingsPage() {
         </form>
 
         <AudioSettingsSection />
+        <VideoVoiceSettingsSection />
       </div>
     </div>
   );

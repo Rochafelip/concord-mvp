@@ -40,6 +40,7 @@ const {
     );
     disconnect = vi.fn().mockResolvedValue(undefined);
     on = vi.fn().mockReturnThis();
+    switchActiveDevice = vi.fn().mockResolvedValue(true);
     remoteParticipants = new Map();
     localParticipant = {
       identity: 'local-user',
@@ -73,6 +74,7 @@ const {
         ():
           | { isMuted: boolean; mute: () => unknown; unmute: () => unknown }
           | { audioTrack: { setProcessor: (processor: unknown) => Promise<void>; stopProcessor: () => Promise<void> } }
+          | { videoTrack: { restartTrack: (options: { facingMode: string }) => Promise<void> } }
           | undefined => undefined,
       ),
     };
@@ -1414,6 +1416,83 @@ describe('voiceClient', () => {
       // stale first connect() would read `this.room` (by then reassigned to room2) and apply the
       // processor to room2's track a second, redundant time.
       expect(track2.setProcessor).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('device management', () => {
+    beforeEach(() => {
+      // Other tests in this file may leave `voiceClient` connected without disconnecting
+      // (there's no global afterEach for it) — start each of these from a known clean state.
+      voiceClient.disconnect();
+    });
+
+    it('reports not being in a call before connecting', () => {
+      expect(voiceClient.isInCall()).toBe(false);
+    });
+
+    it('reports being in a call once connected', async () => {
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+      expect(voiceClient.isInCall()).toBe(true);
+    });
+
+    it('switches the microphone device via room.switchActiveDevice', async () => {
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+      const room = roomInstances[0];
+
+      await voiceClient.setMicrophoneDevice('mic-2');
+
+      expect(room.switchActiveDevice).toHaveBeenCalledWith('audioinput', 'mic-2');
+    });
+
+    it('switches the speaker device via room.switchActiveDevice', async () => {
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+      const room = roomInstances[0];
+
+      await voiceClient.setSpeakerDevice('speaker-2');
+
+      expect(room.switchActiveDevice).toHaveBeenCalledWith('audiooutput', 'speaker-2');
+    });
+
+    it('switches the camera device via room.switchActiveDevice', async () => {
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+      const room = roomInstances[0];
+
+      await voiceClient.setCameraDevice('cam-2');
+
+      expect(room.switchActiveDevice).toHaveBeenCalledWith('videoinput', 'cam-2');
+    });
+
+    it('does nothing when switching devices without an active room', async () => {
+      await voiceClient.setMicrophoneDevice('mic-2');
+      await voiceClient.setSpeakerDevice('speaker-2');
+      await voiceClient.setCameraDevice('cam-2');
+
+      expect(roomInstances.length).toBe(0);
+    });
+
+    it('flips the camera facing mode by restarting the local camera track', async () => {
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+      const room = roomInstances[0];
+      const restartTrack = vi.fn().mockResolvedValue(undefined);
+      room.localParticipant.getTrackPublication = vi.fn((source?: string) =>
+        source === 'camera' ? { videoTrack: { restartTrack } } : undefined,
+      );
+
+      await voiceClient.flipCamera();
+
+      expect(restartTrack).toHaveBeenCalledWith({ facingMode: 'user' });
+
+      await voiceClient.flipCamera();
+
+      expect(restartTrack).toHaveBeenCalledWith({ facingMode: 'environment' });
+    });
+
+    it('does nothing when flipping the camera while it is off', async () => {
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+      const room = roomInstances[0];
+      room.localParticipant.getTrackPublication = vi.fn(() => undefined);
+
+      await expect(voiceClient.flipCamera()).resolves.toBeUndefined();
     });
   });
 });
