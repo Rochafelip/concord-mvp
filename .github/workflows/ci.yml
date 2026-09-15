@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, master]
+    branches: [dev, master]
   pull_request:
-    branches: [main, master]
+    branches: [dev, master]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -35,6 +35,20 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: concordmvp
+          POSTGRES_USER: concordmvp
+          POSTGRES_PASSWORD: concordmvp
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U concordmvp -d concordmvp"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v7
 
@@ -46,9 +60,24 @@ jobs:
 
       - run: ./mvnw -B verify
 
+      # Tests are pure-mock unit tests (docs/DECISIONS.md D4) — nothing else in this job
+      # actually applies the SQL migrations to a real database, so a broken migration
+      # would otherwise only surface on prod deploy. Run the real migration files with the
+      # Flyway CLI directly, decoupled from the app's own Flyway/Maven version.
+      - name: Validate Flyway migrations
+        run: |
+          docker run --rm --network host \
+            -v "$PWD/src/main/resources/db/migration:/flyway/sql:ro" \
+            flyway/flyway:11 \
+            -url=jdbc:postgresql://localhost:5432/concordmvp \
+            -user=concordmvp -password=concordmvp \
+            migrate
+
   infra-validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
 
       - run: docker compose --env-file infrastructure/.env.example -f infrastructure/docker-compose.yml config
+
+      - run: docker compose --env-file infrastructure/.env.example -f infrastructure/docker-compose.yml build backend frontend

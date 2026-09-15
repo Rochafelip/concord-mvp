@@ -1,0 +1,55 @@
+name: CD Production
+
+# Runs on the self-hosted runner installed on the same home PC that hosts prod
+# (infrastructure/CI_CD.md) — no SSH, no registry: the runner already has local
+# access to Docker and to infrastructure/.env.
+on:
+  push:
+    branches: [master]
+
+concurrency:
+  group: cd-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: [self-hosted]
+    steps:
+      # clean: false — infrastructure/.env is gitignored and lives only in this
+      # runner's persistent workspace; the default `git clean -ffdx` would delete it.
+      - uses: actions/checkout@v7
+        with:
+          clean: false
+
+      - name: Deploy
+        working-directory: infrastructure
+        run: docker compose --env-file .env -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+
+      - name: Health check
+        run: |
+          for i in $(seq 1 12); do
+            if curl -fsk https://localhost:45678/actuator/health; then
+              echo "Backend is healthy"
+              break
+            fi
+            if [ "$i" -eq 12 ]; then
+              echo "Backend health check failed"
+              exit 1
+            fi
+            sleep 5
+          done
+          curl -fsk https://localhost:45678/ > /dev/null
+
+      - name: Tag images with commit SHA
+        working-directory: infrastructure
+        run: |
+          SHA="${GITHUB_SHA::7}"
+          docker tag infrastructure-backend:latest "concord-backend:$SHA"
+          docker tag infrastructure-frontend:latest "concord-frontend:$SHA"
+
+          # Keep only the 5 most recent sha-tagged images per service (traceability only —
+          # rollback-production.yml redeploys from git, it doesn't reuse these tags).
+          # `docker images` lists newest-first by default.
+          for svc in concord-backend concord-frontend; do
+            docker images "$svc" --format '{{.ID}}' | tail -n +6 | xargs -r docker rmi -f
+          done

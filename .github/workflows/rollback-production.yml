@@ -1,0 +1,42 @@
+name: Rollback Production
+
+# Manual escape hatch: re-deploys a previous commit's code + compose config
+# (not just an old image tag, which could drift from the config that shipped with it).
+on:
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: Commit SHA to roll back to
+        required: true
+
+concurrency:
+  group: cd-production
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    runs-on: [self-hosted]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.commit_sha }}
+          clean: false
+
+      - name: Redeploy
+        working-directory: infrastructure
+        run: docker compose --env-file .env -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+
+      - name: Health check
+        run: |
+          for i in $(seq 1 12); do
+            if curl -fsk https://localhost:45678/actuator/health; then
+              echo "Backend is healthy"
+              break
+            fi
+            if [ "$i" -eq 12 ]; then
+              echo "Backend health check failed"
+              exit 1
+            fi
+            sleep 5
+          done
+          curl -fsk https://localhost:45678/ > /dev/null
