@@ -18,6 +18,7 @@ interface DeviceState {
   selectCamera: (deviceId: string) => Promise<void>;
   selectMicrophone: (deviceId: string) => Promise<void>;
   selectSpeaker: (deviceId: string) => Promise<void>;
+  syncActiveCamera: (deviceId: string) => void;
 }
 
 const KIND_LABELS: Record<'audioinput' | 'audiooutput' | 'videoinput', string> = {
@@ -62,6 +63,15 @@ export const useDeviceStore = create<DeviceState>((set) => ({
     deviceManager.setPreferred('videoinput', deviceId);
     set({ selectedCameraId: deviceId });
     if (voiceClient.isInCall()) await voiceClient.setCameraDevice(deviceId);
+  },
+
+  // Mirrors the camera dropdown to a device change made outside it — the mobile flip button
+  // switches the active track via `facingMode` rather than `deviceId`, so it can't go through
+  // `selectCamera` (that would trigger a second, redundant switchActiveDevice call). Persists the
+  // resulting deviceId as the preference too, so a later `refresh()` (e.g. next call) keeps it.
+  syncActiveCamera: (deviceId) => {
+    deviceManager.setPreferred('videoinput', deviceId);
+    set({ selectedCameraId: deviceId });
   },
 
   selectMicrophone: async (deviceId) => {
