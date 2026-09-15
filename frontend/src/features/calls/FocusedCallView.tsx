@@ -2,6 +2,7 @@ import { LayoutGrid } from 'lucide-react';
 
 import type { VoiceParticipant } from '../../types/voice';
 
+import { FocusableStrip } from './FocusableStrip';
 import { OffCameraRoster } from './OffCameraRoster';
 import { ParticipantTile } from './ParticipantTile';
 import { ScreenShareTile } from './ScreenShareTile';
@@ -23,24 +24,30 @@ interface FocusedCallViewProps {
 }
 
 /**
- * Renders the call view whenever at least one camera/share is being watched.
+ * Renders the call view whenever at least one camera/share is being watched — see
+ * docs/superpowers/specs/2026-09-09-call-grid-unification-multiwatch-design.md §4. The watched
+ * area contains only the currently watched targets; FocusableStrip below it lists everything
+ * else that could be added to the set.
  *
- * The watched area contains only the currently watched targets.
- *
- * FocusableStrip is intentionally rendered outside this component by the
- * parent call view. This allows available screen shares and cameras to remain
- * visible even when watchTargets is empty and ParticipantGrid is displayed.
+ * The strip belongs HERE rather than as a sibling of ParticipantGrid in ParticipantList. In grid
+ * mode nothing is watched, so ParticipantGrid already shows every participant and every tile is
+ * itself the "Focus on X's camera" button — a strip alongside it renders each camera-on
+ * participant a second time and produces two buttons with the same accessible name. Hoisting it
+ * into ParticipantList to keep it visible in grid mode is exactly the regression 502de0e
+ * introduced (and e3daa75 then reverted by accident); ParticipantList.test.tsx pins the intended
+ * behaviour, asserting no focusable-strip once a manual watch is cleared.
  */
 export function FocusedCallView({
   participants,
   watchTargets,
   isManual,
+  onAddWatch,
   onRemoveWatch,
   onReturnToAutomatic,
   avatarUrlByUserId,
   deafenedByUserId,
-         canDisconnect,
-         channelId,
+  canDisconnect,
+  channelId,
 }: FocusedCallViewProps) {
   const offCamera = participants.filter(
     (participant) =>
@@ -111,6 +118,14 @@ export function FocusedCallView({
           </button>
         )}
       </div>
+
+      <FocusableStrip
+        participants={participants}
+        watchTargets={watchTargets}
+        onAddWatch={onAddWatch}
+        avatarUrlByUserId={avatarUrlByUserId}
+        deafenedByUserId={deafenedByUserId}
+      />
 
       <OffCameraRoster
         participants={offCamera}

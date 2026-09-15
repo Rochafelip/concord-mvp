@@ -10,6 +10,7 @@ import { ScreenShareTile } from './ScreenShareTile';
 vi.mock('../../services/voiceClient', () => ({
   voiceClient: {
     setScreenShareVolume: vi.fn(),
+    getScreenShareVolume: vi.fn().mockReturnValue(undefined),
     toggleMute: vi.fn(),
     disconnect: vi.fn(),
   },
@@ -92,6 +93,7 @@ describe('ScreenShareTile', () => {
   describe('audio starts muted', () => {
     beforeEach(() => {
       vi.mocked(voiceClient.setScreenShareVolume).mockClear();
+      vi.mocked(voiceClient.getScreenShareVolume).mockReturnValue(undefined);
     });
 
     it('silences screen-share audio for a remote participant on mount', () => {
@@ -110,6 +112,35 @@ describe('ScreenShareTile', () => {
       render(<ScreenShareTile participant={sharingParticipant({ isLocal: true, screenShareHasAudio: true })} />);
 
       expect(voiceClient.setScreenShareVolume).not.toHaveBeenCalled();
+    });
+
+    // "Starts muted" is about a share the listener has not opted into yet, not about every mount
+    // of this tile. The tile remounts whenever the watched set changes — moving between the
+    // watched area and FocusableStrip, or another share starting — and re-silencing it there
+    // would throw away a level the listener had just set, the one case where the reported bug
+    // really does reset audio rather than only the slider.
+    it('leaves a share alone once the listener has set a level for it', () => {
+      vi.mocked(voiceClient.getScreenShareVolume).mockReturnValue(0.6);
+
+      render(<ScreenShareTile participant={sharingParticipant({ isLocal: false, identity: 'bob', screenShareHasAudio: true })} />);
+
+      expect(voiceClient.setScreenShareVolume).not.toHaveBeenCalled();
+    });
+
+    it('still silences a share the listener muted itself, rather than re-opening it', () => {
+      vi.mocked(voiceClient.getScreenShareVolume).mockReturnValue(0);
+
+      render(<ScreenShareTile participant={sharingParticipant({ isLocal: false, identity: 'bob', screenShareHasAudio: true })} />);
+
+      expect(voiceClient.setScreenShareVolume).not.toHaveBeenCalled();
+    });
+
+    it('reopens the volume control at the level the listener chose', () => {
+      vi.mocked(voiceClient.getScreenShareVolume).mockReturnValue(0.6);
+
+      render(<ScreenShareTile participant={sharingParticipant({ isLocal: false, identity: 'bob', screenShareHasAudio: true, name: 'Felipe' })} />);
+
+      expect(screen.getByRole('slider', { name: "Volume for Felipe's screen" })).toHaveValue('60');
     });
 
     it('renders the volume control muted by default', () => {
