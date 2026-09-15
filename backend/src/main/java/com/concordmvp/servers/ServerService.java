@@ -6,6 +6,7 @@ import com.concordmvp.channels.ChannelType;
 import com.concordmvp.common.exception.BadRequestException;
 import com.concordmvp.common.exception.ForbiddenException;
 import com.concordmvp.common.exception.ResourceNotFoundException;
+import com.concordmvp.messages.AttachmentCleanupService;
 import com.concordmvp.messages.MessageRepository;
 import com.concordmvp.messages.MessageService;
 import com.concordmvp.messages.ChannelReadStateService;
@@ -45,6 +46,7 @@ public class ServerService {
     private final ServerInviteRepository serverInviteRepository;
     private final ChannelRepository channelRepository;
     private final MessageRepository messageRepository;
+    private final AttachmentCleanupService attachmentCleanupService;
     private final MessageService messageService;
     private final UserRepository userRepository;
     private final RealtimeEventPublisher realtimeEventPublisher;
@@ -57,6 +59,7 @@ public class ServerService {
                           ServerInviteRepository serverInviteRepository,
                           ChannelRepository channelRepository,
                           MessageRepository messageRepository,
+                          AttachmentCleanupService attachmentCleanupService,
                           MessageService messageService,
                           UserRepository userRepository,
                           RealtimeEventPublisher realtimeEventPublisher,
@@ -66,6 +69,7 @@ public class ServerService {
         this.serverInviteRepository = serverInviteRepository;
         this.channelRepository = channelRepository;
         this.messageRepository = messageRepository;
+        this.attachmentCleanupService = attachmentCleanupService;
         this.messageService = messageService;
         this.userRepository = userRepository;
         this.realtimeEventPublisher = realtimeEventPublisher;
@@ -78,11 +82,13 @@ public class ServerService {
                           ServerInviteRepository serverInviteRepository,
                           ChannelRepository channelRepository,
                           MessageRepository messageRepository,
+                          AttachmentCleanupService attachmentCleanupService,
                           MessageService messageService,
                           UserRepository userRepository,
                           RealtimeEventPublisher realtimeEventPublisher) {
         this(serverRepository, serverMemberRepository, serverInviteRepository, channelRepository,
-             messageRepository, messageService, userRepository, realtimeEventPublisher, null);
+             messageRepository, attachmentCleanupService, messageService, userRepository,
+             realtimeEventPublisher, null);
     }
 
     @Transactional
@@ -265,6 +271,13 @@ public class ServerService {
         List<UUID> channelIds = channelRepository.findByServerId(serverId).stream()
                 .map(Channel::getId)
                 .toList();
+        // Deleting the messages takes their attachment rows with it (ON DELETE CASCADE), which
+        // leaves no way to find the stored files afterwards — so the files go first, exactly as
+        // ChannelService.deleteChannel does it.
+        List<UUID> messageIds = messageRepository.findByChannelIdIn(channelIds).stream()
+                .map(com.concordmvp.messages.Message::getId)
+                .toList();
+        attachmentCleanupService.deleteForMessages(messageIds);
         messageRepository.deleteByChannelIdIn(channelIds);
 
         channelRepository.deleteByServerId(serverId);

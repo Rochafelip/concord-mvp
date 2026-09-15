@@ -6,6 +6,7 @@ import com.concordmvp.channels.ChannelType;
 import com.concordmvp.common.exception.BadRequestException;
 import com.concordmvp.common.exception.ForbiddenException;
 import com.concordmvp.common.exception.ResourceNotFoundException;
+import com.concordmvp.messages.AttachmentCleanupService;
 import com.concordmvp.messages.MessageRepository;
 import com.concordmvp.messages.MessageService;
 import com.concordmvp.messages.ChannelReadStateService;
@@ -61,6 +62,9 @@ class ServerServiceTest {
     private MessageRepository messageRepository;
 
     @Mock
+    private AttachmentCleanupService attachmentCleanupService;
+
+    @Mock
     private MessageService messageService;
 
     @Mock
@@ -77,7 +81,8 @@ class ServerServiceTest {
     @BeforeEach
     void setUp() {
         serverService = new ServerService(serverRepository, serverMemberRepository, serverInviteRepository,
-                channelRepository, messageRepository, messageService, userRepository, realtimeEventPublisher, null);
+                channelRepository, messageRepository, attachmentCleanupService, messageService, userRepository,
+                realtimeEventPublisher, null);
     }
 
     /** Mimics JPA assigning an id on save/persist for a {@link Server} that doesn't already have one. */
@@ -434,6 +439,36 @@ class ServerServiceTest {
         inOrder.verify(serverInviteRepository).delete(invite);
         inOrder.verify(serverMemberRepository).deleteAll(any());
         inOrder.verify(serverRepository).delete(server);
+    }
+
+    @Test
+    void deleteServer_deletesAttachmentFilesBeforeTheMessagesThatReferenceThem() {
+        UUID serverId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        Server server = server(serverId, ownerId);
+        UUID channelId = UUID.randomUUID();
+        Channel channel = new Channel();
+        channel.setId(channelId);
+        channel.setServerId(serverId);
+        UUID messageId = UUID.randomUUID();
+        com.concordmvp.messages.Message message = new com.concordmvp.messages.Message();
+        message.setId(messageId);
+        message.setChannelId(channelId);
+
+        when(serverRepository.findById(serverId)).thenReturn(Optional.of(server));
+        when(serverMemberRepository.findByServerId(serverId)).thenReturn(List.of(member(serverId, ownerId)));
+        when(serverInviteRepository.findByServerId(serverId)).thenReturn(Optional.empty());
+        when(channelRepository.findByServerId(serverId)).thenReturn(List.of(channel));
+        when(messageRepository.findByChannelIdIn(List.of(channelId))).thenReturn(List.of(message));
+
+        serverService.deleteServer(serverId, ownerId);
+
+        // Order is the whole point: message_attachments rows go with their message via ON DELETE
+        // CASCADE, so once the messages are gone the files on disk can no longer be found and
+        // would be stranded in the uploads directory forever.
+        InOrder inOrder = inOrder(attachmentCleanupService, messageRepository);
+        inOrder.verify(attachmentCleanupService).deleteForMessages(List.of(messageId));
+        inOrder.verify(messageRepository).deleteByChannelIdIn(List.of(channelId));
     }
 
     // --- joinServer ---
