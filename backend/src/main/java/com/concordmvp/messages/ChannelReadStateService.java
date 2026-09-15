@@ -2,7 +2,6 @@ package com.concordmvp.messages;
 
 import com.concordmvp.channels.Channel;
 import com.concordmvp.channels.ChannelRepository;
-import com.concordmvp.channels.ChannelService;
 import com.concordmvp.servers.ServerMember;
 import com.concordmvp.servers.ServerMemberRepository;
 import com.concordmvp.realtime.RealtimeEventPublisher;
@@ -26,20 +25,17 @@ public class ChannelReadStateService {
     private final ServerMemberRepository serverMemberRepository;
     private final MessageRepository messageRepository;
     private final RealtimeEventPublisher realtimeEventPublisher;
-    private final ChannelService channelService;
 
     public ChannelReadStateService(ChannelReadStateRepository channelReadStateRepository,
                                     ChannelRepository channelRepository,
                                     ServerMemberRepository serverMemberRepository,
                                     MessageRepository messageRepository,
-                                    RealtimeEventPublisher realtimeEventPublisher,
-                                    ChannelService channelService) {
+                                    RealtimeEventPublisher realtimeEventPublisher) {
         this.channelReadStateRepository = channelReadStateRepository;
         this.channelRepository = channelRepository;
         this.serverMemberRepository = serverMemberRepository;
         this.messageRepository = messageRepository;
         this.realtimeEventPublisher = realtimeEventPublisher;
-        this.channelService = channelService;
     }
 
     @Transactional
@@ -139,7 +135,10 @@ public class ChannelReadStateService {
     
     private void broadcastChannelRead(UUID userId, UUID channelId, UUID lastReadMessageId) {
         try {
-            Channel channel = channelService.getChannel(channelId, userId);
+            Channel channel = channelRepository.findById(channelId).orElse(null);
+            if (channel == null || !serverMemberRepository.existsByServerIdAndUserId(channel.getServerId(), userId)) {
+                return;
+            }
             Set<UUID> recipients = serverMemberRepository.findByServerId(channel.getServerId()).stream()
                     .map(ServerMember::getUserId)
                     .collect(Collectors.toSet());

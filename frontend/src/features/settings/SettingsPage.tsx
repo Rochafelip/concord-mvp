@@ -105,7 +105,7 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="h-full min-h-0 overflow-y-auto">
+    <div className="h-full min-h-0 overflow-y-auto overscroll-y-none bg-app">
       <div className="mx-auto max-w-lg space-y-8 p-4 sm:p-8">
         <h1 className="text-title font-semibold text-ink">Configurações</h1>
 

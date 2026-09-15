@@ -44,18 +44,18 @@ services:
   nginx:
     volumes:
       - ./nginx/nginx.prod.conf.template:/etc/nginx/templates/prod.conf.template:ro
-      - certbot_certs:/etc/letsencrypt:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
       - certbot_www:/var/www/certbot:ro
     environment:
-      DOMAIN: ${DOMAIN}
+      DOMAIN: ${DOMAIN:-${DUCKDNS_SUBDOMAIN}.duckdns.org}
 
   backend:
     environment:
-      APP_BASE_URL: ${APP_BASE_URL:-https://concordmvp.duckdns.org:45678}
+      APP_BASE_URL: ${APP_BASE_URL:-https://${DUCKDNS_SUBDOMAIN}.duckdns.org:45678}
 
   livekit:
     volumes:
-      - livekit_certs:/etc/livekit-certs:ro
+      - ./nginx/certs:/etc/livekit-certs:ro
 
 volumes:
   certbot_certs:
