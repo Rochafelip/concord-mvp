@@ -311,7 +311,9 @@ export function useRealtimeSync(): void {
       }),
 
       websocketClient.subscribe('CHANNEL_READ', (payload) => {
-        const { channelId, unreadCount } = payload as ChannelReadPayload;
+        const { channelId, userId, unreadCount } = payload as ChannelReadPayload;
+        if (userId !== useAuthStore.getState().user?.id) return;
+
         // Update the channel's unread count in all relevant caches
         queryClient.setQueryData<Channel[]>(['servers', currentServerIdRef.current, 'channels'], (old) => {
           if (!old) return old;

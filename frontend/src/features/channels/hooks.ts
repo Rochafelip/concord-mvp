@@ -55,6 +55,15 @@ export function useMarkChannelAsRead() {
   return useMutation({
     mutationFn: ({ channelId, lastReadMessageId }: { channelId: string; lastReadMessageId?: string }) =>
       api.markChannelAsRead(channelId, lastReadMessageId || null),
+    onMutate: ({ channelId }) => {
+      queryClient.setQueryData<Channel[]>(['servers', serverId, 'channels'], (old) => {
+        if (!old) return old;
+        return old.map((ch) => ch.id === channelId ? { ...ch, unreadCount: 0 } : ch);
+      });
+      queryClient.setQueryData<Channel>(['channels', channelId], (old) =>
+        old ? { ...old, unreadCount: 0 } : old,
+      );
+    },
     onSuccess: (_, variables) => {
       const { channelId } = variables;
       

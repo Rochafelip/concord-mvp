@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { CallView } from '../features/calls/CallView';
-import { useChannel } from '../features/channels/hooks';
+import { useChannel, useMarkChannelAsRead } from '../features/channels/hooks';
 import { setLastVisitedTextChannelId } from '../features/channels/lastVisitedChannel';
 import { ChatWindow } from '../features/chat/ChatWindow';
 
@@ -14,12 +14,14 @@ import { ChatWindow } from '../features/chat/ChatWindow';
 export function ChannelRoute() {
   const { channelId } = useParams<{ channelId: string }>();
   const { data: channel } = useChannel(channelId);
+  const { mutate: markChannelAsRead } = useMarkChannelAsRead();
 
   useEffect(() => {
     if (channel?.type === 'TEXT') {
       setLastVisitedTextChannelId(channel.serverId, channel.id);
+      markChannelAsRead({ channelId: channel.id });
     }
-  }, [channel]);
+  }, [channel, markChannelAsRead]);
 
   if (!channelId) return null;
   if (!channel) return <div className="p-4 text-muted">Loading…</div>;
