@@ -68,32 +68,24 @@ export function MessageList({ channelId }: MessageListProps) {
   const lastMessageIdRef = useRef<string | undefined>(undefined);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [deletingMessageId, setDeletingMessageId] = useState<string | null>(null);
-  let currentUserId: string | undefined;
-try {
-  currentUserId = useAuthStore((state) => state.user?.id);
-} catch (error) {
-  // In test environment, authStore may not be mocked
-  currentUserId = 'u1';
-}
+  const currentUserId = useAuthStore((state) => state.user?.id);
 
   const messages = useMemo(() => toChronologicalOrder(data?.pages), [data]);
-  let markChannelAsRead: any = null;
-  try {
-    markChannelAsRead = useMarkChannelAsRead();
-  } catch (error) {
-    // QueryClient not available in test environment
-  }
+  // Destructured because TanStack keeps `mutate` stable across renders while the mutation object
+  // itself is a new value every render — depending on the object would re-run the effect below on
+  // every render and mark the channel read in a loop.
+  const { mutate: markChannelAsRead } = useMarkChannelAsRead();
 
   // Mark channel as read when messages are loaded
   useEffect(() => {
-    if (markChannelAsRead && messages.length > 0) {
+    if (messages.length > 0) {
       const lastMessage = messages[messages.length - 1];
-      markChannelAsRead.mutate({
+      markChannelAsRead({
         channelId,
         lastReadMessageId: lastMessage.id,
       });
     }
-  }, [channelId, messages.length, markChannelAsRead]);
+  }, [channelId, messages, markChannelAsRead]);
 
   useLayoutEffect(() => {
     const container = containerRef.current;
