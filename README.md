@@ -293,7 +293,7 @@ The exact commands may evolve as the project is implemented.
 
 ## Docker Commands
 
-The full stack (frontend, backend, PostgreSQL, LiveKit, Nginx) runs via Docker Compose from the `infrastructure/` directory. For the complete deployment runbooks (router port-forwarding, TLS certificates, `.env` setup), see [`infrastructure/HOME_DEPLOY.md`](infrastructure/HOME_DEPLOY.md) (self-hosted PC, no domain), [`infrastructure/DEPLOY.md`](infrastructure/DEPLOY.md) (VPS with a domain and Let's Encrypt), or [`infrastructure/VM_REVIEW.md`](infrastructure/VM_REVIEW.md) (quick review deployment behind a Cloudflare Quick Tunnel, no router config needed).
+The full stack (frontend, backend, PostgreSQL, LiveKit, Nginx) runs via Docker Compose from the `infrastructure/` directory. For the complete deployment runbooks (router port-forwarding, TLS certificates, `.env` setup), see [`infrastructure/HOME_DEPLOY.md`](infrastructure/HOME_DEPLOY.md) (self-hosted PC, no domain), [`infrastructure/DEPLOY.md`](infrastructure/DEPLOY.md) (VPS with a domain and Let's Encrypt), or [`infrastructure/VM_REVIEW.md`](infrastructure/VM_REVIEW.md) (quick review deployment behind a Cloudflare Quick Tunnel, no router config needed). Production deploys are automated after merging to `master` — see [`infrastructure/CI_CD.md`](infrastructure/CI_CD.md) for the branch/CI/CD flow, the self-hosted runner setup, and rollback.
 
 Start the stack:
 

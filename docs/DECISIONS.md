@@ -338,3 +338,30 @@ connected clients can update cached user summaries without a new login.
 self-hosted deployment and introduces no object-storage dependency. A future
 S3-compatible adapter can replace the local storage implementation behind its
 service boundary.
+
+---
+
+## D18 — Automated CD via self-hosted runner, no persistent DEV environment
+
+Date: 2026-09-15
+
+**Context**: D5 deferred automated deployment. Production has since moved onto a
+real, always-on machine (this PC, via router port-forwarding —
+`infrastructure/HOME_DEPLOY.md`), making automation worthwhile. That same
+constraint — one PC, one public IP, one set of LiveKit/Postgres ports — means
+there's no second machine to host a persistent DEV environment on, and no VPS to
+SSH into for deployment.
+
+**Decision**: Add a `dev` branch (CI-only, no deploy) ahead of `master`
+(production). On merge to `master`, a **self-hosted GitHub Actions runner**
+installed on this same PC redeploys the existing Docker Compose stack locally and
+runs a health check (`infrastructure/CI_CD.md`). No SSH keys, registry credentials,
+or GitHub Secrets are needed — the runner already has local Docker access and reads
+the existing `infrastructure/.env` directly. Rollback is a manual
+`workflow_dispatch` that redeploys a prior commit (code + compose config together).
+
+**Consequences**: `dev` merges get CI validation but no running environment to
+verify against beyond local `docker compose up`. Branch protection (PR, 1 approval,
+and passing CI) applies to both `dev` and `master`. If a second physical environment
+is ever added, a real "deploy DEV" stage can be introduced without changing the
+production path.
