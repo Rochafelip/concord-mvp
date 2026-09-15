@@ -133,14 +133,20 @@ try {
     fetchNextPage();
   }
 
-  async function handleDeleteAttachment(message: Message) {
-    if (!window.confirm('Apagar este anexo e a mensagem?')) return;
+  async function handleDeleteMessage(message: Message) {
+    const confirmText = message.imageUrl
+      ? 'Apagar este anexo e a mensagem?'
+      : 'Apagar esta mensagem?';
+    if (!window.confirm(confirmText)) return;
 
     setDeletingMessageId(message.id);
     try {
       await deleteMessage(message.id);
     } catch {
-      window.alert('Não foi possível apagar o anexo. Tente novamente.');
+      const errorText = message.imageUrl
+        ? 'Não foi possível apagar o anexo. Tente novamente.'
+        : 'Não foi possível apagar a mensagem. Tente novamente.';
+      window.alert(errorText);
     } finally {
       setDeletingMessageId(null);
     }
@@ -204,7 +210,7 @@ try {
                   {message.author.id === currentUserId && !message.imageUrl && (
                     <TextDeleteButton
                       disabled={deletingMessageId === message.id}
-                      onClick={() => void handleDeleteAttachment(message)}
+                      onClick={() => void handleDeleteMessage(message)}
                     />
                   )}
                 </div>
@@ -219,7 +225,7 @@ try {
                     {message.author.id === currentUserId && (
                       <AttachmentDeleteButton
                         disabled={deletingMessageId === message.id}
-                        onClick={() => void handleDeleteAttachment(message)}
+                        onClick={() => void handleDeleteMessage(message)}
                       />
                     )}
                   </div>
@@ -244,7 +250,7 @@ try {
                       {message.author.id === currentUserId && (
                         <AttachmentDeleteButton
                           disabled={deletingMessageId === message.id}
-                          onClick={() => void handleDeleteAttachment(message)}
+                          onClick={() => void handleDeleteMessage(message)}
                         />
                       )}
                     </div>
@@ -268,7 +274,7 @@ try {
                       {message.author.id === currentUserId && (
                         <AttachmentDeleteButton
                           disabled={deletingMessageId === message.id}
-                          onClick={() => void handleDeleteAttachment(message)}
+                          onClick={() => void handleDeleteMessage(message)}
                         />
                       )}
                     </div>
