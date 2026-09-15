@@ -76,6 +76,32 @@ e nenhuma mudança de código altera isso.
    resolver aqui.
 4. Repita depois de qualquer mudança em `MAIL_*` ou no serviço de envio.
 
+## Resultado medido em 2026-09-15
+
+Linha de base após as mudanças acima, para comparar em testes futuros. Ativação
+e recuperação de senha disparadas para uma conta Gmail; o painel de detalhes da
+mensagem no Gmail mostrou, para ambas:
+
+```
+de:          Concord <concordmvp@gmail.com>
+enviado por: gmail.com
+assinado por: gmail.com
+```
+
+O `enviado por` só aparece quando o SPF valida, e o `assinado por` só quando a
+assinatura DKIM valida; ambos em `gmail.com`, igual ao domínio do `From`, o que
+significa SPF e DKIM **alinhados** e, por consequência, DMARC passando.
+
+As duas mensagens foram entregues na **caixa de entrada** — não em Promoções nem
+em Spam — e o Gmail ainda as classificou como importantes.
+
+Confirma o diagnóstico: a autenticação nunca esteve quebrada, e o que dá para
+melhorar sem domínio próprio é a identidade do remetente — que agora aparece
+como `Concord` em vez do endereço cru.
+
+**Ainda não coberto**: nenhum teste em Outlook/Hotmail foi feito, então o
+comportamento de entrega no segundo provedor é desconhecido.
+
 ## Se o projeto ganhar um domínio registrado
 
 É o que destrava tudo acima. Com o domínio em um DNS que aceite registros
