@@ -13,10 +13,12 @@ import com.concordmvp.realtime.WsEvent;
 import com.concordmvp.realtime.WsEventType;
 import com.concordmvp.servers.ServerMember;
 import com.concordmvp.servers.ServerMemberRepository;
+import com.concordmvp.servers.ServerRepository;
 import com.concordmvp.users.User;
 import com.concordmvp.users.UserRepository;
 import com.concordmvp.users.UserAvatarUrls;
 import com.concordmvp.users.dto.UserSummaryResponse;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -43,18 +45,30 @@ public class VoicePresenceService {
 
     private final ChannelService channelService;
     private final ServerMemberRepository serverMemberRepository;
+        private final ServerRepository serverRepository;
     private final UserRepository userRepository;
     private final RealtimeEventPublisher realtimeEventPublisher;
 
-    public VoicePresenceService(ChannelService channelService,
+        @Autowired
+        public VoicePresenceService(ChannelService channelService,
                                  ServerMemberRepository serverMemberRepository,
+                                 ServerRepository serverRepository,
                                  UserRepository userRepository,
                                  RealtimeEventPublisher realtimeEventPublisher) {
         this.channelService = channelService;
         this.serverMemberRepository = serverMemberRepository;
+        this.serverRepository = serverRepository;
         this.userRepository = userRepository;
         this.realtimeEventPublisher = realtimeEventPublisher;
     }
+
+        // Constructor retained for existing unit tests that do not exercise owner-only actions.
+        public VoicePresenceService(ChannelService channelService,
+                                                                 ServerMemberRepository serverMemberRepository,
+                                                                 UserRepository userRepository,
+                                                                 RealtimeEventPublisher realtimeEventPublisher) {
+                this(channelService, serverMemberRepository, null, userRepository, realtimeEventPublisher);
+        }
 
     public void updatePresence(UUID channelId, UUID userId, boolean muted, boolean cameraOn,
                                 boolean screenSharing, boolean speaking, boolean deafened) {
@@ -100,6 +114,30 @@ public class VoicePresenceService {
                 .map(Entry::response)
                 .toList();
     }
+
+        public void disconnectParticipant(UUID channelId, UUID targetUserId, UUID requesterId) {
+                Channel channel = channelService.getChannel(channelId, requesterId);
+                UUID serverId = channel.getServerId();
+                UUID ownerId = serverRepository.findById(serverId)
+                                .orElseThrow(() -> new ResourceNotFoundException("Server not found: " + serverId))
+                                .getOwnerId();
+                if (!ownerId.equals(requesterId)) {
+                        throw new ForbiddenException("Only the server owner can disconnect voice participants");
+                }
+                if (targetUserId.equals(requesterId)) {
+                        throw new BadRequestException("The server owner cannot disconnect themselves");
+                }
+
+                Entry entry = byUserId.get(targetUserId);
+                if (entry == null || !entry.channelId().equals(channelId)) {
+                        throw new ResourceNotFoundException("User is not connected to this voice channel");
+                }
+
+                realtimeEventPublisher.broadcast(currentMemberIds(serverId), new WsEvent(
+                        WsEventType.VOICE_KICK,
+                        new VoicePresenceLeavePayload(serverId, channelId, targetUserId)));
+                removePresence(targetUserId);
+        }
 
     private Set<UUID> currentMemberIds(UUID serverId) {
         return serverMemberRepository.findByServerId(serverId).stream()
