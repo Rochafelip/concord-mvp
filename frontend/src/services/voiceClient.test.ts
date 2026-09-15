@@ -1487,6 +1487,20 @@ describe('voiceClient', () => {
       expect(restartTrack).toHaveBeenCalledWith({ facingMode: 'environment' });
     });
 
+    it('returns the deviceId the browser picked for the new facing mode', async () => {
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+      const room = roomInstances[0];
+      const restartTrack = vi.fn().mockResolvedValue(undefined);
+      const getSettings = vi.fn(() => ({ deviceId: 'front-cam' }));
+      room.localParticipant.getTrackPublication = vi.fn((source?: string) =>
+        source === 'camera'
+          ? { videoTrack: { restartTrack, mediaStreamTrack: { getSettings } } }
+          : undefined,
+      );
+
+      await expect(voiceClient.flipCamera()).resolves.toBe('front-cam');
+    });
+
     it('does nothing when flipping the camera while it is off', async () => {
       await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
       const room = roomInstances[0];

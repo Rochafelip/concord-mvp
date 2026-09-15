@@ -1,6 +1,7 @@
 import { AudioLines, AudioLinesOff, Mic, MicOff, PhoneOff, RefreshCw, Settings, Video, VideoOff, Volume2, VolumeX } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { voiceClient } from '../../services/voiceClient';
+import { useDeviceStore } from '../../stores/deviceStore';
 import { getNoiseSuppressionPreference, setNoiseSuppressionPreference } from '../settings/audio/noiseSuppressionPreference';
 import { DeviceSettingsPanel } from './DeviceSettingsPanel';
 import { useVoiceParticipants } from './hooks';
@@ -45,6 +46,11 @@ export function CallControlBar({ onLeave }: CallControlBarProps) {
     setSuppressionEnabled(next);
     setNoiseSuppressionPreference(next);
     void voiceClient.setNoiseSuppressionEnabled(next);
+  }
+
+  async function handleFlipCamera() {
+    const deviceId = await voiceClient.flipCamera();
+    if (deviceId) useDeviceStore.getState().syncActiveCamera(deviceId);
   }
 
   return (
@@ -103,7 +109,7 @@ export function CallControlBar({ onLeave }: CallControlBarProps) {
           type="button"
           aria-label="Flip camera"
           title="Flip camera"
-          onClick={() => void voiceClient.flipCamera()}
+          onClick={() => void handleFlipCamera()}
           className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
         >
           <RefreshCw size={16} aria-hidden="true" />

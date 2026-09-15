@@ -132,6 +132,18 @@ describe('deviceStore', () => {
     });
   });
 
+  describe('syncActiveCamera', () => {
+    it('persists the preference and updates the selection without calling voiceClient', () => {
+      mockVoiceClient.isInCall.mockReturnValue(true);
+
+      useDeviceStore.getState().syncActiveCamera('front-cam');
+
+      expect(mockDeviceManager.setPreferred).toHaveBeenCalledWith('videoinput', 'front-cam');
+      expect(useDeviceStore.getState().selectedCameraId).toBe('front-cam');
+      expect(mockVoiceClient.setCameraDevice).not.toHaveBeenCalled();
+    });
+  });
+
   describe('selectSpeaker', () => {
     it('applies the switch live via voiceClient when in a call and setSinkId is supported', async () => {
       mockVoiceClient.isInCall.mockReturnValue(true);

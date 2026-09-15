@@ -289,11 +289,16 @@ class VoiceClient {
   // against the installed livekit-client's LocalVideoTrack.restartTrack typings).
   private cameraFacing: 'user' | 'environment' = 'environment';
 
-  async flipCamera(): Promise<void> {
+  // Returns the deviceId the browser actually picked to satisfy the new facingMode, so callers
+  // can keep the camera dropdown's selection in sync with a flip — the browser chooses which
+  // physical camera matches 'user'/'environment', not us, and it isn't necessarily the other
+  // entry in the enumerateDevices list a naive index-swap would assume.
+  async flipCamera(): Promise<string | undefined> {
     const videoTrack = this.room?.localParticipant.getTrackPublication(Track.Source.Camera)?.videoTrack;
-    if (!videoTrack) return;
+    if (!videoTrack) return undefined;
     this.cameraFacing = this.cameraFacing === 'environment' ? 'user' : 'environment';
     await videoTrack.restartTrack({ facingMode: this.cameraFacing });
+    return videoTrack.mediaStreamTrack?.getSettings().deviceId;
   }
 
   // Off by default, same reasoning as the camera — starting a share is always an explicit user

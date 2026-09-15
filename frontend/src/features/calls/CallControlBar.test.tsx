@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { ConnectionQuality } from 'livekit-client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { voiceClient } from '../../services/voiceClient';
+import { useDeviceStore } from '../../stores/deviceStore';
 import { useVoiceStore } from '../../stores/voiceStore';
 import type { VoiceParticipant } from '../../types/voice';
 import * as preference from '../settings/audio/noiseSuppressionPreference';
@@ -58,9 +59,11 @@ describe('CallControlBar', () => {
     vi.mocked(voiceClient.toggleCamera).mockClear();
     vi.mocked(voiceClient.toggleScreenShareAudio).mockClear();
     vi.mocked(voiceClient.setNoiseSuppressionEnabled).mockClear();
+    vi.mocked(voiceClient.flipCamera).mockReset().mockResolvedValue(undefined);
     vi.mocked(preference.getNoiseSuppressionPreference).mockReturnValue(true);
     vi.mocked(preference.setNoiseSuppressionPreference).mockReset();
     useVoiceStore.setState({ participants: [] });
+    useDeviceStore.setState({ selectedCameraId: null });
   });
 
   it('renders nothing when there is no local participant yet', () => {
@@ -187,6 +190,18 @@ describe('CallControlBar', () => {
     await user.click(screen.getByRole('button', { name: 'Flip camera' }));
 
     expect(voiceClient.flipCamera).toHaveBeenCalledTimes(1);
+  });
+
+  it('syncs the device store selection to whatever camera flipCamera actually activated', async () => {
+    const user = userEvent.setup();
+    mockMatchMedia(true);
+    vi.mocked(voiceClient.flipCamera).mockResolvedValue('front-cam');
+    useVoiceStore.setState({ participants: [localParticipant({ cameraEnabled: true })] });
+    render(<CallControlBar onLeave={vi.fn()} />);
+
+    await user.click(screen.getByRole('button', { name: 'Flip camera' }));
+
+    expect(useDeviceStore.getState().selectedCameraId).toBe('front-cam');
   });
 
   it('clicking Leave call calls the passed-in onLeave handler', async () => {
