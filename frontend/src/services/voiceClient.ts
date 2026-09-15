@@ -55,6 +55,9 @@ class VoiceClient {
   private currentChannelId: string | null = null;
   private lastReportedPresence: ReportedPresence | null = null;
   private localSpeaking = false;
+  // Private storage for participant volumes (not in store to avoid test issues)
+  private participantVolumes = new Map<string, number>();
+  private screenShareVolumes = new Map<string, number>();
   // Identities of every participant (local or remote) LiveKit currently considers an active
   // speaker, from RoomEvent.ActiveSpeakersChanged — feeds VoiceParticipant.speaking so
   // ParticipantTile's highlight ring tracks live audio the same way ChannelSidebar's does,
@@ -328,11 +331,13 @@ class VoiceClient {
   setParticipantVolume(identity: string, volume: number): void {
     const element = this.audioElements.get(audioKey(identity, Track.Source.Microphone));
     if (element) element.volume = volume;
+    this.participantVolumes.set(identity, volume);
   }
 
   setScreenShareVolume(identity: string, volume: number): void {
     const element = this.audioElements.get(audioKey(identity, Track.Source.ScreenShareAudio));
     if (element) element.volume = volume;
+    this.screenShareVolumes.set(identity, volume);
   }
 
   private setDeafened(value: boolean): void {
@@ -405,6 +410,19 @@ class VoiceClient {
       element.dataset.trackSid = track.sid ?? '';
       document.body.appendChild(element);
       this.audioElements.set(audioKey(participant.identity, track.source), element);
+      
+      // Restore saved volume for this participant and track source
+      if (track.source === Track.Source.Microphone) {
+        const savedVolume = this.participantVolumes.get(participant.identity);
+        if (savedVolume !== undefined) {
+          element.volume = savedVolume;
+        }
+      } else if (track.source === Track.Source.ScreenShareAudio) {
+        const savedVolume = this.screenShareVolumes.get(participant.identity);
+        if (savedVolume !== undefined) {
+          element.volume = savedVolume;
+        }
+      }
     }
     this.syncParticipants();
   };
