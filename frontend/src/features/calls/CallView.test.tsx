@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -45,20 +46,29 @@ function localParticipant() {
   };
 }
 
-function renderCallView(ch: Channel) {
-  return render(
-    <MemoryRouter initialEntries={[`/app/servers/${ch.serverId}/channels/${ch.id}`]}>
-      <Routes>
-        <Route path="/app/servers/:serverId/channels/:channelId" element={<CallView channel={ch} />} />
-      </Routes>
-    </MemoryRouter>,
+let queryClient: QueryClient;
+
+function callViewTree(ch: Channel) {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={[`/app/servers/${ch.serverId}/channels/${ch.id}`]}>
+        <Routes>
+          <Route path="/app/servers/:serverId/channels/:channelId" element={<CallView channel={ch} />} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>
   );
+}
+
+function renderCallView(ch: Channel) {
+  return render(callViewTree(ch));
 }
 
 describe('CallView', () => {
   const mutate = vi.fn();
 
   beforeEach(() => {
+    queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     mutate.mockClear();
     navigateMock.mockClear();
     vi.mocked(voiceClient.disconnect).mockClear();
@@ -76,13 +86,7 @@ describe('CallView', () => {
     const { rerender } = renderCallView(channel('c1'));
     mutate.mockClear();
 
-    rerender(
-      <MemoryRouter initialEntries={['/app/servers/s1/channels/c2']}>
-        <Routes>
-          <Route path="/app/servers/:serverId/channels/:channelId" element={<CallView channel={channel('c2')} />} />
-        </Routes>
-      </MemoryRouter>,
-    );
+    rerender(callViewTree(channel('c2')));
 
     expect(mutate).toHaveBeenCalledWith('c2');
     expect(voiceClient.disconnect).not.toHaveBeenCalled();
@@ -90,13 +94,7 @@ describe('CallView', () => {
 
   it('does not disconnect when unmounted — the call continues in the background', () => {
     const { unmount, rerender } = renderCallView(channel('c1'));
-    rerender(
-      <MemoryRouter initialEntries={['/app/servers/s1/channels/c1']}>
-        <Routes>
-          <Route path="/app/servers/:serverId/channels/:channelId" element={<CallView channel={channel('c1')} />} />
-        </Routes>
-      </MemoryRouter>,
-    );
+    rerender(callViewTree(channel('c1')));
     expect(voiceClient.disconnect).not.toHaveBeenCalled();
 
     unmount();
