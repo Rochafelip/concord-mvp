@@ -234,6 +234,31 @@ export function useRealtimeSync(): void {
         );
       }),
 
+      websocketClient.subscribe('VOICE_KICK', (payload) => {
+        const { serverId, channelId, userId } = payload as VoicePresenceLeavePayload;
+        queryClient.setQueryData<VoicePresenceEntry[]>(['servers', serverId, 'voice-presence'], (old) =>
+          old?.filter((entry) => entry.userId !== userId),
+        );
+
+        if (useVoiceStore.getState().channelId === channelId) {
+          useVoiceStore.getState().setParticipants(
+            useVoiceStore.getState().participants.filter((participant) => participant.identity !== userId),
+          );
+        }
+
+        if (useAuthStore.getState().user?.id === userId) {
+          navigate(`/app/servers/${serverId}`, { replace: true });
+          voiceClient.disconnect();
+          const message = 'You were disconnected from the voice channel by a server admin.';
+          setNotification(message);
+          window.setTimeout(() => {
+            if (useNotificationStore.getState().message === message) {
+              useNotificationStore.getState().clear();
+            }
+          }, 5000);
+        }
+      }),
+
       websocketClient.subscribe('USER_PROFILE_UPDATE', (payload) => {
         const { user } = payload as UserProfileUpdatePayload;
         const currentUser = useAuthStore.getState().user;

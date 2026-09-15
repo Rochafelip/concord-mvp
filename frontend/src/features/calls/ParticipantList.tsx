@@ -2,6 +2,8 @@ import { useMemo } from 'react';
 import { Spinner } from '../../components/Spinner';
 import { FocusedCallView } from './FocusedCallView';
 import { useVoiceParticipants, useVoicePresence } from './hooks';
+import { useIsServerOwner } from '../servers/hooks';
+import { useVoiceStore } from '../../stores/voiceStore';
 import { ParticipantGrid } from './ParticipantGrid';
 import { useWatchTargets } from './useWatchTargets';
 
@@ -18,6 +20,8 @@ interface ParticipantListProps {
  */
 export function ParticipantList({ serverId }: ParticipantListProps) {
   const participants = useVoiceParticipants();
+  const channelId = useVoiceStore((state) => state.channelId);
+  const canDisconnect = useIsServerOwner(serverId);
   const { data: presence } = useVoicePresence(serverId);
   const { watchTargets, isManual, addWatch, removeWatch, clearManual } = useWatchTargets(participants);
 
@@ -66,6 +70,8 @@ export function ParticipantList({ serverId }: ParticipantListProps) {
         onReturnToAutomatic={clearManual}
         avatarUrlByUserId={avatarUrlByUserId}
         deafenedByUserId={deafenedByUserId}
+        canDisconnect={canDisconnect}
+        channelId={channelId}
       />
     );
   }
@@ -76,6 +82,8 @@ export function ParticipantList({ serverId }: ParticipantListProps) {
         participants={participantsWithCurrentNames}
         avatarUrlByUserId={avatarUrlByUserId}
         deafenedByUserId={deafenedByUserId}
+        canDisconnect={canDisconnect}
+        channelId={channelId}
         onWatch={addWatch}
       />
     </div>

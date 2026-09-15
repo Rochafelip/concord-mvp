@@ -8,6 +8,8 @@ interface ParticipantGridProps {
   avatarUrlByUserId: Map<string, string | null | undefined>;
   deafenedByUserId: Map<string, boolean>;
   onWatch: (target: FocusTarget) => void;
+  canDisconnect?: boolean;
+  channelId?: string | null;
 }
 
 /**
@@ -18,7 +20,7 @@ interface ParticipantGridProps {
  * camera-on tiles are click-watchable (onWatch) — pinning an off-camera avatar tile into the
  * watched area isn't a meaningful action.
  */
-export function ParticipantGrid({ participants, avatarUrlByUserId, deafenedByUserId, onWatch }: ParticipantGridProps) {
+export function ParticipantGrid({ participants, avatarUrlByUserId, deafenedByUserId, onWatch, canDisconnect = false, channelId = null }: ParticipantGridProps) {
   const { containerRef, containerClassName, tileClassName, style } = useGridLayout(participants.length);
 
   if (participants.length === 0) return null;
@@ -40,6 +42,8 @@ export function ParticipantGrid({ participants, avatarUrlByUserId, deafenedByUse
           onWatchClick={
             participant.cameraEnabled ? () => onWatch({ type: 'camera', identity: participant.identity }) : undefined
           }
+          canDisconnect={canDisconnect}
+          channelId={channelId}
         />
       ))}
     </div>

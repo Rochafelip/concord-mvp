@@ -20,6 +20,7 @@ export type WsEventType =
   | 'SERVER_OWNER_CHANGE'
   | 'VOICE_PRESENCE_UPDATE'
   | 'VOICE_PRESENCE_LEAVE'
+  | 'VOICE_KICK'
   | 'USER_PROFILE_UPDATE'
   | 'ERROR';
 
@@ -95,3 +96,5 @@ export interface ChannelReadPayload {
   lastReadMessageId: string | null;
   unreadCount: number;
 }
+
+export type VoiceKickPayload = string;

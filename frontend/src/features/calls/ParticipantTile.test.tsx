@@ -202,13 +202,15 @@ describe('ParticipantTile', () => {
       expect(screen.queryByRole('slider')).not.toBeInTheDocument();
     });
 
-    it('reveals on the surrounding call area\'s hover, never on this tile\'s own hover', () => {
+    it('reveals the volume icon when its participant tile is hovered', () => {
       render(<ParticipantTile participant={participant({ isLocal: false, identity: 'bob' })} />);
 
-      const wrapper = screen.getByRole('slider', { name: 'Volume for Felipe' }).parentElement?.parentElement;
-      expect(wrapper).toHaveClass('group-hover/camera-grid:opacity-100');
-      expect(wrapper).toHaveClass('focus-within:opacity-100');
-      expect(wrapper).not.toHaveClass('group-hover:opacity-100');
+      const control = screen.getByRole('slider', { name: 'Volume for Felipe' }).parentElement;
+      expect(control).toHaveClass('group/volume-control');
+      expect(control?.parentElement).toHaveClass('group-hover/participant-tile:opacity-100');
+      expect(screen.getByRole('slider', { name: 'Volume for Felipe' })).toHaveClass(
+        'group-hover/volume-control:opacity-100',
+      );
     });
   });
 
