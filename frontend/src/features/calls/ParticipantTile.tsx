@@ -170,6 +170,7 @@ export function ParticipantTile({
         >
           <VolumeControl
             label={participant.name}
+            initialVolume={voiceClient.getParticipantVolume(participant.identity)}
             onVolumeChange={(volume) => voiceClient.setParticipantVolume(participant.identity, volume)}
           />
         </div>

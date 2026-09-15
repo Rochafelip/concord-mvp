@@ -177,6 +177,11 @@ class VoiceClient {
     // round-trip — routine on every channel switch, not just a final "leave".
     this.audioElements.forEach((element) => element.remove());
     this.audioElements.clear();
+    // Per-listener volume choices are scoped to the call they were made in — without this, a
+    // level picked for Bob in one channel would be silently re-applied to Bob in the next one
+    // (handleTrackSubscribed restores from these maps), long after the user forgot setting it.
+    this.participantVolumes.clear();
+    this.screenShareVolumes.clear();
     useVoiceStore.getState().reset();
   }
 
@@ -338,6 +343,22 @@ class VoiceClient {
     const element = this.audioElements.get(audioKey(identity, Track.Source.ScreenShareAudio));
     if (element) element.volume = volume;
     this.screenShareVolumes.set(identity, volume);
+  }
+
+  // The remembered levels above are the source of truth for the whole call, so every volume
+  // slider in the UI can read its starting position back from here. Those sliders live in tiles
+  // that remount whenever the call layout changes — grid <-> focused view as screen shares come
+  // and go — and without this they would each come back up at their own default, showing 100%
+  // over audio that is still attenuated, or (for a share) re-muting a level the user just set.
+  getParticipantVolume(identity: string): number {
+    return this.participantVolumes.get(identity) ?? 1;
+  }
+
+  // Undefined rather than a default, because "never chosen" is a state ScreenShareTile has to
+  // tell apart: a share the listener has not touched yet starts muted (opt-in watch), but one
+  // they have set a level for must not be re-muted when its tile remounts.
+  getScreenShareVolume(identity: string): number | undefined {
+    return this.screenShareVolumes.get(identity);
   }
 
   private setDeafened(value: boolean): void {
