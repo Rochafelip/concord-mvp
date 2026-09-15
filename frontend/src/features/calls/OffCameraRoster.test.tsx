@@ -1,8 +1,16 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { ConnectionQuality } from 'livekit-client';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { voiceClient } from '../../services/voiceClient';
 import type { VoiceParticipant } from '../../types/voice';
 import { OffCameraRoster } from './OffCameraRoster';
+
+vi.mock('../../services/voiceClient', () => ({
+  voiceClient: {
+    setParticipantVolume: vi.fn(),
+    getParticipantVolume: vi.fn().mockReturnValue(1),
+  },
+}));
 
 function participant(overrides: Partial<VoiceParticipant> = {}): VoiceParticipant {
   return {
@@ -23,6 +31,54 @@ function participant(overrides: Partial<VoiceParticipant> = {}): VoiceParticipan
 }
 
 describe('OffCameraRoster', () => {
+  beforeEach(() => {
+    vi.mocked(voiceClient.getParticipantVolume).mockReturnValue(1);
+    vi.mocked(voiceClient.setParticipantVolume).mockClear();
+  });
+
+  // This roster is where every mic-only participant ends up the moment someone starts sharing a
+  // screen, so without a volume control here a listener loses the ability to adjust exactly the
+  // people they are still listening to — the reported bug's most visible symptom.
+  it('lets a listener set a remote participant\'s volume from the roster', () => {
+    render(
+      <OffCameraRoster
+        participants={[participant({ identity: 'bob', name: 'Bob' })]}
+        avatarUrlByUserId={new Map()}
+        deafenedByUserId={new Map()}
+      />,
+    );
+
+    fireEvent.change(screen.getByRole('slider', { name: 'Volume for Bob' }), { target: { value: '30' } });
+
+    expect(voiceClient.setParticipantVolume).toHaveBeenCalledWith('bob', 0.3);
+  });
+
+  it('opens that slider at the level already chosen for the participant', () => {
+    vi.mocked(voiceClient.getParticipantVolume).mockReturnValue(0.3);
+
+    render(
+      <OffCameraRoster
+        participants={[participant({ identity: 'bob', name: 'Bob' })]}
+        avatarUrlByUserId={new Map()}
+        deafenedByUserId={new Map()}
+      />,
+    );
+
+    expect(screen.getByRole('slider', { name: 'Volume for Bob' })).toHaveValue('30');
+  });
+
+  it('offers no volume control for the local participant, who has nothing to turn down', () => {
+    render(
+      <OffCameraRoster
+        participants={[participant({ identity: 'me', name: 'Eu', isLocal: true })]}
+        avatarUrlByUserId={new Map()}
+        deafenedByUserId={new Map()}
+      />,
+    );
+
+    expect(screen.queryByRole('slider', { name: 'Volume for Eu' })).not.toBeInTheDocument();
+  });
+
   it('renders nothing when there are no off-camera participants', () => {
     const { container } = render(
       <OffCameraRoster participants={[]} avatarUrlByUserId={new Map()} deafenedByUserId={new Map()} />,

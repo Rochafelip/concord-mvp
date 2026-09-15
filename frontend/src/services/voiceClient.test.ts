@@ -801,6 +801,45 @@ describe('voiceClient', () => {
     expect(() => voiceClient.setScreenShareVolume('nobody', 0.5)).not.toThrow();
   });
 
+  // The volume a listener picked is the source of truth for the whole call, not just for the
+  // <audio> element that happened to exist when they picked it — every volume slider in the UI
+  // remounts whenever the call layout changes (grid <-> focused view on a screen share), and
+  // reads its starting position back from here rather than defaulting to 100%.
+  it('reports back the microphone volume a listener chose for a participant', async () => {
+    await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+
+    voiceClient.setParticipantVolume('bob', 0.3);
+
+    expect(voiceClient.getParticipantVolume('bob')).toBe(0.3);
+  });
+
+  it('reports the default microphone volume for a participant nobody has adjusted', async () => {
+    await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+
+    expect(voiceClient.getParticipantVolume('bob')).toBe(1);
+  });
+
+  it("reports back the screen-share volume a listener chose, and undefined before they chose one", async () => {
+    await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+
+    expect(voiceClient.getScreenShareVolume('carol')).toBeUndefined();
+
+    voiceClient.setScreenShareVolume('carol', 0.6);
+
+    expect(voiceClient.getScreenShareVolume('carol')).toBe(0.6);
+  });
+
+  it('forgets remembered volumes when the call ends', async () => {
+    await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+    voiceClient.setParticipantVolume('bob', 0.3);
+    voiceClient.setScreenShareVolume('carol', 0.6);
+
+    voiceClient.disconnect();
+
+    expect(voiceClient.getParticipantVolume('bob')).toBe(1);
+    expect(voiceClient.getScreenShareVolume('carol')).toBeUndefined();
+  });
+
   it("stops affecting a track's element after it is unsubscribed", async () => {
     await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
     const room = roomInstances[0];

@@ -9,7 +9,9 @@ import { FocusedCallView } from './FocusedCallView';
 vi.mock('../../services/voiceClient', () => ({
   voiceClient: {
     setParticipantVolume: vi.fn(),
+    getParticipantVolume: vi.fn().mockReturnValue(1),
     setScreenShareVolume: vi.fn(),
+    getScreenShareVolume: vi.fn().mockReturnValue(undefined),
     toggleMute: vi.fn(),
     disconnect: vi.fn(),
   },

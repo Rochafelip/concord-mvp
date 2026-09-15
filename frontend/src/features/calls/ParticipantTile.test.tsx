@@ -9,6 +9,7 @@ import { ParticipantTile } from './ParticipantTile';
 vi.mock('../../services/voiceClient', () => ({
   voiceClient: {
     setParticipantVolume: vi.fn(),
+    getParticipantVolume: vi.fn().mockReturnValue(1),
   },
 }));
 
@@ -31,6 +32,22 @@ function participant(overrides: Partial<VoiceParticipant> = {}): VoiceParticipan
 }
 
 describe('ParticipantTile', () => {
+  beforeEach(() => {
+    vi.mocked(voiceClient.getParticipantVolume).mockReturnValue(1);
+  });
+
+  // The tile remounts whenever the call layout changes — most visibly when a screen share
+  // starts and ParticipantList swaps the grid for FocusedCallView — so the slider has to come
+  // back up showing the level this listener already picked, not 100% over quieter audio.
+  it("opens its volume slider at the level already chosen for that participant", () => {
+    vi.mocked(voiceClient.getParticipantVolume).mockReturnValue(0.3);
+
+    render(<ParticipantTile participant={participant({ identity: 'bob', name: 'Bob' })} />);
+
+    expect(voiceClient.getParticipantVolume).toHaveBeenCalledWith('bob');
+    expect(screen.getByRole('slider', { name: 'Volume for Bob' })).toHaveValue('30');
+  });
+
   it('shows the Concord avatar placeholder when there is no video track', () => {
     const { container } = render(<ParticipantTile participant={participant()} />);
 

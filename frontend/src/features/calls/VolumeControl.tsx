@@ -5,23 +5,38 @@ interface VolumeControlProps {
   /** Display name used only to build distinct aria-labels, e.g. "Bob" or "Bob's screen". */
   label: string;
   onVolumeChange: (volume: number) => void;
-  /** Initial muted state. Defaults to false (matches prior behavior). ScreenShareTile passes
-   * `true` so this control's displayed state matches the muted-by-default screen-share audio
-   * (see docs/superpowers/specs/2026-09-08-screenshare-opt-in-watch-design.md) — mic volume
-   * controls (ParticipantTile) don't pass it and keep defaulting to unmuted. */
-  defaultMuted?: boolean;
+  /** The level this control opens at, 0-1. Callers read it back from voiceClient, which
+   * remembers it for the whole call — see the component comment below. 0 opens muted, which is
+   * how ScreenShareTile renders a share nobody has turned up yet (see
+   * docs/superpowers/specs/2026-09-08-screenshare-opt-in-watch-design.md). Defaults to 1, so a
+   * source nobody has touched starts at full volume. */
+  initialVolume?: number;
 }
 
 /**
- * A small, self-contained local volume control: a mute toggle plus a 0-100% slider. Owns its own
- * volume/muted state — there is nowhere else it needs to live, since this never persists across
- * calls and each mounting participant tile gets a fresh instance anyway. Muting doesn't discard
- * the slider's remembered position; moving the slider while muted un-mutes automatically,
- * matching how OS volume mixers behave.
+ * A small, self-contained local volume control: a mute toggle plus a 0-100% slider. Muting
+ * doesn't discard the slider's remembered position; moving the slider while muted un-mutes
+ * automatically, matching how OS volume mixers behave.
+ *
+ * The *working* volume is component state, but the level a listener settled on is not: it
+ * belongs to the call, and this control is mounted and unmounted several times during one.
+ * ParticipantList swaps ParticipantGrid for FocusedCallView the moment anyone starts sharing a
+ * screen, which remounts every tile below it, and a tile also remounts moving between the
+ * watched area and FocusableStrip. With the level held only here, each of those remounts
+ * resurfaced the slider at 100% over audio that was still attenuated — the UI half of the bug
+ * 262415b fixed for the audio elements themselves. So callers pass the remembered level in via
+ * `initialVolume` (from voiceClient.getParticipantVolume/getScreenShareVolume) and this seeds
+ * its state from that instead of from a hardcoded default.
+ *
+ * Seeding, not syncing: `initialVolume` is read once per mount, so a later change to it does not
+ * yank the slider out from under a listener who is mid-drag. voiceClient is already the only
+ * writer, and it learns of every change through onVolumeChange, so the two cannot drift.
  */
-export function VolumeControl({ label, onVolumeChange, defaultMuted = false }: VolumeControlProps) {
-  const [volume, setVolume] = useState(1);
-  const [muted, setMuted] = useState(defaultMuted);
+export function VolumeControl({ label, onVolumeChange, initialVolume = 1 }: VolumeControlProps) {
+  // A level of 0 means muted, and mute must keep a non-zero position to restore to — otherwise
+  // un-muting a source that opened silent would restore it to silence.
+  const [volume, setVolume] = useState(initialVolume === 0 ? 1 : initialVolume);
+  const [muted, setMuted] = useState(initialVolume === 0);
 
   function handleSliderChange(event: ChangeEvent<HTMLInputElement>) {
     const nextVolume = Number(event.target.value) / 100;

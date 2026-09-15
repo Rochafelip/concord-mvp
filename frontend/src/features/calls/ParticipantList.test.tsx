@@ -1,20 +1,27 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ConnectionQuality } from 'livekit-client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { voiceClient } from '../../services/voiceClient';
 import { useVoiceStore } from '../../stores/voiceStore';
 import type { VoiceParticipant } from '../../types/voice';
 import * as callsApi from './api';
 import { ParticipantList } from './ParticipantList';
 
+// The volume setters/getters are backed by a real Map rather than bare spies: the bug this
+// pins is precisely that the UI drops a level on remount, which is only visible if the stand-in
+// for voiceClient remembers what it was told, the way the real one does.
+const rememberedVolumes = new Map<string, number>();
 vi.mock('../../services/voiceClient', () => ({
   voiceClient: {
     toggleMute: vi.fn(),
     toggleCamera: vi.fn(),
     toggleScreenShare: vi.fn(),
     setParticipantVolume: vi.fn(),
+    getParticipantVolume: vi.fn(),
     setScreenShareVolume: vi.fn(),
+    getScreenShareVolume: vi.fn().mockReturnValue(undefined),
     disconnect: vi.fn(),
   },
 }));
@@ -51,6 +58,17 @@ describe('ParticipantList', () => {
   beforeEach(() => {
     useVoiceStore.setState({ status: 'connected', channelId: 'c1', participants: [], error: null });
     vi.mocked(callsApi.getVoicePresence).mockResolvedValue([]);
+    rememberedVolumes.clear();
+    // mockImplementation alone leaves call history from earlier tests in place, and one of these
+    // tests asserts on the exact set of calls.
+    vi.mocked(voiceClient.setParticipantVolume).mockReset();
+    vi.mocked(voiceClient.getParticipantVolume).mockReset();
+    vi.mocked(voiceClient.setParticipantVolume).mockImplementation((identity, volume) => {
+      rememberedVolumes.set(identity, volume);
+    });
+    vi.mocked(voiceClient.getParticipantVolume).mockImplementation(
+      (identity) => rememberedVolumes.get(identity) ?? 1,
+    );
   });
 
   it('shows a connecting placeholder before the first participant sync', () => {
@@ -318,6 +336,105 @@ describe('ParticipantList', () => {
       expect(screen.getByRole('button', { name: "Focus on Felipe's screen" })).toBeInTheDocument();
       expect(screen.getByText(/João's screen/)).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Return to automatic layout' })).toBeInTheDocument();
+    });
+  });
+
+  // The reported bug, end to end: lower someone's volume in the grid, then have a screen share
+  // start (which swaps the grid for FocusedCallView and remounts every tile below it) and the
+  // level must still be both in effect and visible. It used to come back showing 100% — or, for
+  // a mic-only participant pushed into the off-camera roster, not come back at all.
+  describe('a volume set before a screen share starts', () => {
+    const sharer = () => participant({
+      identity: 'carol',
+      name: 'Carol',
+      screenShareEnabled: true,
+      screenShareTrack: { attach: vi.fn(), detach: vi.fn() } as never,
+    });
+
+    it('stays visible and set for a mic-only participant, who moves to the off-camera roster', () => {
+      useVoiceStore.setState({
+        participants: [
+          participant({ identity: 'me', name: 'Eu', isLocal: true }),
+          participant({ identity: 'bob', name: 'Bob' }),
+        ],
+      });
+      renderList();
+
+      fireEvent.change(screen.getByRole('slider', { name: 'Volume for Bob' }), { target: { value: '30' } });
+      expect(voiceClient.setParticipantVolume).toHaveBeenCalledWith('bob', 0.3);
+
+      act(() => {
+        useVoiceStore.setState({
+          participants: [
+            participant({ identity: 'me', name: 'Eu', isLocal: true }),
+            participant({ identity: 'bob', name: 'Bob' }),
+            sharer(),
+          ],
+        });
+      });
+
+      expect(screen.getByTestId('watched-area')).toBeInTheDocument();
+      expect(screen.getByRole('slider', { name: 'Volume for Bob' })).toHaveValue('30');
+    });
+
+    it('survives the share ending and the call returning to the grid', () => {
+      useVoiceStore.setState({
+        participants: [
+          participant({ identity: 'me', name: 'Eu', isLocal: true }),
+          participant({ identity: 'bob', name: 'Bob' }),
+        ],
+      });
+      renderList();
+
+      fireEvent.change(screen.getByRole('slider', { name: 'Volume for Bob' }), { target: { value: '30' } });
+      act(() => {
+        useVoiceStore.setState({
+          participants: [
+            participant({ identity: 'me', name: 'Eu', isLocal: true }),
+            participant({ identity: 'bob', name: 'Bob' }),
+            sharer(),
+          ],
+        });
+      });
+      act(() => {
+        useVoiceStore.setState({
+          participants: [
+            participant({ identity: 'me', name: 'Eu', isLocal: true }),
+            participant({ identity: 'bob', name: 'Bob' }),
+          ],
+        });
+      });
+
+      expect(screen.getByRole('slider', { name: 'Volume for Bob' })).toHaveValue('30');
+      // Nothing re-sent a level on the way through: the audio was never actually reset.
+      expect(vi.mocked(voiceClient.setParticipantVolume).mock.calls).toEqual([['bob', 0.3]]);
+    });
+
+    it('stays visible and set for a camera-on participant, who moves to the focusable strip', () => {
+      const bobWithCamera = participant({
+        identity: 'bob',
+        name: 'Bob',
+        cameraEnabled: true,
+        videoTrack: { attach: vi.fn(), detach: vi.fn() } as never,
+      });
+      useVoiceStore.setState({
+        participants: [participant({ identity: 'me', name: 'Eu', isLocal: true }), bobWithCamera],
+      });
+      renderList();
+
+      fireEvent.change(screen.getByRole('slider', { name: 'Volume for Bob' }), { target: { value: '30' } });
+
+      act(() => {
+        useVoiceStore.setState({
+          participants: [participant({ identity: 'me', name: 'Eu', isLocal: true }), bobWithCamera, sharer()],
+        });
+      });
+
+      // The strip suppresses the inline control (a range input cannot nest in its button), so
+      // Bob is reached by focusing his camera — the level is what must survive, not the widget.
+      fireEvent.click(screen.getByRole('button', { name: "Focus on Bob's camera" }));
+
+      expect(screen.getByRole('slider', { name: 'Volume for Bob' })).toHaveValue('30');
     });
   });
 });

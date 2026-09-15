@@ -1,6 +1,8 @@
 import { Avatar } from '../../components/Avatar';
+import { voiceClient } from '../../services/voiceClient';
 import type { VoiceParticipant } from '../../types/voice';
 import { MicStatusIcon } from './MicStatusIcon';
+import { VolumeControl } from './VolumeControl';
 
 interface OffCameraRosterProps {
   participants: VoiceParticipant[];
@@ -13,6 +15,13 @@ interface OffCameraRosterProps {
  * screen-sharing, which gets its own ScreenShareTile), so they don't take up main-grid space
  * alongside camera tiles — see docs/superpowers/specs/2026-09-09-call-grid-layout-design.md §3.
  * Renders nothing when empty.
+ *
+ * Each remote entry carries its own volume control, on the same hover-to-reveal pattern as
+ * ParticipantTile's. This roster is where every mic-only participant lands the moment anyone
+ * starts sharing a screen, so without one here a listener loses the ability to adjust exactly
+ * the people they are still only listening to — the most visible half of the reported
+ * "screen share resets participant volume" bug, which was never a reset at all: voiceClient kept
+ * the level (262415b), the control to see and change it just stopped being rendered.
  */
 export function OffCameraRoster({ participants, avatarUrlByUserId, deafenedByUserId }: OffCameraRosterProps) {
   if (participants.length === 0) return null;
@@ -25,7 +34,10 @@ export function OffCameraRoster({ participants, avatarUrlByUserId, deafenedByUse
       {participants.map((participant) => {
         const deafened = deafenedByUserId.get(participant.identity) ?? false;
         return (
-          <div key={participant.identity} className="flex flex-shrink-0 items-center gap-2">
+          <div
+            key={participant.identity}
+            className="group/roster-entry flex flex-shrink-0 items-center gap-2"
+          >
             <Avatar
               displayName={participant.name}
               avatarUrl={avatarUrlByUserId.get(participant.identity)}
@@ -36,6 +48,15 @@ export function OffCameraRoster({ participants, avatarUrlByUserId, deafenedByUse
               <MicStatusIcon micEnabled={participant.micEnabled} deafened={deafened} />
               {participant.name}
             </span>
+            {!participant.isLocal && (
+              <div className="opacity-0 transition-opacity group-hover/roster-entry:opacity-100 group-focus-within/roster-entry:opacity-100">
+                <VolumeControl
+                  label={participant.name}
+                  initialVolume={voiceClient.getParticipantVolume(participant.identity)}
+                  onVolumeChange={(volume) => voiceClient.setParticipantVolume(participant.identity, volume)}
+                />
+              </div>
+            )}
           </div>
         );
       })}

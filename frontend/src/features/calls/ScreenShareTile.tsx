@@ -67,8 +67,14 @@ export function ScreenShareTile({ participant, className = '', onWatchClick, can
     };
   }, [screenShareTrack]);
 
+  // Opt-in watch: a remote share arrives silent until the listener turns it up (see
+  // docs/superpowers/specs/2026-09-08-screenshare-opt-in-watch-design.md). That applies to a
+  // share they have not judged yet, not to every mount of this tile — it remounts whenever the
+  // watched set changes, and re-silencing it there discarded the level they had just set.
+  // voiceClient remembers that level for the call, so "already has one" is what gates this.
   useLayoutEffect(() => {
     if (participant.isLocal || !participant.screenShareHasAudio) return;
+    if (voiceClient.getScreenShareVolume(participant.identity) !== undefined) return;
     voiceClient.setScreenShareVolume(participant.identity, 0);
   }, [participant.isLocal, participant.identity, participant.screenShareHasAudio]);
 
@@ -184,8 +190,8 @@ export function ScreenShareTile({ participant, className = '', onWatchClick, can
             >
               <VolumeControl
                 label={`${participant.name}'s screen`}
+                initialVolume={voiceClient.getScreenShareVolume(participant.identity) ?? 0}
                 onVolumeChange={(volume) => voiceClient.setScreenShareVolume(participant.identity, volume)}
-                defaultMuted
               />
             </div>
           )}
@@ -218,8 +224,8 @@ export function ScreenShareTile({ participant, className = '', onWatchClick, can
           {!participant.isLocal && participant.screenShareHasAudio && participant.screenShareAudioEnabled && (
             <VolumeControl
               label={`${participant.name}'s screen`}
+              initialVolume={voiceClient.getScreenShareVolume(participant.identity) ?? 0}
               onVolumeChange={(volume) => voiceClient.setScreenShareVolume(participant.identity, volume)}
-              defaultMuted
             />
           )}
           <button
