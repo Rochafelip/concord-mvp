@@ -2,6 +2,10 @@ package com.concordmvp.media;
 
 import com.concordmvp.channels.Channel;
 import com.concordmvp.channels.ChannelService;
+import com.concordmvp.permissions.Permission;
+import com.concordmvp.permissions.PermissionService;
+import com.concordmvp.servers.Server;
+import com.concordmvp.servers.ServerRepository;
 import com.concordmvp.channels.ChannelType;
 import com.concordmvp.common.exception.BadRequestException;
 import com.concordmvp.common.exception.ForbiddenException;
@@ -34,7 +38,9 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -52,12 +58,23 @@ class VoicePresenceServiceTest {
     @Mock
     private RealtimeEventPublisher realtimeEventPublisher;
 
+    @Mock
+    private ServerRepository serverRepository;
+
+    @Mock
+    private PermissionService permissionService;
+
     private VoicePresenceService voicePresenceService;
 
     @BeforeEach
     void setUp() {
         voicePresenceService = new VoicePresenceService(
-                channelService, serverMemberRepository, userRepository, realtimeEventPublisher);
+                channelService, serverMemberRepository, serverRepository, userRepository,
+                realtimeEventPublisher, permissionService);
+        // Default: the requester can see every voice channel. Tests that care about the filter
+        // override this for one specific channel.
+        lenient().when(permissionService.hasChannel(any(UUID.class), any(), eq(Permission.VIEW_CHANNEL)))
+                .thenReturn(true);
     }
 
     private Channel channel(UUID id, UUID serverId, ChannelType type) {
@@ -272,5 +289,95 @@ class VoicePresenceServiceTest {
 
         assertThat(current).hasSize(1);
         assertThat(current.get(0).user().id()).isEqualTo(userId);
+    }
+
+    // --- DISCONNECT_MEMBERS replaces the old owner-only rule ---
+
+    @Test
+    void disconnectParticipant_withoutDisconnectMembers_throwsForbidden() {
+        UUID serverId = UUID.randomUUID();
+        UUID channelId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        Channel voice = channel(channelId, serverId, ChannelType.VOICE);
+        when(channelService.getChannel(channelId, requesterId)).thenReturn(voice);
+        doThrow(new ForbiddenException("denied")).when(permissionService)
+                .requireChannel(voice, requesterId, Permission.DISCONNECT_MEMBERS);
+
+        assertThatThrownBy(() -> voicePresenceService.disconnectParticipant(channelId, UUID.randomUUID(), requesterId))
+                .isInstanceOf(ForbiddenException.class);
+
+        verifyNoInteractions(realtimeEventPublisher);
+    }
+
+    @Test
+    void disconnectParticipant_cannotDisconnectSomebodyWhoOutranksYou() {
+        UUID serverId = UUID.randomUUID();
+        UUID channelId = UUID.randomUUID();
+        UUID moderatorId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        when(channelService.getChannel(channelId, moderatorId))
+                .thenReturn(channel(channelId, serverId, ChannelType.VOICE));
+        when(permissionService.outranks(serverId, moderatorId, adminId)).thenReturn(false);
+
+        assertThatThrownBy(() -> voicePresenceService.disconnectParticipant(channelId, adminId, moderatorId))
+                .isInstanceOf(ForbiddenException.class);
+
+        verifyNoInteractions(realtimeEventPublisher);
+    }
+
+    @Test
+    void disconnectParticipant_moderatorWithThePermission_kicksALowerRankedMember() {
+        UUID serverId = UUID.randomUUID();
+        UUID channelId = UUID.randomUUID();
+        UUID moderatorId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        Channel voice = channel(channelId, serverId, ChannelType.VOICE);
+        when(channelService.getChannel(channelId, targetId)).thenReturn(voice);
+        when(channelService.getChannel(channelId, moderatorId)).thenReturn(voice);
+        when(userRepository.findById(targetId)).thenReturn(Optional.of(user(targetId, "Alvo")));
+        when(serverMemberRepository.findByServerId(serverId))
+                .thenReturn(List.of(member(moderatorId, serverId), member(targetId, serverId)));
+        when(permissionService.outranks(serverId, moderatorId, targetId)).thenReturn(true);
+        voicePresenceService.updatePresence(channelId, targetId, false, false, false, false, false);
+
+        voicePresenceService.disconnectParticipant(channelId, targetId, moderatorId);
+
+        ArgumentCaptor<WsEvent> events = ArgumentCaptor.forClass(WsEvent.class);
+        verify(realtimeEventPublisher, times(3)).broadcast(any(), events.capture());
+        assertThat(events.getAllValues()).extracting(WsEvent::type)
+                .containsExactly(WsEventType.VOICE_PRESENCE_UPDATE, WsEventType.VOICE_KICK,
+                        WsEventType.VOICE_PRESENCE_LEAVE);
+    }
+
+    @Test
+    void disconnectParticipant_cannotTargetYourself() {
+        UUID serverId = UUID.randomUUID();
+        UUID channelId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        when(channelService.getChannel(channelId, requesterId))
+                .thenReturn(channel(channelId, serverId, ChannelType.VOICE));
+
+        assertThatThrownBy(() -> voicePresenceService.disconnectParticipant(channelId, requesterId, requesterId))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    // --- presence is filtered by VIEW_CHANNEL ---
+
+    @Test
+    void getPresence_omitsParticipantsInChannelsTheRequesterCannotSee() {
+        UUID serverId = UUID.randomUUID();
+        UUID hiddenChannelId = UUID.randomUUID();
+        UUID speakerId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        when(channelService.getChannel(hiddenChannelId, speakerId))
+                .thenReturn(channel(hiddenChannelId, serverId, ChannelType.VOICE));
+        when(userRepository.findById(speakerId)).thenReturn(Optional.of(user(speakerId, "Secreto")));
+        when(serverMemberRepository.findByServerId(serverId)).thenReturn(List.of(member(speakerId, serverId)));
+        voicePresenceService.updatePresence(hiddenChannelId, speakerId, false, false, false, false, false);
+
+        when(serverMemberRepository.existsByServerIdAndUserId(serverId, requesterId)).thenReturn(true);
+        when(permissionService.hasChannel(hiddenChannelId, requesterId, Permission.VIEW_CHANNEL)).thenReturn(false);
+
+        assertThat(voicePresenceService.getPresence(serverId, requesterId)).isEmpty();
     }
 }

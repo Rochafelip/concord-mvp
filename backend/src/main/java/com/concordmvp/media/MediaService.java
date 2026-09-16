@@ -6,6 +6,9 @@ import com.concordmvp.channels.ChannelType;
 import com.concordmvp.common.exception.BadRequestException;
 import com.concordmvp.common.exception.ResourceNotFoundException;
 import com.concordmvp.media.dto.VoiceTokenResponse;
+import com.concordmvp.permissions.Permission;
+import com.concordmvp.permissions.PermissionService;
+import com.concordmvp.permissions.PermissionSet;
 import com.concordmvp.users.User;
 import com.concordmvp.users.UserRepository;
 import com.concordmvp.servers.ServerMember;
@@ -20,7 +23,10 @@ import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -38,6 +44,12 @@ import java.util.UUID;
  * LiveKit), so reusing {@code jjwt} keeps the dependency footprint unchanged (docs/TECH_STACK.md
  * §30/§34). The claim shape (issuer/subject/exp/name/video grant map) mirrors LiveKit's own
  * {@code AccessToken.toJwt()} exactly.
+ *
+ * <p>The grant is where voice permissions are actually enforced. SPEAK, USE_VIDEO and SHARE_SCREEN
+ * become entries in {@code canPublishSources}, so LiveKit itself refuses a track the user may not
+ * publish — a tampered client cannot talk its way past it. Because the grant is fixed when the
+ * token is minted, a permission change during a call is applied by having the client rejoin
+ * (docs/DECISIONS.md D20); no Server API call to LiveKit is made from here.
  */
 @Service
 public class MediaService {
@@ -47,6 +59,7 @@ public class MediaService {
     private final ChannelService channelService;
     private final UserRepository userRepository;
     private final ServerMemberRepository serverMemberRepository;
+    private final PermissionService permissionService;
     private final String livekitApiKey;
     private final SecretKey livekitSigningKey;
     private final String livekitPublicUrl;
@@ -57,18 +70,15 @@ public class MediaService {
                          @Value("${livekit.api-key}") String livekitApiKey,
                          @Value("${livekit.api-secret}") String livekitApiSecret,
                          @Value("${livekit.public-url}") String livekitPublicUrl,
-                         ServerMemberRepository serverMemberRepository) {
+                         ServerMemberRepository serverMemberRepository,
+                         PermissionService permissionService) {
+        this.permissionService = permissionService;
         this.channelService = channelService;
         this.userRepository = userRepository;
         this.serverMemberRepository = serverMemberRepository;
         this.livekitApiKey = livekitApiKey;
         this.livekitSigningKey = Keys.hmacShaKeyFor(livekitApiSecret.getBytes(StandardCharsets.UTF_8));
         this.livekitPublicUrl = livekitPublicUrl;
-    }
-
-    public MediaService(ChannelService channelService, UserRepository userRepository,
-                         String livekitApiKey, String livekitApiSecret, String livekitPublicUrl) {
-        this(channelService, userRepository, livekitApiKey, livekitApiSecret, livekitPublicUrl, null);
     }
 
     public VoiceTokenResponse issueVoiceToken(UUID channelId, UUID requesterId) {
@@ -78,6 +88,8 @@ public class MediaService {
             throw new BadRequestException("Channel is not a voice channel: " + channelId);
         }
 
+        permissionService.requireChannel(channel, requesterId, Permission.CONNECT);
+
         User requester = userRepository.findById(requesterId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + requesterId));
         if (!requester.isEmailVerified()) {
@@ -86,28 +98,32 @@ public class MediaService {
         }
 
         String roomName = "voice-channel-" + channel.getId();
-        String displayName = requester.getDisplayName();
-        if (serverMemberRepository != null) {
-            ServerMember membership = serverMemberRepository.findByServerIdAndUserId(
-                            channel.getServerId(), requesterId)
-                    .orElseThrow(() -> new com.concordmvp.common.exception.ForbiddenException(
-                            "Not a member of this server: " + channel.getServerId()));
-            displayName = membership.getDisplayName() == null
-                    ? requester.getDisplayName() : membership.getDisplayName();
-        }
-        String token = buildLiveKitToken(requester, displayName, roomName);
+        // Membership was already enforced by getChannel above; this lookup is for the per-server
+        // nickname, and doubles as a safety net if that ever stops being true.
+        ServerMember membership = serverMemberRepository.findByServerIdAndUserId(
+                        channel.getServerId(), requesterId)
+                .orElseThrow(() -> new com.concordmvp.common.exception.ForbiddenException(
+                        "Not a member of this server: " + channel.getServerId()));
+        String displayName = membership.getDisplayName() == null
+                ? requester.getDisplayName() : membership.getDisplayName();
+        long permissions = permissionService.channelPermissions(channel, requesterId);
+        String token = buildLiveKitToken(requester, displayName, roomName, permissions);
 
         return new VoiceTokenResponse(token, livekitPublicUrl, roomName);
     }
 
-    private String buildLiveKitToken(User requester, String displayName, String roomName) {
+    private String buildLiveKitToken(User requester, String displayName, String roomName, long permissions) {
         Instant now = Instant.now();
-        Map<String, Object> videoGrant = Map.of(
-                "roomJoin", true,
-                "room", roomName,
-                "canPublish", true,
-                "canSubscribe", true
-        );
+        List<String> publishSources = publishSourcesFor(permissions);
+
+        // LinkedHashMap rather than Map.of: the source order must be stable for the claim to be
+        // reproducible, and Map.of neither preserves order nor takes a variable number of pairs.
+        Map<String, Object> videoGrant = new LinkedHashMap<>();
+        videoGrant.put("roomJoin", true);
+        videoGrant.put("room", roomName);
+        videoGrant.put("canPublish", !publishSources.isEmpty());
+        videoGrant.put("canPublishSources", publishSources);
+        videoGrant.put("canSubscribe", true);
 
         return Jwts.builder()
                 .issuer(livekitApiKey)
@@ -117,5 +133,24 @@ public class MediaService {
                 .claim("video", videoGrant)
                 .signWith(livekitSigningKey)
                 .compact();
+    }
+
+    /**
+     * Maps the user's voice permissions onto LiveKit's track sources. An empty list means
+     * listen-only: the member can join and hear, but LiveKit will reject any track it publishes.
+     */
+    private static List<String> publishSourcesFor(long permissions) {
+        List<String> sources = new ArrayList<>();
+        if (PermissionSet.has(permissions, Permission.SPEAK)) {
+            sources.add("microphone");
+        }
+        if (PermissionSet.has(permissions, Permission.USE_VIDEO)) {
+            sources.add("camera");
+        }
+        if (PermissionSet.has(permissions, Permission.SHARE_SCREEN)) {
+            sources.add("screen_share");
+            sources.add("screen_share_audio");
+        }
+        return sources;
     }
 }

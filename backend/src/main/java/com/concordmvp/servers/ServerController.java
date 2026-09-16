@@ -1,6 +1,8 @@
 package com.concordmvp.servers;
 
 import com.concordmvp.common.CurrentUser;
+import com.concordmvp.permissions.PermissionService;
+import com.concordmvp.permissions.PermissionSet;
 import com.concordmvp.servers.dto.CreateServerRequest;
 import com.concordmvp.servers.dto.InviteResponse;
 import com.concordmvp.servers.dto.JoinServerRequest;
@@ -33,8 +35,11 @@ public class ServerController {
 
     private final ServerService serverService;
     private final UserRepository userRepository;
+    private final PermissionService permissionService;
 
-    public ServerController(ServerService serverService, UserRepository userRepository) {
+    public ServerController(ServerService serverService, UserRepository userRepository,
+                             PermissionService permissionService) {
+        this.permissionService = permissionService;
         this.serverService = serverService;
         this.userRepository = userRepository;
     }
@@ -109,9 +114,14 @@ public class ServerController {
         return toResponse(server);
     }
 
+    /**
+     * Carries the requester's own effective permissions so the UI can hide actions it would only
+     * get a 403 for. Convenience, never enforcement — that lives in the services.
+     */
     private ServerResponse toResponse(Server server) {
         return new ServerResponse(server.getId(), server.getName(), server.getOwnerId(),
-                server.getCreatedAt(), server.getUpdatedAt());
+                server.getCreatedAt(), server.getUpdatedAt(),
+                PermissionSet.toNames(permissionService.serverPermissions(server.getId(), CurrentUser.id())));
     }
 
     private ServerMemberResponse toMemberResponse(ServerMember member) {

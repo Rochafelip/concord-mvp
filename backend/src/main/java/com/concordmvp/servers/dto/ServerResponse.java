@@ -1,6 +1,7 @@
 package com.concordmvp.servers.dto;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 public record ServerResponse(
@@ -8,6 +9,8 @@ public record ServerResponse(
         String name,
         UUID ownerId,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        /** The requesting user's effective permissions on this server, as permission names. */
+        List<String> permissions
 ) {
 }
