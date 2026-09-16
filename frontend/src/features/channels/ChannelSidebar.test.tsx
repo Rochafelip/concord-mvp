@@ -153,7 +153,6 @@ describe('ChannelSidebar', () => {
 
   it('deletes the channel only after the confirmation dialog is accepted', async () => {
     vi.mocked(api.deleteChannel).mockResolvedValue(undefined);
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
     useAuthStore.setState({
       isAuthenticated: true,
       user: { id: 'owner-1', username: 'o', displayName: 'O', email: 'o@x.com', avatarUrl: null },
@@ -162,16 +161,35 @@ describe('ChannelSidebar', () => {
     renderSidebar();
 
     await screen.findByText('Alpha');
-    const deleteButton = screen.getByRole('button', { name: 'Delete text channel general' });
-    await user.click(deleteButton);
+    await user.click(screen.getByRole('button', { name: 'Delete text channel general' }));
 
-    expect(confirmSpy).toHaveBeenCalledWith('Delete channel "general"? This cannot be undone.');
+    expect(screen.getByText('Delete "general"? This cannot be undone.')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
     expect(api.deleteChannel).not.toHaveBeenCalled();
+    expect(screen.queryByText('Delete "general"? This cannot be undone.')).not.toBeInTheDocument();
 
-    confirmSpy.mockReturnValue(true);
-    await user.click(deleteButton);
+    await user.click(screen.getByRole('button', { name: 'Delete text channel general' }));
+    await user.click(screen.getByRole('button', { name: 'Delete channel' }));
 
     expect(api.deleteChannel).toHaveBeenCalledWith('c1');
+  });
+
+  it('confirms the deletion of a voice channel by name too', async () => {
+    vi.mocked(api.deleteChannel).mockResolvedValue(undefined);
+    useAuthStore.setState({
+      isAuthenticated: true,
+      user: { id: 'owner-1', username: 'o', displayName: 'O', email: 'o@x.com', avatarUrl: null },
+    });
+    const user = userEvent.setup();
+    renderSidebar();
+
+    await screen.findByText('Alpha');
+    await user.click(screen.getByRole('button', { name: 'Delete voice channel lobby' }));
+    await user.click(screen.getByRole('button', { name: 'Delete channel' }));
+
+    expect(api.deleteChannel).toHaveBeenCalledWith('c2');
   });
 
   describe('voice channel participant preview', () => {
