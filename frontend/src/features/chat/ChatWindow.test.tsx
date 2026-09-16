@@ -46,6 +46,12 @@ describe('ChatWindow', () => {
       isFetchingNextPage: false,
       isPending: false,
     } as unknown as ReturnType<typeof chatHooks.useMessageHistory>);
+
+    // `vi.mock('../channels/hooks')` auto-mocks every export to return undefined, but MessageList
+    // destructures `mutate` off this one on render.
+    vi.mocked(channelHooks.useMarkChannelAsRead).mockReturnValue(
+      { mutate: vi.fn() } as unknown as ReturnType<typeof channelHooks.useMarkChannelAsRead>,
+    );
   });
 
   it('shows the message composer for a TEXT channel', async () => {
