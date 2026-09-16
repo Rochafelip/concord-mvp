@@ -2,10 +2,11 @@ import { HeadphoneOff, MicOff, MonitorUp, Plus, Settings, Trash2, Video, Volume2
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Avatar } from '../../components/Avatar';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { disconnectVoiceParticipant } from '../calls/api';
 import { useVoicePresence } from '../calls/hooks';
 import { useAuthStore } from '../auth/authStore';
-import { useIsServerOwner, useServer } from '../servers/hooks';
+import { useHasPermission, useServer } from '../servers/hooks';
 import { ServerSettingsPanel } from '../servers/ServerSettingsPanel';
 import type { Channel, ChannelType } from '../../types/channel';
 import { CreateChannelModal } from './CreateChannelModal';
@@ -31,24 +32,34 @@ export function ChannelSidebar({ onNavigate }: ChannelSidebarProps) {
   const { data: server } = useServer(serverId);
   const { data: channels } = useChannels(serverId);
   const { data: voicePresence } = useVoicePresence(serverId);
-  const isOwner = useIsServerOwner(serverId);
+  // Channels the user cannot see never arrive from the backend, so there is nothing to filter
+  // here — these two only decide which controls to draw.
+  const canManageChannels = useHasPermission(serverId, 'MANAGE_CHANNELS');
+  const canDisconnect = useHasPermission(serverId, 'DISCONNECT_MEMBERS');
   const currentUserId = useAuthStore((state) => state.user?.id);
   const [createType, setCreateType] = useState<Exclude<ChannelType, 'ONBOARDING'> | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [voiceContextUser, setVoiceContextUser] = useState<{ channelId: string; userId: string; displayName: string } | null>(null);
+  const [channelPendingDeletion, setChannelPendingDeletion] = useState<Channel | null>(null);
   const voiceContextMenuRef = useRef<HTMLDivElement>(null);
   const deleteChannelMutation = useDeleteChannel(serverId);
 
   function handleDeleteChannel(event: MouseEvent<HTMLButtonElement>, channel: Channel) {
+    // The trash icon sits inside the channel's <Link>, so the click must not navigate.
     event.preventDefault();
     event.stopPropagation();
-    if (window.confirm(`Delete channel "${channel.name}"? This cannot be undone.`)) {
-      deleteChannelMutation.mutate(channel.id);
-    }
+    setChannelPendingDeletion(channel);
+  }
+
+  function confirmDeleteChannel() {
+    if (!channelPendingDeletion) return;
+    deleteChannelMutation.mutate(channelPendingDeletion.id, {
+      onSettled: () => setChannelPendingDeletion(null),
+    });
   }
 
   function handleVoiceParticipantContextMenu(event: MouseEvent<HTMLDivElement>, channelId: string, userId: string, displayName: string) {
-    if (!isOwner || userId === currentUserId) return;
+    if (!canDisconnect || userId === currentUserId) return;
     event.preventDefault();
     setVoiceContextUser({ channelId, userId, displayName });
   }
@@ -126,7 +137,7 @@ export function ChannelSidebar({ onNavigate }: ChannelSidebarProps) {
         <div>
           <div className="flex items-center justify-between px-1">
             <h3 className="text-caption font-semibold uppercase text-muted">Text channels</h3>
-            {isOwner && (
+            {canManageChannels && (
               <button
                 type="button"
                 aria-label="Create text channel"
@@ -154,7 +165,7 @@ export function ChannelSidebar({ onNavigate }: ChannelSidebarProps) {
                     </span>
                   )}
                 </Link>
-                {isOwner && (
+                {canManageChannels && (
                   <button
                     type="button"
                     aria-label={`Delete text channel ${channel.name}`}
@@ -172,7 +183,7 @@ export function ChannelSidebar({ onNavigate }: ChannelSidebarProps) {
         <div>
           <div className="flex items-center justify-between px-1">
             <h3 className="text-caption font-semibold uppercase text-muted">Voice channels</h3>
-            {isOwner && (
+            {canManageChannels && (
               <button
                 type="button"
                 aria-label="Create voice channel"
@@ -198,7 +209,7 @@ export function ChannelSidebar({ onNavigate }: ChannelSidebarProps) {
                       <Volume2 size={14} aria-hidden="true" />
                       {channel.name}
                     </Link>
-                    {isOwner && (
+                    {canManageChannels && (
                       <button
                         type="button"
                         aria-label={`Delete voice channel ${channel.name}`}
@@ -224,7 +235,7 @@ export function ChannelSidebar({ onNavigate }: ChannelSidebarProps) {
                           />
                           <span className="truncate text-caption text-muted">{participant.displayName}</span>
                           </div>
-                          {isOwner && participant.userId !== currentUserId && voiceContextUser?.userId === participant.userId && voiceContextUser.channelId === channel.id && (
+                          {canDisconnect && participant.userId !== currentUserId && voiceContextUser?.userId === participant.userId && voiceContextUser.channelId === channel.id && (
                             <div ref={voiceContextMenuRef} className="absolute right-0 top-full z-20 min-w-44 rounded border border-border bg-surface p-1 shadow-lg">
                               <button
                                 type="button"
@@ -266,6 +277,17 @@ export function ChannelSidebar({ onNavigate }: ChannelSidebarProps) {
           onClose={() => setCreateType(null)}
         />
       )}
+      <ConfirmDialog
+        open={channelPendingDeletion != null}
+        title="Delete channel"
+        message={`Delete "${channelPendingDeletion?.name}"? This cannot be undone.`}
+        confirmLabel="Delete channel"
+        pendingLabel="Deleting…"
+        destructive
+        pending={deleteChannelMutation.isPending}
+        onConfirm={confirmDeleteChannel}
+        onClose={() => setChannelPendingDeletion(null)}
+      />
       <ServerSettingsPanel serverId={serverId} open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </aside>
   );

@@ -69,14 +69,42 @@ Each application must remain independently buildable.
 * Receive messages in real time
 * Persist messages
 * Load message history
-* File attachments on messages: images (JPEG/PNG/GIF/WebP, detected by real
-  file content, 8 MB limit, rendered inline with a full-size lightbox) or any
-  other file type (50 MB limit, no content restriction, rendered as a
-  downloadable file chip — served with a forced download so it can never
-  execute in the browser)
+* File attachments on messages: up to 10 per message, 150 MB each. An upload
+  whose real file content matches a known image signature (JPEG/PNG/GIF/WebP/
+  BMP/AVIF — magic bytes, not the declared type) is rendered inline with a
+  full-size lightbox; any other file type is allowed and rendered as a
+  downloadable file chip, served with a forced download so it can never
+  execute in the browser
+* Attaching files to a message: the paperclip button, drag & drop onto the
+  composer, or pasting an image from the clipboard (Ctrl+V, including a
+  Win+Shift+S screenshot). All three stage a preview that can be removed
+  before sending; the upload happens on send
 * Unread message tracking per channel
 * Visual indicators for channels with unread messages
 * Mark channels as read functionality
+
+### Roles and permissions
+
+* Per-server roles with a position-based hierarchy, plus a non-deletable
+  `@everyone` role every server has at position 0
+* A member may hold several roles; its effective permissions are the union
+* 23 permissions as a bitfield (see `com.concordmvp.permissions.Permission` and
+  docs/DECISIONS.md D20). The bit indexes are a persistence contract — never
+  renumber one
+* Per-channel overrides, for a role or for a single user, each with an
+  allow/deny/inherit state. Precedence: `@everyone` override, then the union of
+  the member's role overrides, then the member's own override
+* `PermissionService` is the single place that answers "may this user do this
+  here?". Every protected action goes through it; nothing re-derives
+  authorization from raw repositories
+* Voice permissions are enforced by the LiveKit grant itself
+  (`canPublishSources`), not by the client
+* Deleting a server and transferring ownership stay owner-only and are not
+  delegable by permission
+
+Moderation (kick, ban, timeout, mute, move), the audit log, and the role
+management UI are **not** implemented yet — their permission bits exist but
+nothing enforces them. Do not treat them as available.
 
 ### Voice
 
@@ -108,10 +136,7 @@ Do NOT implement the following unless explicitly requested:
 * Threads
 * Reactions
 * GIF integration
-* Advanced roles
-* Advanced permissions
 * Server discovery
-* Complex moderation
 * User custom statuses
 * Rich presence
 * Notifications
@@ -384,7 +409,16 @@ V1__create_users.sql
 V2__create_servers.sql
 V3__create_channels.sql
 V16__create_channel_read_states.sql
+V18__create_roles_and_permissions.sql
 ```
+
+### Roles and permissions
+
+Migration V18 adds `roles`, `member_roles` and `channel_permission_overrides`,
+and backfills an `@everyone` role for every server that already existed. That
+backfill grants exactly what every member could already do, so nobody loses
+access on deploy. **Every server must have exactly one `@everyone` role** — if it
+is missing, that server's members resolve to zero permissions.
 
 ### Channel Read States
 

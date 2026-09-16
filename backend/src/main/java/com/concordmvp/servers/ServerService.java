@@ -6,9 +6,14 @@ import com.concordmvp.channels.ChannelType;
 import com.concordmvp.common.exception.BadRequestException;
 import com.concordmvp.common.exception.ForbiddenException;
 import com.concordmvp.common.exception.ResourceNotFoundException;
+import com.concordmvp.messages.AttachmentCleanupService;
 import com.concordmvp.messages.MessageRepository;
 import com.concordmvp.messages.MessageService;
 import com.concordmvp.messages.ChannelReadStateService;
+import com.concordmvp.permissions.Permission;
+import com.concordmvp.permissions.PermissionService;
+import com.concordmvp.permissions.RoleRepository;
+import com.concordmvp.permissions.RoleService;
 import com.concordmvp.realtime.RealtimeEventPublisher;
 import com.concordmvp.realtime.WsEvent;
 import com.concordmvp.realtime.WsEventType;
@@ -45,10 +50,14 @@ public class ServerService {
     private final ServerInviteRepository serverInviteRepository;
     private final ChannelRepository channelRepository;
     private final MessageRepository messageRepository;
+    private final AttachmentCleanupService attachmentCleanupService;
     private final MessageService messageService;
     private final UserRepository userRepository;
     private final RealtimeEventPublisher realtimeEventPublisher;
     private final ChannelReadStateService channelReadStateService;
+    private final PermissionService permissionService;
+    private final RoleService roleService;
+    private final RoleRepository roleRepository;
     private final SecureRandom secureRandom = new SecureRandom();
 
     @Autowired
@@ -57,32 +66,27 @@ public class ServerService {
                           ServerInviteRepository serverInviteRepository,
                           ChannelRepository channelRepository,
                           MessageRepository messageRepository,
+                          AttachmentCleanupService attachmentCleanupService,
                           MessageService messageService,
                           UserRepository userRepository,
                           RealtimeEventPublisher realtimeEventPublisher,
+                          PermissionService permissionService,
+                          RoleService roleService,
+                          RoleRepository roleRepository,
                           ChannelReadStateService channelReadStateService) {
+        this.permissionService = permissionService;
+        this.roleService = roleService;
+        this.roleRepository = roleRepository;
         this.serverRepository = serverRepository;
         this.serverMemberRepository = serverMemberRepository;
         this.serverInviteRepository = serverInviteRepository;
         this.channelRepository = channelRepository;
         this.messageRepository = messageRepository;
+        this.attachmentCleanupService = attachmentCleanupService;
         this.messageService = messageService;
         this.userRepository = userRepository;
         this.realtimeEventPublisher = realtimeEventPublisher;
         this.channelReadStateService = channelReadStateService;
-    }
-
-    // Constructor for backward compatibility with tests
-    public ServerService(ServerRepository serverRepository,
-                          ServerMemberRepository serverMemberRepository,
-                          ServerInviteRepository serverInviteRepository,
-                          ChannelRepository channelRepository,
-                          MessageRepository messageRepository,
-                          MessageService messageService,
-                          UserRepository userRepository,
-                          RealtimeEventPublisher realtimeEventPublisher) {
-        this(serverRepository, serverMemberRepository, serverInviteRepository, channelRepository,
-             messageRepository, messageService, userRepository, realtimeEventPublisher, null);
     }
 
     @Transactional
@@ -97,6 +101,10 @@ public class ServerService {
         ownerMembership.setServerId(saved.getId());
         ownerMembership.setUserId(ownerId);
         serverMemberRepository.save(ownerMembership);
+
+        // Same transaction, so a server can never exist without the baseline role its members
+        // resolve against. V18 did this in SQL for the servers that already existed.
+        roleService.createEveryoneRole(saved.getId());
 
         Channel onboardingChannel = new Channel();
         onboardingChannel.setServerId(saved.getId());
@@ -133,6 +141,7 @@ public class ServerService {
     public List<ServerMember> listMembers(UUID serverId, UUID requesterId) {
         requireServer(serverId);
         requireMember(serverId, requesterId);
+        permissionService.requireServer(serverId, requesterId, Permission.VIEW_MEMBER_LIST);
         return serverMemberRepository.findByServerId(serverId);
     }
 
@@ -265,9 +274,20 @@ public class ServerService {
         List<UUID> channelIds = channelRepository.findByServerId(serverId).stream()
                 .map(Channel::getId)
                 .toList();
+        // Deleting the messages takes their attachment rows with it (ON DELETE CASCADE), which
+        // leaves no way to find the stored files afterwards — so the files go first, exactly as
+        // ChannelService.deleteChannel does it.
+        List<UUID> messageIds = messageRepository.findByChannelIdIn(channelIds).stream()
+                .map(com.concordmvp.messages.Message::getId)
+                .toList();
+        attachmentCleanupService.deleteForMessages(messageIds);
         messageRepository.deleteByChannelIdIn(channelIds);
 
         channelRepository.deleteByServerId(serverId);
+
+        // Roles go before the memberships: member_roles cascades off server_members, and the
+        // overrides cascade off both channels and roles.
+        roleRepository.deleteByServerId(serverId);
 
         serverInviteRepository.findByServerId(serverId).ifPresent(serverInviteRepository::delete);
         serverMemberRepository.deleteAll(serverMemberRepository.findByServerId(serverId));
@@ -275,8 +295,8 @@ public class ServerService {
     }
 
     public ServerInvite getOrCreateInvite(UUID serverId, UUID requesterId) {
-        Server server = requireServer(serverId);
-        requireOwner(server, requesterId);
+        requireServer(serverId);
+        permissionService.requireServer(serverId, requesterId, Permission.MANAGE_INVITES);
 
         return serverInviteRepository.findByServerId(serverId)
                 .orElseGet(() -> createInvite(serverId));
@@ -284,8 +304,8 @@ public class ServerService {
 
     @Transactional
     public ServerInvite regenerateInvite(UUID serverId, UUID requesterId) {
-        Server server = requireServer(serverId);
-        requireOwner(server, requesterId);
+        requireServer(serverId);
+        permissionService.requireServer(serverId, requesterId, Permission.MANAGE_INVITES);
 
         return serverInviteRepository.findByServerId(serverId)
                 .map(invite -> {
@@ -322,12 +342,6 @@ public class ServerService {
         User user = requireUser(userId);
         if (!user.isEmailVerified()) {
             throw new ForbiddenException("Verifique seu e-mail antes de criar ou entrar em um servidor.");
-        }
-    }
-
-    private void requireOwner(Server server, UUID requesterId) {
-        if (!server.getOwnerId().equals(requesterId)) {
-            throw new ForbiddenException("Only the server owner can perform this action");
         }
     }
 

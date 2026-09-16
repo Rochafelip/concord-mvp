@@ -474,19 +474,32 @@ id
 channel_id
 author_id
 content
-image_url
-file_name
-file_size
 created_at
 updated_at
 ```
 
-`image_url`, `file_name`, and `file_size` are all nullable — set together
-when the message has a file attachment (`image_url` historically named for
-images but may point to any file type; `file_name`/`file_size` describe it),
-and all `NULL` for a plain text message. `image_url` is restricted at the
-application layer (`MessageService`) to match `/api/v1/uploads/...`, the
-backend's own upload-serving path — see `docs/OPEN_QUESTIONS.md` §21.
+Attachments live in their own table (see below), so a message can carry
+several. Migration V17 moved them out of `messages`, where a single one used
+to sit inline as `image_url`/`file_name`/`file_size`.
+
+```text
+message_attachments
+--------------------------------
+id
+message_id  → messages(id) ON DELETE CASCADE
+url
+file_name
+file_size
+position
+```
+
+`url` is restricted at the application layer (`MessageService`) to match
+`/api/v1/uploads/...`, the backend's own upload-serving path — see
+`docs/OPEN_QUESTIONS.md` §21. `position` is the sender's ordering, unique per
+message, and a message may have at most 10 attachments (enforced in
+`MessageService`, not by a constraint). The rows go with the message via the
+cascade; the stored files are deleted separately by
+`AttachmentCleanupService`, which must therefore run BEFORE the message.
 
 ---
 
@@ -521,10 +534,10 @@ author_id
 created_at
 ```
 
-`content` is optional (may be an empty string) when the message has a file
-attachment (`image_url` set) — a message must have non-empty `content`, a
-non-null `image_url`, or both. This is enforced in `MessageService`, not by
-a database constraint.
+`content` is optional (may be an empty string) when the message has at least
+one attachment — a message must have non-empty `content`, at least one
+attachment, or both. This is enforced in `MessageService`, not by a database
+constraint.
 
 The exact content-length constraint should be aligned with the API contract.
 
@@ -1283,3 +1296,40 @@ Image bytes are not stored in PostgreSQL. Existing users remain valid with a
 `NULL` key and receive the Concord fallback avatar. Avatar files are limited
 to 5 MB and accepted only for JPEG, PNG, GIF, and WebP content validated by
 the backend.
+
+## Roles and permissions
+
+Added by `V18__create_roles_and_permissions.sql`.
+
+```text
+servers
+   |
+   +-- roles                         (server_id, position, permissions BIGINT, is_everyone)
+   |      |
+   |      +-- member_roles           (server_member_id, role_id)
+   |      |
+   |      +-- channel_permission_overrides (role_id, allow, deny)
+   |
+   +-- channels
+          |
+          +-- channel_permission_overrides (channel_id, role_id | user_id, allow, deny)
+```
+
+**`roles`** — one row per role. `permissions` is a 63-bit field in a `BIGINT`
+whose bit indexes are owned by `com.concordmvp.permissions.Permission` and are a
+persistence contract: renumbering one silently reinterprets every row here. A
+partial unique index (`uq_roles_everyone`) guarantees at most one `is_everyone`
+role per server, and the migration's backfill guarantees at least one, so every
+server has exactly one. `position` is the hierarchy — higher means more
+authority, `@everyone` is pinned at 0.
+
+**`member_roles`** — keyed on `server_members.id` rather than on
+`(server_id, user_id)`, so leaving a server takes the assignments with it through
+the FK cascade and `ServerService.leaveServer` needs no extra cleanup.
+
+**`channel_permission_overrides`** — role overrides and user overrides share one
+table, discriminated by which FK is set; `ck_override_single_target` enforces that
+exactly one of them is. One table keeps the permission calculation at a single
+query, and the two are always read together anyway. `allow`/`deny` are masked to
+the channel-scoped permissions when applied, so a row can never hand out
+`ADMINISTRATOR` whatever it happens to contain.

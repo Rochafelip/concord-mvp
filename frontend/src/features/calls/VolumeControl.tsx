@@ -61,6 +61,9 @@ export function VolumeControl({ label, onVolumeChange, initialVolume = 1 }: Volu
       >
         {muted ? <VolumeX size={14} aria-hidden="true" /> : <Volume2 size={14} aria-hidden="true" />}
       </button>
+      {/* Flush against the button (no margin): a gap here would be dead space the cursor crosses
+          when moving from the button onto the track, dropping :hover mid-transition and leaving
+          the track pointer-events-none right as the user tries to reach it. */}
       <input
         type="range"
         aria-label={`Volume for ${label}`}
@@ -68,7 +71,7 @@ export function VolumeControl({ label, onVolumeChange, initialVolume = 1 }: Volu
         max={100}
         value={muted ? 0 : Math.round(volume * 100)}
         onChange={handleSliderChange}
-        className="pointer-events-none absolute right-full mr-1 h-1 w-16 origin-right opacity-0 transition-opacity group-hover/volume-control:pointer-events-auto group-hover/volume-control:opacity-100 group-focus-within/volume-control:pointer-events-auto group-focus-within/volume-control:opacity-100"
+        className="pointer-events-none absolute right-full h-1 w-16 origin-right opacity-0 transition-opacity group-hover/volume-control:pointer-events-auto group-hover/volume-control:opacity-100 group-focus-within/volume-control:pointer-events-auto group-focus-within/volume-control:opacity-100"
       />
     </div>
   );

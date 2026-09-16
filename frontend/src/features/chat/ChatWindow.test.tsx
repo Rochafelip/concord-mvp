@@ -20,6 +20,9 @@ function channel(overrides: Partial<Channel> = {}): Channel {
     type: 'TEXT',
     createdAt: '2026-01-01',
     updatedAt: '2026-01-01',
+    // ChatWindow resolves these and passes them down; without them it renders the
+    // "no permission" notices instead of the list and composer.
+    permissions: ['VIEW_CHANNEL', 'READ_MESSAGE_HISTORY', 'SEND_MESSAGES', 'ATTACH_FILES'],
     ...overrides,
   };
 }
@@ -43,6 +46,12 @@ describe('ChatWindow', () => {
       isFetchingNextPage: false,
       isPending: false,
     } as unknown as ReturnType<typeof chatHooks.useMessageHistory>);
+
+    // `vi.mock('../channels/hooks')` auto-mocks every export to return undefined, but MessageList
+    // destructures `mutate` off this one on render.
+    vi.mocked(channelHooks.useMarkChannelAsRead).mockReturnValue(
+      { mutate: vi.fn() } as unknown as ReturnType<typeof channelHooks.useMarkChannelAsRead>,
+    );
   });
 
   it('shows the message composer for a TEXT channel', async () => {
@@ -61,6 +70,29 @@ describe('ChatWindow', () => {
     renderChatWindow();
 
     expect(await screen.findByText(/read-only/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/message/i)).not.toBeInTheDocument();
+  });
+
+  it('replaces the history with a notice when the user cannot read it', async () => {
+    vi.mocked(channelHooks.useChannel).mockReturnValue(
+      { data: channel({ permissions: ['VIEW_CHANNEL', 'SEND_MESSAGES'] }) } as unknown as ReturnType<
+        typeof channelHooks.useChannel
+      >,
+    );
+    renderChatWindow();
+
+    expect(await screen.findByText(/ler o histórico/i)).toBeInTheDocument();
+  });
+
+  it('replaces the composer with a notice when the user cannot send messages', async () => {
+    vi.mocked(channelHooks.useChannel).mockReturnValue(
+      { data: channel({ permissions: ['VIEW_CHANNEL', 'READ_MESSAGE_HISTORY'] }) } as unknown as ReturnType<
+        typeof channelHooks.useChannel
+      >,
+    );
+    renderChatWindow();
+
+    expect(await screen.findByText(/enviar mensagens/i)).toBeInTheDocument();
     expect(screen.queryByLabelText(/message/i)).not.toBeInTheDocument();
   });
 });

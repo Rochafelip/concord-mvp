@@ -3,6 +3,7 @@ package com.concordmvp.channels.dto;
 import com.concordmvp.channels.ChannelType;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -17,6 +18,8 @@ public record ChannelResponse(
         ChannelType type,
         Instant createdAt,
         Instant updatedAt,
-        Integer unreadCount
+        Integer unreadCount,
+        /** The requesting user's effective permissions in this channel, as permission names. */
+        List<String> permissions
 ) {
 }

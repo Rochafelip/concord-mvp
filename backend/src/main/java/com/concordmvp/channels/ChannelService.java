@@ -8,6 +8,8 @@ import com.concordmvp.common.exception.ResourceNotFoundException;
 import com.concordmvp.messages.MessageRepository;
 import com.concordmvp.messages.AttachmentCleanupService;
 import com.concordmvp.messages.ChannelReadStateService;
+import com.concordmvp.permissions.Permission;
+import com.concordmvp.permissions.PermissionService;
 import com.concordmvp.realtime.RealtimeEventPublisher;
 import com.concordmvp.realtime.WsEvent;
 import com.concordmvp.realtime.WsEventType;
@@ -26,9 +28,14 @@ import java.util.stream.Collectors;
 
 /**
  * Business logic for channels. Reuses {@code servers.ServerRepository}/{@code
- * ServerMemberRepository} directly for authorization lookups — this project's established
+ * ServerMemberRepository} directly for membership lookups — this project's established
  * pattern is for a module to depend on another module's repositories directly for simple
  * read-only checks, rather than going through that module's service layer.
+ *
+ * <p>Anything beyond bare membership goes through {@link PermissionService}: creating and
+ * deleting channels needs MANAGE_CHANNELS, and every read is filtered by VIEW_CHANNEL. The
+ * dependency is mandatory, deliberately — an optional one would make it possible to construct a
+ * ChannelService that silently enforces nothing.
  */
 @Service
 public class ChannelService {
@@ -40,6 +47,7 @@ public class ChannelService {
     private final AttachmentCleanupService attachmentCleanupService;
     private final RealtimeEventPublisher realtimeEventPublisher;
     private final ChannelReadStateService channelReadStateService;
+    private final PermissionService permissionService;
 
     @Autowired
     public ChannelService(ChannelRepository channelRepository,
@@ -48,7 +56,9 @@ public class ChannelService {
                            MessageRepository messageRepository,
                            AttachmentCleanupService attachmentCleanupService,
                            RealtimeEventPublisher realtimeEventPublisher,
+                           PermissionService permissionService,
                            ChannelReadStateService channelReadStateService) {
+        this.permissionService = permissionService;
         this.channelRepository = channelRepository;
         this.serverRepository = serverRepository;
         this.serverMemberRepository = serverMemberRepository;
@@ -58,28 +68,14 @@ public class ChannelService {
         this.channelReadStateService = channelReadStateService;
     }
 
-    // Constructor for backward compatibility with tests
-    public ChannelService(ChannelRepository channelRepository,
-                           ServerRepository serverRepository,
-                           ServerMemberRepository serverMemberRepository,
-                           MessageRepository messageRepository,
-                           AttachmentCleanupService attachmentCleanupService,
-                           RealtimeEventPublisher realtimeEventPublisher) {
-        this(channelRepository, serverRepository, serverMemberRepository, messageRepository,
-             attachmentCleanupService, realtimeEventPublisher, null);
-    }
-
     @Transactional
     public Channel createChannel(UUID serverId, String name, ChannelType type, UUID requesterId) {
         if (type == ChannelType.ONBOARDING) {
             throw new BadRequestException("The onboarding channel is managed by the system and cannot be created manually");
         }
 
-        Server server = requireServer(serverId);
-
-        if (!server.getOwnerId().equals(requesterId)) {
-            throw new ForbiddenException("Only the server owner can create channels");
-        }
+        requireServer(serverId);
+        permissionService.requireServer(serverId, requesterId, Permission.MANAGE_CHANNELS);
 
         Channel channel = new Channel();
         channel.setServerId(serverId);
@@ -116,14 +112,13 @@ public class ChannelService {
             throw new BadRequestException("The onboarding channel is managed by the system and cannot be deleted");
         }
 
-        Server server = requireServer(channel.getServerId());
+        requireServer(channel.getServerId());
+        permissionService.requireServer(channel.getServerId(), requesterId, Permission.MANAGE_CHANNELS);
 
-        if (!server.getOwnerId().equals(requesterId)) {
-            throw new ForbiddenException("Only the server owner can delete channels");
-        }
-
-        List<com.concordmvp.messages.Message> messages = messageRepository.findByChannelIdIn(List.of(channelId));
-        attachmentCleanupService.deleteForMessages(messages);
+        List<UUID> messageIds = messageRepository.findByChannelIdIn(List.of(channelId)).stream()
+                .map(com.concordmvp.messages.Message::getId)
+                .toList();
+        attachmentCleanupService.deleteForMessages(messageIds);
         messageRepository.deleteByChannelIdIn(List.of(channelId));
         channelRepository.delete(channel);
 
@@ -135,7 +130,7 @@ public class ChannelService {
     public List<Channel> listChannels(UUID serverId, UUID requesterId) {
         requireServer(serverId);
         requireMember(serverId, requesterId);
-        return channelRepository.findByServerId(serverId);
+        return permissionService.filterVisible(channelRepository.findByServerId(serverId), serverId, requesterId);
     }
 
     public Channel getChannel(UUID channelId, UUID requesterId) {
@@ -143,6 +138,8 @@ public class ChannelService {
                 .orElseThrow(() -> new ResourceNotFoundException("Channel not found: " + channelId));
 
         requireMember(channel.getServerId(), requesterId);
+        // Reported as a 404 rather than a 403 — see PermissionService.requireVisible.
+        permissionService.requireVisible(channel, requesterId);
 
         return channel;
     }
@@ -164,12 +161,13 @@ public class ChannelService {
                 .collect(Collectors.toSet());
     }
 
+    /**
+     * Used for the CHANNEL_CREATE broadcast, which has no single recipient — so unreadCount and
+     * permissions are both left empty and every client refetches. The per-requester shape is built
+     * by {@code ChannelController}, which does know who is asking.
+     */
     private ChannelResponse toResponse(Channel channel) {
-        Integer unreadCount = null;
-        // Note: unreadCount is set to null here since we don't have the userId context
-        // The frontend will fetch unread counts separately or they will be included
-        // in channel-specific responses
         return new ChannelResponse(channel.getId(), channel.getServerId(), channel.getName(),
-                channel.getType(), channel.getCreatedAt(), channel.getUpdatedAt(), unreadCount);
+                channel.getType(), channel.getCreatedAt(), channel.getUpdatedAt(), null, List.of());
     }
 }

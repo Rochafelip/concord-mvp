@@ -12,6 +12,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { voiceClient } from '../../services/voiceClient';
 import { useChannel } from '../channels/hooks';
+import { hasPermission } from '../../types/permission';
 import { useServer } from '../servers/hooks';
 import { QUALITY_ICON } from './connectionQuality';
 import { ScreenShareQualityModal } from './ScreenShareQualityModal';
@@ -24,6 +25,10 @@ export function VoiceConnectionBar() {
   const navigate = useNavigate();
   const localParticipant = useVoiceParticipants().find((participant) => participant.isLocal);
   const [isQualityModalOpen, setQualityModalOpen] = useState(false);
+
+  // Cosmetic only: without SHARE_SCREEN the LiveKit token omits the screen_share source, so
+  // LiveKit itself rejects the track even if this button were somehow reachable.
+  const canShareScreen = hasPermission(channel?.permissions, 'SHARE_SCREEN');
 
   if (status !== 'connected' || !channelId) return null;
 
@@ -87,21 +92,23 @@ export function VoiceConnectionBar() {
               <Headphones data-testid="deafen-icon-on" size={18} aria-hidden="true" />
             )}
           </button>
-          <button
-            type="button"
-            aria-label={localParticipant.screenShareEnabled ? 'Stop sharing' : 'Share screen'}
-            title={localParticipant.screenShareEnabled ? 'Stop sharing' : 'Share screen'}
-            onClick={() =>
-              localParticipant.screenShareEnabled ? voiceClient.toggleScreenShare() : setQualityModalOpen(true)
-            }
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-sidebar text-ink hover:bg-border"
-          >
-            {localParticipant.screenShareEnabled ? (
-              <MonitorX size={18} aria-hidden="true" />
-            ) : (
-              <MonitorUp size={18} aria-hidden="true" />
-            )}
-          </button>
+          {canShareScreen && (
+            <button
+              type="button"
+              aria-label={localParticipant.screenShareEnabled ? 'Stop sharing' : 'Share screen'}
+              title={localParticipant.screenShareEnabled ? 'Stop sharing' : 'Share screen'}
+              onClick={() =>
+                localParticipant.screenShareEnabled ? voiceClient.toggleScreenShare() : setQualityModalOpen(true)
+              }
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-sidebar text-ink hover:bg-border"
+            >
+              {localParticipant.screenShareEnabled ? (
+                <MonitorX size={18} aria-hidden="true" />
+              ) : (
+                <MonitorUp size={18} aria-hidden="true" />
+              )}
+            </button>
+          )}
           <button
             type="button"
             aria-label="Leave call"

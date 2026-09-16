@@ -6,6 +6,7 @@ import { toVoicePresenceEntry } from '../features/calls/api';
 import { useAuthStore } from '../features/auth/authStore';
 import { getWsTicket } from '../features/auth/api';
 import { websocketClient } from '../services/websocketClient';
+import { getVoiceToken } from '../features/calls/api';
 import { voiceClient } from '../services/voiceClient';
 import { useNotificationStore } from '../stores/notificationStore';
 import { useVoiceStore } from '../stores/voiceStore';
@@ -17,6 +18,7 @@ import type {
   ChannelDeletedPayload,
   ErrorPayload,
   MessageDeletedPayload,
+  PermissionsUpdatePayload,
   ServerDeletedPayload,
   ServerMemberEventPayload,
   ServerMemberUpdatePayload,
@@ -184,6 +186,40 @@ export function useRealtimeSync(): void {
             entry.userId === userId ? { ...entry, displayName } : entry,
           ),
         );
+      }),
+
+      websocketClient.subscribe('PERMISSIONS_UPDATE', (payload) => {
+        const { serverId } = payload as PermissionsUpdatePayload;
+
+        // TanStack matches query keys by prefix, so this one call covers the server itself plus
+        // its channels, members and roles. The per-channel queries are keyed by channel id
+        // rather than by server, so they need their own prefix.
+        queryClient.invalidateQueries({ queryKey: ['servers', serverId] });
+        queryClient.invalidateQueries({ queryKey: ['channels'] });
+
+        // A LiveKit grant is fixed when the token is minted (docs/DECISIONS.md D20), so a call
+        // already in progress keeps the permissions it started with until it reconnects with a
+        // fresh token. voiceClient.connect() tears down the existing room itself, which keeps
+        // the gap to a few hundred milliseconds instead of a visible leave-then-join.
+        const voiceState = useVoiceStore.getState();
+        const voiceChannelId = voiceState.channelId;
+        if (voiceState.status !== 'connected' || !voiceChannelId) return;
+
+        const voiceChannel = queryClient.getQueryData<Channel>(['channels', voiceChannelId]);
+        if (voiceChannel != null && voiceChannel.serverId !== serverId) return;
+
+        void (async () => {
+          try {
+            const generation = voiceClient.beginConnect(voiceChannelId);
+            const { token, url } = await getVoiceToken(voiceChannelId);
+            await voiceClient.connect(voiceChannelId, token, url, generation);
+          } catch {
+            // Most likely the permission change is exactly what revoked CONNECT. Dropping the
+            // call is the correct outcome then, and the channel list refetch above already
+            // removes the channel from view.
+            voiceClient.disconnect();
+          }
+        })();
       }),
 
       websocketClient.subscribe('SERVER_OWNER_CHANGE', () => {

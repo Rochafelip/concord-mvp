@@ -1,8 +1,9 @@
 import { useMemo } from 'react';
 import { Spinner } from '../../components/Spinner';
+import { FocusableStrip } from './FocusableStrip';
 import { FocusedCallView } from './FocusedCallView';
 import { useVoiceParticipants, useVoicePresence } from './hooks';
-import { useIsServerOwner } from '../servers/hooks';
+import { useHasPermission } from '../servers/hooks';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { ParticipantGrid } from './ParticipantGrid';
 import { useWatchTargets } from './useWatchTargets';
@@ -15,13 +16,20 @@ interface ParticipantListProps {
 /**
  * Per docs/superpowers/specs/2026-09-09-call-grid-unification-multiwatch-design.md: whenever
  * useWatchTargets resolves at least one watched target (a manual pin/add, or the automatic
- * share default), renders FocusedCallView. With nothing watched, renders ParticipantGrid alone —
- * every connected participant, camera on or off.
+ * share default), renders FocusedCallView. With nothing watched, renders ParticipantGrid —
+ * every connected participant, camera on or off — plus a shares-only FocusableStrip.
+ *
+ * That strip is what makes an active share reachable again after the user clears the watched set
+ * (clicking the only watched share removes it, and useWatchTargets deliberately keeps a cleared
+ * set cleared rather than snapping back to the auto default). Without it the grid is a dead end:
+ * it renders participants but never their shares, so the only way back to a share was leaving
+ * and rejoining the channel, which remounts the hook. It lists shares ONLY — cameras are already
+ * their own watch buttons in the grid, and duplicating them is the 502de0e regression.
  */
 export function ParticipantList({ serverId }: ParticipantListProps) {
   const participants = useVoiceParticipants();
   const channelId = useVoiceStore((state) => state.channelId);
-  const canDisconnect = useIsServerOwner(serverId);
+  const canDisconnect = useHasPermission(serverId, 'DISCONNECT_MEMBERS');
   const { data: presence } = useVoicePresence(serverId);
   const { watchTargets, isManual, addWatch, removeWatch, clearManual } = useWatchTargets(participants);
 
@@ -85,6 +93,14 @@ export function ParticipantList({ serverId }: ParticipantListProps) {
         canDisconnect={canDisconnect}
         channelId={channelId}
         onWatch={addWatch}
+      />
+      <FocusableStrip
+        participants={participantsWithCurrentNames}
+        watchTargets={watchTargets}
+        onAddWatch={addWatch}
+        avatarUrlByUserId={avatarUrlByUserId}
+        deafenedByUserId={deafenedByUserId}
+        showCameras={false}
       />
     </div>
   );

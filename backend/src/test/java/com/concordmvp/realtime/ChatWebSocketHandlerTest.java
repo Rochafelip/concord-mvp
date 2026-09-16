@@ -3,6 +3,7 @@ package com.concordmvp.realtime;
 import com.concordmvp.common.exception.ForbiddenException;
 import com.concordmvp.media.VoicePresenceService;
 import com.concordmvp.messages.MessageService;
+import com.concordmvp.messages.dto.AttachmentRequest;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,6 +19,7 @@ import org.springframework.web.socket.WebSocketSession;
 import java.io.IOException;
 import java.util.Map;
 import java.util.Set;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -128,37 +130,42 @@ class ChatWebSocketHandlerTest {
         handler.handleMessage(session, new TextMessage(
                 "{\"type\":\"MESSAGE_CREATE\",\"payload\":{\"channelId\":\"" + channelId + "\",\"content\":\"hi\"}}"));
 
-        verify(messageService).sendMessage(eq(channelId), eq("hi"), isNull(), isNull(), isNull(), eq(userId));
+        verify(messageService).sendMessage(eq(channelId), eq("hi"), isNull(), eq(userId));
         verify(session, never()).sendMessage(any());
     }
 
     @Test
-    void handleTextMessage_messageCreate_withImageUrl_passesItToMessageService() throws Exception {
+    void handleTextMessage_messageCreate_withAttachment_passesItToMessageService() throws Exception {
         UUID userId = UUID.randomUUID();
         UUID channelId = UUID.randomUUID();
         WebSocketSession session = sessionWithUserId(userId);
 
         handler.handleMessage(session, new TextMessage(
                 "{\"type\":\"MESSAGE_CREATE\",\"payload\":{\"channelId\":\"" + channelId
-                        + "\",\"content\":\"\",\"imageUrl\":\"/api/v1/uploads/abc.png\"}}"));
+                        + "\",\"content\":\"\",\"attachments\":[{\"url\":\"/api/v1/uploads/abc.pdf\","
+                        + "\"fileName\":\"report.pdf\",\"fileSize\":12345}]}}"));
 
-        verify(messageService).sendMessage(eq(channelId), eq(""), eq("/api/v1/uploads/abc.png"), isNull(), isNull(), eq(userId));
+        verify(messageService).sendMessage(eq(channelId), eq(""),
+                eq(List.of(new AttachmentRequest("/api/v1/uploads/abc.pdf", "report.pdf", 12345L))), eq(userId));
         verify(session, never()).sendMessage(any());
     }
 
     @Test
-    void handleTextMessage_messageCreate_withFileNameAndSize_passesThemToMessageService() throws Exception {
+    void handleTextMessage_messageCreate_withSeveralAttachments_preservesTheirOrder() throws Exception {
         UUID userId = UUID.randomUUID();
         UUID channelId = UUID.randomUUID();
         WebSocketSession session = sessionWithUserId(userId);
 
         handler.handleMessage(session, new TextMessage(
                 "{\"type\":\"MESSAGE_CREATE\",\"payload\":{\"channelId\":\"" + channelId
-                        + "\",\"content\":\"\",\"imageUrl\":\"/api/v1/uploads/abc.pdf\","
-                        + "\"fileName\":\"report.pdf\",\"fileSize\":12345}}"));
+                        + "\",\"content\":\"two shots\",\"attachments\":["
+                        + "{\"url\":\"/api/v1/uploads/a.png\",\"fileName\":\"a.png\",\"fileSize\":1},"
+                        + "{\"url\":\"/api/v1/uploads/b.png\",\"fileName\":\"b.png\",\"fileSize\":2}]}}"));
 
-        verify(messageService).sendMessage(eq(channelId), eq(""), eq("/api/v1/uploads/abc.pdf"),
-                eq("report.pdf"), eq(12345L), eq(userId));
+        // Order matters: the service turns the list index into each attachment's stored position.
+        verify(messageService).sendMessage(eq(channelId), eq("two shots"), eq(List.of(
+                new AttachmentRequest("/api/v1/uploads/a.png", "a.png", 1L),
+                new AttachmentRequest("/api/v1/uploads/b.png", "b.png", 2L))), eq(userId));
         verify(session, never()).sendMessage(any());
     }
 
@@ -167,7 +174,7 @@ class ChatWebSocketHandlerTest {
         UUID userId = UUID.randomUUID();
         UUID channelId = UUID.randomUUID();
         WebSocketSession session = sessionWithUserId(userId);
-        when(messageService.sendMessage(eq(channelId), eq("hi"), isNull(), isNull(), isNull(), eq(userId)))
+        when(messageService.sendMessage(eq(channelId), eq("hi"), isNull(), eq(userId)))
                 .thenThrow(new ForbiddenException("Not a member of this server"));
 
         handler.handleMessage(session, new TextMessage(

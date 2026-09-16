@@ -337,6 +337,48 @@ describe('ParticipantList', () => {
       expect(screen.getByText(/João's screen/)).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Return to automatic layout' })).toBeInTheDocument();
     });
+
+    // The reported dead end: removing the only watched share drops the whole view back to the
+    // plain grid, which lists participants but never their shares — leaving the share the user
+    // just stopped watching with no way back, since useWatchTargets deliberately keeps a cleared
+    // set cleared. Rejoining the channel was the only escape (it remounts the hook).
+    it('keeps an active share reachable from the plain grid after the last watch is cleared', async () => {
+      const user = userEvent.setup();
+      const track = { attach: vi.fn(), detach: vi.fn() } as never;
+      useVoiceStore.setState({
+        participants: [
+          participant({ identity: 'u1', name: 'Felipe', isLocal: true, cameraEnabled: true }),
+          participant({ identity: 'u2', name: 'João', isLocal: false, screenShareTrack: track }),
+        ],
+      });
+      renderList();
+
+      await user.click(screen.getByRole('button', { name: "Stop watching João's screen" }));
+      expect(screen.getByTestId('participant-grid')).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: "Focus on João's screen" }));
+
+      expect(screen.getByText(/João's screen/)).toBeInTheDocument();
+    });
+
+    // 502de0e hoisted the whole strip out of FocusedCallView and had to be reverted: in grid mode
+    // every camera-on participant already is its own "Focus on X's camera" button, so listing
+    // cameras again produced two buttons sharing one accessible name. Only shares belong here.
+    it('does not list cameras twice while the plain grid is showing', async () => {
+      const user = userEvent.setup();
+      const track = { attach: vi.fn(), detach: vi.fn() } as never;
+      useVoiceStore.setState({
+        participants: [
+          participant({ identity: 'u1', name: 'Felipe', isLocal: false, cameraEnabled: true }),
+          participant({ identity: 'u2', name: 'João', isLocal: false, screenShareTrack: track }),
+        ],
+      });
+      renderList();
+
+      await user.click(screen.getByRole('button', { name: "Stop watching João's screen" }));
+
+      expect(screen.getAllByRole('button', { name: "Focus on Felipe's camera" })).toHaveLength(1);
+    });
   });
 
   // The reported bug, end to end: lower someone's volume in the grid, then have a screen share

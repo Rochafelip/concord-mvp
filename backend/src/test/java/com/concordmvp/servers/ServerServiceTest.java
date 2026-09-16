@@ -6,9 +6,15 @@ import com.concordmvp.channels.ChannelType;
 import com.concordmvp.common.exception.BadRequestException;
 import com.concordmvp.common.exception.ForbiddenException;
 import com.concordmvp.common.exception.ResourceNotFoundException;
+import com.concordmvp.messages.AttachmentCleanupService;
 import com.concordmvp.messages.MessageRepository;
 import com.concordmvp.messages.MessageService;
 import com.concordmvp.messages.ChannelReadStateService;
+import com.concordmvp.permissions.Permission;
+import com.concordmvp.permissions.PermissionService;
+import com.concordmvp.permissions.Role;
+import com.concordmvp.permissions.RoleRepository;
+import com.concordmvp.permissions.RoleService;
 import com.concordmvp.realtime.RealtimeEventPublisher;
 import com.concordmvp.realtime.WsEvent;
 import com.concordmvp.realtime.WsEventType;
@@ -35,6 +41,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -61,6 +68,9 @@ class ServerServiceTest {
     private MessageRepository messageRepository;
 
     @Mock
+    private AttachmentCleanupService attachmentCleanupService;
+
+    @Mock
     private MessageService messageService;
 
     @Mock
@@ -72,12 +82,22 @@ class ServerServiceTest {
     @Mock
     private ChannelReadStateService channelReadStateService;
 
+    @Mock
+    private PermissionService permissionService;
+
+    @Mock
+    private RoleService roleService;
+
+    @Mock
+    private RoleRepository roleRepository;
+
     private ServerService serverService;
 
     @BeforeEach
     void setUp() {
         serverService = new ServerService(serverRepository, serverMemberRepository, serverInviteRepository,
-                channelRepository, messageRepository, messageService, userRepository, realtimeEventPublisher, null);
+                channelRepository, messageRepository, attachmentCleanupService, messageService, userRepository,
+                realtimeEventPublisher, permissionService, roleService, roleRepository, null);
     }
 
     /** Mimics JPA assigning an id on save/persist for a {@link Server} that doesn't already have one. */
@@ -172,6 +192,21 @@ class ServerServiceTest {
                 "Alice entrou no servidor");
     }
 
+    @Test
+    void createServer_bootstrapsTheEveryoneRole_soTheNewServerHasABaselineFromTheStart() {
+        // Without this the members of a brand-new server would resolve to zero permissions, while
+        // servers that existed before V18 got their @everyone from the migration's backfill.
+        UUID ownerId = UUID.randomUUID();
+        stubServerSaveAssignsId();
+        stubMemberSaveAssignsId();
+        stubChannelSaveAssignsId();
+        when(userRepository.findById(ownerId)).thenReturn(Optional.of(user(ownerId, "Alice")));
+
+        Server result = serverService.createServer("My Server", ownerId);
+
+        verify(roleService).createEveryoneRole(result.getId());
+    }
+
     // --- listServersForUser ---
 
     @Test
@@ -220,6 +255,34 @@ class ServerServiceTest {
                 .isInstanceOf(ForbiddenException.class);
     }
 
+    @Test
+    void listMembers_memberWithoutViewMemberList_throwsForbidden() {
+        UUID serverId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        when(serverRepository.findById(serverId)).thenReturn(Optional.of(server(serverId, UUID.randomUUID())));
+        when(serverMemberRepository.existsByServerIdAndUserId(serverId, requesterId)).thenReturn(true);
+        doThrow(new ForbiddenException("denied")).when(permissionService)
+                .requireServer(serverId, requesterId, Permission.VIEW_MEMBER_LIST);
+
+        assertThatThrownBy(() -> serverService.listMembers(serverId, requesterId))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void deleteServer_alsoDeletesTheServersRoles() {
+        UUID serverId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        Server existing = server(serverId, ownerId);
+        when(serverRepository.findById(serverId)).thenReturn(Optional.of(existing));
+        when(serverMemberRepository.findByServerId(serverId)).thenReturn(List.of(member(serverId, ownerId)));
+        when(channelRepository.findByServerId(serverId)).thenReturn(List.of());
+        when(messageRepository.findByChannelIdIn(List.of())).thenReturn(List.of());
+
+        serverService.deleteServer(serverId, ownerId);
+
+        verify(roleRepository).deleteByServerId(serverId);
+    }
+
     // --- owner-only actions ---
 
     @Test
@@ -248,22 +311,26 @@ class ServerServiceTest {
     }
 
     @Test
-    void regenerateInvite_nonOwner_throwsForbidden() {
+    void regenerateInvite_withoutManageInvites_throwsForbidden() {
         UUID serverId = UUID.randomUUID();
         UUID ownerId = UUID.randomUUID();
         UUID requesterId = UUID.randomUUID();
         when(serverRepository.findById(serverId)).thenReturn(Optional.of(server(serverId, ownerId)));
+        doThrow(new ForbiddenException("denied")).when(permissionService)
+                .requireServer(serverId, requesterId, Permission.MANAGE_INVITES);
 
         assertThatThrownBy(() -> serverService.regenerateInvite(serverId, requesterId))
                 .isInstanceOf(ForbiddenException.class);
     }
 
     @Test
-    void getOrCreateInvite_nonOwner_throwsForbidden() {
+    void getOrCreateInvite_withoutManageInvites_throwsForbidden() {
         UUID serverId = UUID.randomUUID();
         UUID ownerId = UUID.randomUUID();
         UUID requesterId = UUID.randomUUID();
         when(serverRepository.findById(serverId)).thenReturn(Optional.of(server(serverId, ownerId)));
+        doThrow(new ForbiddenException("denied")).when(permissionService)
+                .requireServer(serverId, requesterId, Permission.MANAGE_INVITES);
 
         assertThatThrownBy(() -> serverService.getOrCreateInvite(serverId, requesterId))
                 .isInstanceOf(ForbiddenException.class);
@@ -434,6 +501,36 @@ class ServerServiceTest {
         inOrder.verify(serverInviteRepository).delete(invite);
         inOrder.verify(serverMemberRepository).deleteAll(any());
         inOrder.verify(serverRepository).delete(server);
+    }
+
+    @Test
+    void deleteServer_deletesAttachmentFilesBeforeTheMessagesThatReferenceThem() {
+        UUID serverId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        Server server = server(serverId, ownerId);
+        UUID channelId = UUID.randomUUID();
+        Channel channel = new Channel();
+        channel.setId(channelId);
+        channel.setServerId(serverId);
+        UUID messageId = UUID.randomUUID();
+        com.concordmvp.messages.Message message = new com.concordmvp.messages.Message();
+        message.setId(messageId);
+        message.setChannelId(channelId);
+
+        when(serverRepository.findById(serverId)).thenReturn(Optional.of(server));
+        when(serverMemberRepository.findByServerId(serverId)).thenReturn(List.of(member(serverId, ownerId)));
+        when(serverInviteRepository.findByServerId(serverId)).thenReturn(Optional.empty());
+        when(channelRepository.findByServerId(serverId)).thenReturn(List.of(channel));
+        when(messageRepository.findByChannelIdIn(List.of(channelId))).thenReturn(List.of(message));
+
+        serverService.deleteServer(serverId, ownerId);
+
+        // Order is the whole point: message_attachments rows go with their message via ON DELETE
+        // CASCADE, so once the messages are gone the files on disk can no longer be found and
+        // would be stranded in the uploads directory forever.
+        InOrder inOrder = inOrder(attachmentCleanupService, messageRepository);
+        inOrder.verify(attachmentCleanupService).deleteForMessages(List.of(messageId));
+        inOrder.verify(messageRepository).deleteByChannelIdIn(List.of(channelId));
     }
 
     // --- joinServer ---

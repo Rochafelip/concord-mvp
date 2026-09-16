@@ -10,6 +10,7 @@ import type { VoicePresenceEntry } from '../types/voice';
 import { useVoiceStore } from '../stores/voiceStore';
 import { voiceClient } from '../services/voiceClient';
 import { getWsTicket } from '../features/auth/api';
+import { getVoiceToken } from '../features/calls/api';
 import { useRealtimeSync } from './useRealtimeSync';
 
 const { handlers, mockConnect, mockDisconnect } = vi.hoisted(() => ({
@@ -38,7 +39,17 @@ vi.mock('../services/websocketClient', () => ({
 }));
 
 vi.mock('../services/voiceClient', () => ({
-  voiceClient: { disconnect: vi.fn() },
+  voiceClient: {
+    disconnect: vi.fn(),
+    beginConnect: vi.fn(() => 1),
+    connect: vi.fn(() => Promise.resolve()),
+  },
+}));
+
+// Partial: the voice-presence tests below rely on the module's real toVoicePresenceEntry.
+vi.mock('../features/calls/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../features/calls/api')>()),
+  getVoiceToken: vi.fn(() => Promise.resolve({ token: 'fresh-token', url: 'wss://livekit.test' })),
 }));
 
 vi.mock('../features/auth/api', () => ({
@@ -81,6 +92,9 @@ describe('useRealtimeSync', () => {
     mockConnect.mockClear();
     mockDisconnect.mockClear();
     vi.mocked(voiceClient.disconnect).mockClear();
+    vi.mocked(voiceClient.connect).mockClear();
+    vi.mocked(voiceClient.beginConnect).mockClear();
+    vi.mocked(getVoiceToken).mockClear();
     vi.mocked(getWsTicket).mockClear();
     useVoiceStore.setState({ status: 'disconnected', channelId: null, participants: [], error: null, isDeafened: false });
     useAuthStore.setState({
@@ -309,6 +323,62 @@ describe('useRealtimeSync', () => {
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['servers', 's1', 'members'] });
     },
   );
+
+  it('PERMISSIONS_UPDATE refetches everything scoped to that server', () => {
+    const queryClient = newQueryClient();
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    renderHarness(queryClient, '/app/servers/s1/channels/c1');
+
+    emit('PERMISSIONS_UPDATE', { serverId: 's1' });
+
+    // TanStack matches query keys by prefix, so ['servers','s1'] covers that server's channels,
+    // members and roles in one call. ['channels'] covers the single-channel queries that
+    // ChatWindow and VoiceConnectionBar hold, which are keyed by channel id rather than server.
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['servers', 's1'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['channels'] });
+  });
+
+  it('PERMISSIONS_UPDATE rejoins an active call so LiveKit issues a grant with the new permissions', async () => {
+    // The LiveKit grant is fixed when the token is minted (D20), so the only way to pick up a
+    // permission change mid-call is to fetch a fresh token and reconnect with it.
+    const queryClient = newQueryClient();
+    queryClient.setQueryData<Channel>(['channels', 'c1'], {
+      id: 'c1', serverId: 's1', name: 'lobby', type: 'VOICE', createdAt: 'x', updatedAt: 'x',
+    });
+    useVoiceStore.setState({ channelId: 'c1', status: 'connected' });
+    renderHarness(queryClient, '/app/servers/s1/channels/c1');
+
+    emit('PERMISSIONS_UPDATE', { serverId: 's1' });
+    await act(async () => { await Promise.resolve(); });
+
+    expect(getVoiceToken).toHaveBeenCalledWith('c1');
+    expect(voiceClient.connect).toHaveBeenCalledWith('c1', 'fresh-token', 'wss://livekit.test', 1);
+  });
+
+  it('PERMISSIONS_UPDATE leaves a call in another server alone', async () => {
+    const queryClient = newQueryClient();
+    queryClient.setQueryData<Channel>(['channels', 'other-channel'], {
+      id: 'other-channel', serverId: 's2', name: 'lobby', type: 'VOICE', createdAt: 'x', updatedAt: 'x',
+    });
+    useVoiceStore.setState({ channelId: 'other-channel', status: 'connected' });
+    renderHarness(queryClient, '/app/servers/s1/channels/c1');
+
+    emit('PERMISSIONS_UPDATE', { serverId: 's1' });
+    await act(async () => { await Promise.resolve(); });
+
+    expect(voiceClient.connect).not.toHaveBeenCalled();
+  });
+
+  it('PERMISSIONS_UPDATE does not touch a call that is not connected', async () => {
+    const queryClient = newQueryClient();
+    useVoiceStore.setState({ channelId: null, status: 'disconnected' });
+    renderHarness(queryClient, '/app/servers/s1/channels/c1');
+
+    emit('PERMISSIONS_UPDATE', { serverId: 's1' });
+    await act(async () => { await Promise.resolve(); });
+
+    expect(voiceClient.connect).not.toHaveBeenCalled();
+  });
 
   it('SERVER_OWNER_CHANGE invalidates the whole servers branch', () => {
     const queryClient = newQueryClient();

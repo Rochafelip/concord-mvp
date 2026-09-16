@@ -197,7 +197,7 @@ public record ChannelReadStateResponse(
 
 ```java
 @Transactional
-public Message sendMessage(UUID channelId, String content, String imageUrl, String fileName, Long fileSize, UUID authorId) {
+public Message sendMessage(UUID channelId, String content, List<AttachmentRequest> attachments, UUID authorId) {
     // ... existing validation and message creation logic ...
 
     Message saved = messageRepository.save(message);
