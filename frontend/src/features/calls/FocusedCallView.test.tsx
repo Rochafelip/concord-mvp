@@ -221,7 +221,7 @@ describe('FocusedCallView', () => {
       />,
     );
 
-    expect(screen.queryByRole('button', { name: 'Return to automatic layout' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Show all participants' })).not.toBeInTheDocument();
 
     rerender(
       <FocusedCallView
@@ -236,7 +236,7 @@ describe('FocusedCallView', () => {
       />,
     );
 
-    expect(screen.getByRole('button', { name: 'Return to automatic layout' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Show all participants' })).toBeInTheDocument();
   });
 
   it('calls onReturnToAutomatic when the return button is clicked', async () => {
@@ -255,7 +255,7 @@ describe('FocusedCallView', () => {
       />,
     );
 
-    await user.click(screen.getByRole('button', { name: 'Return to automatic layout' }));
+    await user.click(screen.getByRole('button', { name: 'Show all participants' }));
 
     expect(onReturnToAutomatic).toHaveBeenCalledTimes(1);
   });
