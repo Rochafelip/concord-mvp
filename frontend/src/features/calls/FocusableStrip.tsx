@@ -9,6 +9,11 @@ interface FocusableStripProps {
   onAddWatch: (target: FocusTarget) => void;
   avatarUrlByUserId: Map<string, string | null | undefined>;
   deafenedByUserId: Map<string, boolean>;
+  /** False while ParticipantList's plain grid is showing: there, every camera-on participant is
+   * already a "Focus on X's camera" button of its own, so listing cameras here too yields two
+   * buttons with one accessible name — the regression 502de0e introduced. Shares have no such
+   * double, since the grid never renders them. */
+  showCameras?: boolean;
 }
 
 function isWatched(watchTargets: FocusTarget[], type: FocusTarget['type'], identity: string): boolean {
@@ -28,13 +33,16 @@ export function FocusableStrip({
   onAddWatch,
   avatarUrlByUserId,
   deafenedByUserId,
+  showCameras = true,
 }: FocusableStripProps) {
   const otherShares = participants.filter(
     (participant) => participant.screenShareTrack && !isWatched(watchTargets, 'share', participant.identity),
   );
-  const otherCameras = participants.filter(
-    (participant) => participant.cameraEnabled && !isWatched(watchTargets, 'camera', participant.identity),
-  );
+  const otherCameras = showCameras
+    ? participants.filter(
+        (participant) => participant.cameraEnabled && !isWatched(watchTargets, 'camera', participant.identity),
+      )
+    : [];
 
   if (otherShares.length === 0 && otherCameras.length === 0) return null;
 
