@@ -2,6 +2,8 @@ package com.concordmvp.messages;
 
 import com.concordmvp.channels.Channel;
 import com.concordmvp.channels.ChannelService;
+import com.concordmvp.permissions.Permission;
+import com.concordmvp.permissions.PermissionService;
 import com.concordmvp.channels.ChannelType;
 import com.concordmvp.common.exception.BadRequestException;
 import com.concordmvp.common.exception.ForbiddenException;
@@ -21,6 +23,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -34,9 +37,12 @@ class AttachmentUploadServiceTest {
 
     private AttachmentUploadService attachmentUploadService;
 
+    @Mock
+    private PermissionService permissionService;
+
     @BeforeEach
     void setUp() throws IOException {
-        attachmentUploadService = new AttachmentUploadService(channelService, uploadsDir.toString());
+        attachmentUploadService = new AttachmentUploadService(channelService, permissionService, uploadsDir.toString());
     }
 
     private Channel channel(UUID id, UUID serverId) {
@@ -211,5 +217,24 @@ class AttachmentUploadServiceTest {
         assertThat(result.fileName()).isEqualTo("README");
         String storageFilename = result.url().substring("/api/v1/uploads/".length());
         assertThat(storageFilename).doesNotContain(".");
+    }
+
+    @Test
+    void upload_withoutAttachFiles_throwsForbidden_andWritesNothingToDisk() throws Exception {
+        UUID channelId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        Channel target = new Channel();
+        target.setId(channelId);
+        target.setServerId(UUID.randomUUID());
+        when(channelService.getChannel(channelId, requesterId)).thenReturn(target);
+        doThrow(new ForbiddenException("denied")).when(permissionService)
+                .requireChannel(target, requesterId, Permission.ATTACH_FILES);
+
+        MockMultipartFile file = new MockMultipartFile("file", "a.png", "image/png", new byte[] {1, 2, 3});
+
+        assertThatThrownBy(() -> attachmentUploadService.upload(channelId, requesterId, file))
+                .isInstanceOf(ForbiddenException.class);
+
+        assertThat(Files.list(uploadsDir).toList()).isEmpty();
     }
 }

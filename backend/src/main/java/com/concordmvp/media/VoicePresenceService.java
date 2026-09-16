@@ -2,6 +2,8 @@ package com.concordmvp.media;
 
 import com.concordmvp.channels.Channel;
 import com.concordmvp.channels.ChannelService;
+import com.concordmvp.permissions.Permission;
+import com.concordmvp.permissions.PermissionService;
 import com.concordmvp.channels.ChannelType;
 import com.concordmvp.common.exception.BadRequestException;
 import com.concordmvp.common.exception.ForbiddenException;
@@ -48,27 +50,22 @@ public class VoicePresenceService {
         private final ServerRepository serverRepository;
     private final UserRepository userRepository;
     private final RealtimeEventPublisher realtimeEventPublisher;
+    private final PermissionService permissionService;
 
         @Autowired
         public VoicePresenceService(ChannelService channelService,
                                  ServerMemberRepository serverMemberRepository,
                                  ServerRepository serverRepository,
                                  UserRepository userRepository,
-                                 RealtimeEventPublisher realtimeEventPublisher) {
+                                 RealtimeEventPublisher realtimeEventPublisher,
+                                 PermissionService permissionService) {
+        this.permissionService = permissionService;
         this.channelService = channelService;
         this.serverMemberRepository = serverMemberRepository;
         this.serverRepository = serverRepository;
         this.userRepository = userRepository;
         this.realtimeEventPublisher = realtimeEventPublisher;
     }
-
-        // Constructor retained for existing unit tests that do not exercise owner-only actions.
-        public VoicePresenceService(ChannelService channelService,
-                                                                 ServerMemberRepository serverMemberRepository,
-                                                                 UserRepository userRepository,
-                                                                 RealtimeEventPublisher realtimeEventPublisher) {
-                this(channelService, serverMemberRepository, null, userRepository, realtimeEventPublisher);
-        }
 
     public void updatePresence(UUID channelId, UUID userId, boolean muted, boolean cameraOn,
                                 boolean screenSharing, boolean speaking, boolean deafened) {
@@ -109,8 +106,12 @@ public class VoicePresenceService {
             throw new ForbiddenException("Not a member of this server: " + serverId);
         }
 
+        // One VIEW_CHANNEL check per occupied voice channel. The map only ever holds people
+        // currently connected to voice, so this is a handful of entries, not the channel list.
         return byUserId.values().stream()
                 .filter(entry -> entry.serverId().equals(serverId))
+                .filter(entry -> permissionService.hasChannel(entry.channelId(), requesterId,
+                        Permission.VIEW_CHANNEL))
                 .map(Entry::response)
                 .toList();
     }
@@ -118,14 +119,13 @@ public class VoicePresenceService {
         public void disconnectParticipant(UUID channelId, UUID targetUserId, UUID requesterId) {
                 Channel channel = channelService.getChannel(channelId, requesterId);
                 UUID serverId = channel.getServerId();
-                UUID ownerId = serverRepository.findById(serverId)
-                                .orElseThrow(() -> new ResourceNotFoundException("Server not found: " + serverId))
-                                .getOwnerId();
-                if (!ownerId.equals(requesterId)) {
-                        throw new ForbiddenException("Only the server owner can disconnect voice participants");
-                }
                 if (targetUserId.equals(requesterId)) {
-                        throw new BadRequestException("The server owner cannot disconnect themselves");
+                        throw new BadRequestException("Você não pode desconectar a si mesmo");
+                }
+                permissionService.requireChannel(channel, requesterId, Permission.DISCONNECT_MEMBERS);
+                if (!permissionService.outranks(serverId, requesterId, targetUserId)) {
+                        throw new ForbiddenException(
+                                        "Você não pode desconectar alguém no seu nível ou acima");
                 }
 
                 Entry entry = byUserId.get(targetUserId);

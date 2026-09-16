@@ -413,3 +413,87 @@ procedimento, para que a migração seja mecânica quando for decidida. Um `From
 domínio novo exige também trocar o Gmail gratuito por um serviço que assine DKIM
 com esse domínio — manter o Gmail faria o DMARC **falhar**, resultado pior que o
 atual.
+
+## D20 — Cargos e permissões: bitfield, sem cache, voz via grant do LiveKit
+
+**Context**: O `AGENTS.md` listava "Advanced roles", "Advanced permissions" e
+"Complex moderation" como fora de escopo. O dono do projeto pediu explicitamente
+o sistema completo de cargos e permissões, que é o override que aquele documento
+prevê. A autorização, até aqui, eram duas regras — "é membro" e "é
+`server.owner_id`" — replicadas à mão em oito pontos do backend.
+
+A entrega foi dividida em três specs, porque as 24 seções do pedido cobrem cinco
+subsistemas e um documento único ficaria vago demais para implementar. Esta
+decisão cobre a Spec A: o motor de permissões (Fases 1-4 e 7 do pedido). A Spec B
+traz moderação e audit log; a Spec C, a interface de gerenciamento de cargos.
+
+**Decision**:
+
+1. **Permissões são um bitfield `BIGINT`, não uma linha por permissão.** O
+   cálculo vira aritmética de bits, e resolver um membro custa duas ou três
+   queries indexadas independentemente de quantas permissões existam. O merge de
+   um override de canal são duas operações (`(base & ~deny) | allow`). Custo
+   aceito: teto de 63 permissões — 23 em uso — e a necessidade de manter
+   `Permission.java` espelhado em `frontend/src/types/permission.ts`, travada
+   por `PermissionVocabularySyncTest`. **Os índices dos bits são contrato de
+   persistência: renumerar um reinterpreta silenciosamente todas as linhas já
+   gravadas.** Um bit aposentado nunca é reaproveitado.
+
+2. **Na API as permissões trafegam como nomes, nunca como o número.** Nomes
+   sobrevivem a uma renumeração, são legíveis no DevTools e poupam o frontend de
+   qualquer aritmética de bits. O bitmask é detalhe de persistência.
+
+3. **Sem cache de permissões.** Coerente com a D3 (Redis fora do MVP) e a D1
+   (escala de grupo de amigos). Um cache exigiria invalidação distribuída —
+   exatamente o que a D3 evitou. A única otimização é `filterVisible`, que
+   resolve o membro uma vez e busca todos os overrides numa query só, para que
+   listar N canais nunca vire N consultas.
+
+4. **Permissões de voz são aplicadas pelo grant do LiveKit, com reconexão.**
+   `SPEAK`, `USE_VIDEO` e `SHARE_SCREEN` viram entradas em `canPublishSources` no
+   token, então o próprio LiveKit recusa uma track que o usuário não pode
+   publicar — um cliente adulterado não contorna. Como o grant é fixado no
+   momento em que o token é assinado, uma mudança de permissão durante a chamada
+   é aplicada buscando um token novo e reconectando (`voiceClient.connect` já
+   derruba a sala anterior), o que custa algumas centenas de milissegundos.
+
+   *Alternativa recusada*: integrar a Server API do LiveKit
+   (`UpdateParticipant`) para alterar permissões ao vivo, sem reconexão. Ela
+   introduziria uma dependência de rede backend→LiveKit e o peso transitivo que o
+   javadoc do `MediaService` já justifica evitar (Retrofit, protobuf,
+   kotlin-stdlib).
+
+5. **`ADMINISTRATOR` ignora os overrides de canal, mas não ignora a hierarquia.**
+   Sem a segunda metade, dois administradores poderiam se remover mutuamente e o
+   cargo viraria uma corrida. Só o dono do servidor ignora a hierarquia.
+
+6. **`MANAGE_ROLES` não permite conceder o que o próprio ator não possui.** Sem
+   essa regra, `MANAGE_ROLES` seria equivalente a `ADMINISTRATOR` por um caminho
+   indireto.
+
+7. **Excluir e transferir o servidor continuam exclusivos do dono**, não
+   delegáveis por permissão (mantém a D7 e a D11 como estão).
+
+8. **`VIEW_CHANNEL` negado responde 404, não 403.** Um 403 confirmaria que o
+   canal existe, vazando a estrutura do servidor para quem não deveria saber que
+   ele está lá.
+
+**Consequences**: Todo servidor tem um cargo `@everyone` não deletável na posição
+0. A migration V18 fez o backfill dele para os servidores existentes, em SQL, com
+exatamente as permissões que todo membro já tinha — ninguém perdeu acesso no
+deploy. `ServerService.createServer` faz o mesmo para servidores novos, na mesma
+transação. Se esse cargo faltar para algum servidor, seus membros resolvem para
+zero permissões; é o principal risco operacional desta mudança.
+
+Onze permissões do pedido original foram deliberadamente não implementadas por
+protegerem funcionalidades que não existem no Concord (`VIEW_SERVER`,
+`VIEW_MEMBER_PROFILE`, `SEND_MESSAGES_IN_THREADS`, `ADD_REACTIONS`,
+`USE_EXTERNAL_EMOJIS`, `EMBED_LINKS`, `USE_SOUNDBOARD`, `PIN_MESSAGES`,
+`EDIT_OTHERS_MESSAGES`, `DELETE_MESSAGES` e `VIEW_VOICE_CHANNEL`). `MANAGE_SERVER`
+existe como bit mas não protege nada ainda: não há operação de edição de servidor.
+
+O endpoint de anexos (`/api/v1/uploads/**`) **continua público**, como a decisão
+anterior documentada em `AttachmentServingController` estabelece. Uma URL de anexo
+permanece acessível a quem tiver o link, mesmo que a pessoa perca `VIEW_CHANNEL`
+do canal de origem. Fechar isso é uma decisão em aberto, registrada em
+`docs/OPEN_QUESTIONS.md`.

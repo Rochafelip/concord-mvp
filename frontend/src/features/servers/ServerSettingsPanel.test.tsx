@@ -16,6 +16,8 @@ const server: Server = {
   ownerId: 'owner-1',
   createdAt: '2026-01-01',
   updatedAt: '2026-01-01',
+  // The invite section is gated on MANAGE_INVITES now; transfer and delete stay owner-only.
+  permissions: ['MANAGE_INVITES'],
 };
 
 const members: ServerMember[] = [
@@ -62,11 +64,13 @@ describe('ServerSettingsPanel', () => {
     expect(screen.getByText(/can't leave directly/i)).toBeInTheDocument();
   });
 
-  it('lets a non-owner leave and hides owner-only actions', async () => {
+  it('lets a plain member leave, and hides both the owner-only actions and the invite section', async () => {
     useAuthStore.setState({
       isAuthenticated: true,
       user: { id: 'member-1', username: 'member', displayName: 'Member', email: 'm@x.com', avatarUrl: null },
     });
+    // No MANAGE_INVITES: the invite section is now gated on the permission, not on ownership.
+    vi.mocked(api.getServer).mockResolvedValue({ ...server, permissions: [] });
     vi.mocked(api.leaveServer).mockResolvedValue(undefined);
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     const user = userEvent.setup();

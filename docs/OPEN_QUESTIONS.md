@@ -1127,3 +1127,39 @@ Once a question is answered:
 2. Update any affected documentation.
 3. Mark the question as resolved or remove it.
 4. Do not leave conflicting information in other documentation files.
+
+---
+
+# 33. Attachment access after losing channel access
+
+## Q33 — Should `/api/v1/uploads/**` stay publicly reachable?
+
+`AttachmentServingController` is deliberately unauthenticated
+(`SecurityConfig` has a `permitAll` entry for the path). Access relies on the
+random UUID filename being unguessable — the same trust model as a shareable
+link. That was a conscious decision, taken before roles existed.
+
+With `VIEW_CHANNEL` now enforced everywhere else, this is the one gap left: an
+attachment URL keeps working for anyone who has it, including a member who has
+since lost `VIEW_CHANNEL` on the channel the attachment was posted in, and
+including someone who was never in the server.
+
+**Options:**
+
+1. **Leave it as it is.** Consistent with the existing decision, and the URLs are
+   not enumerable. The exposure is bounded by who ever saw the link.
+
+2. **Require authentication plus `VIEW_CHANNEL` on the owning channel.**
+   Authentication is cookie-based, so `<img src>` would keep working with no
+   frontend change. It needs a lookup from stored filename to
+   `message_attachments` to `messages` to channel — and a decision about files
+   that have been uploaded but not yet attached to a message, which have no row
+   yet and are exactly what the composer preview renders before sending.
+
+3. **Signed, expiring URLs.** No per-request DB lookup, but it introduces a
+   signing scheme and breaks any link that was saved.
+
+Option 2 is the one that actually closes the gap. It is not a code-only change:
+it reverses a documented decision and changes how the composer preview has to
+work, so it needs the project owner's approval (AGENTS.md, "Architectural
+Changes").

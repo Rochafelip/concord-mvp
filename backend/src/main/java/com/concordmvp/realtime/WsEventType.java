@@ -21,5 +21,6 @@ public enum WsEventType {
     VOICE_PRESENCE_LEAVE,
     VOICE_KICK,
     USER_PROFILE_UPDATE,
+    PERMISSIONS_UPDATE,
     ERROR
 }

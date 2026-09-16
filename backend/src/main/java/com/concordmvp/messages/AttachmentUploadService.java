@@ -1,6 +1,9 @@
 package com.concordmvp.messages;
 
+import com.concordmvp.channels.Channel;
 import com.concordmvp.channels.ChannelService;
+import com.concordmvp.permissions.Permission;
+import com.concordmvp.permissions.PermissionService;
 import com.concordmvp.common.exception.BadRequestException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -43,17 +46,23 @@ public class AttachmentUploadService {
             Set.of("jpg", "jpeg", "png", "gif", "webp", "bmp", "avif");
 
     private final ChannelService channelService;
+    private final PermissionService permissionService;
     private final Path uploadsDir;
 
     public AttachmentUploadService(ChannelService channelService,
+                                    PermissionService permissionService,
                                     @Value("${app.uploads.dir}") String uploadsDir) throws IOException {
         this.channelService = channelService;
+        this.permissionService = permissionService;
         this.uploadsDir = Path.of(uploadsDir);
         Files.createDirectories(this.uploadsDir);
     }
 
     public UploadedAttachment upload(UUID channelId, UUID requesterId, MultipartFile file) {
-        channelService.getChannel(channelId, requesterId);
+        // getChannel enforces membership and VIEW_CHANNEL; uploading additionally needs ATTACH_FILES,
+        // checked before a single byte is written to disk.
+        Channel channel = channelService.getChannel(channelId, requesterId);
+        permissionService.requireChannel(channel, requesterId, Permission.ATTACH_FILES);
 
         if (file.isEmpty()) {
             throw new BadRequestException("File is empty");

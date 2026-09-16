@@ -12,6 +12,11 @@ const MAX_ATTACHMENTS = 10;
 
 interface MessageInputProps {
   channelId: string;
+  /**
+   * ATTACH_FILES in this channel, resolved by ChatWindow. Defaults to false so a caller that has
+   * not resolved it yet hides the control rather than offering an action the backend refuses.
+   */
+  canAttachFiles?: boolean;
 }
 
 interface PendingAttachment {
@@ -45,7 +50,7 @@ function namePastedFile(file: File): File {
   return new File([file], `pasted-image-${Date.now()}.${extension}`, { type: file.type });
 }
 
-export function MessageInput({ channelId }: MessageInputProps) {
+export function MessageInput({ channelId, canAttachFiles = false }: MessageInputProps) {
   const [content, setContent] = useState('');
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -89,6 +94,9 @@ export function MessageInput({ channelId }: MessageInputProps) {
    * drop), so the limits and the preview behave identically whichever one the user reaches for.
    */
   function attachFiles(files: File[]) {
+    // Covers all three entry points at once — paperclip, paste and drag & drop — so none of them
+    // can stage a file the user is not allowed to upload.
+    if (!canAttachFiles) return;
     if (files.length === 0) return;
 
     // Computed outside the state updater, which must stay free of side effects (creating object
@@ -310,18 +318,20 @@ export function MessageInput({ channelId }: MessageInputProps) {
             onPaste={handlePaste}
           />
         </div>
-        <label className="flex h-10 w-10 items-center justify-center rounded text-muted hover:text-ink">
-          <Paperclip size={18} aria-hidden="true" />
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            aria-label="Attach file"
-            disabled={isUploading || !isConnected}
-            onChange={handleFileSelected}
-            className="sr-only"
-          />
-        </label>
+        {canAttachFiles && (
+          <label className="flex h-10 w-10 items-center justify-center rounded text-muted hover:text-ink">
+            <Paperclip size={18} aria-hidden="true" />
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              aria-label="Attach file"
+              disabled={isUploading || !isConnected}
+              onChange={handleFileSelected}
+              className="sr-only"
+            />
+          </label>
+        )}
         <Button type="submit" disabled={!canSend}>
           <span className="hidden sm:inline">{isUploading ? 'Sending…' : 'Send'}</span>
           <span className="sm:hidden" aria-hidden="true">↑</span>

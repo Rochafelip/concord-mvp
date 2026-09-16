@@ -1148,3 +1148,58 @@ No avatar bytes travel over WebSocket or LiveKit. After a successful update or
 removal, the backend publishes `USER_PROFILE_UPDATE`, and frontend caches update
 the current user, message authors, server members, and voice presence without
 requiring a new login.
+
+## 40. Roles and permissions
+
+Authorization lives in one module, `com.concordmvp.permissions`, and in one
+service inside it: `PermissionService`. Every protected action asks that service;
+nothing re-derives authorization from raw repositories any more.
+
+```text
+User
+  |
+  v
+ServerMember            (is this person in the server at all?)
+  |
+  v
+Roles                   (@everyone | OR of the member's roles)
+  |
+  v
+ADMINISTRATOR? ------> all permissions, channel overrides skipped
+  |
+  v
+Channel override: @everyone   (base & ~deny) | allow
+  |
+  v
+Channel override: roles       aggregated first, then applied
+  |
+  v
+Channel override: user        the last word
+  |
+  v
+Effective permissions
+```
+
+The server owner short-circuits the whole chain and resolves to every
+permission, without a single role lookup.
+
+**Dependency rule.** `PermissionService` depends only on repositories — never on
+`ChannelService`, `MessageService`, `ServerService` or `MediaService`, since
+those depend on it and the reverse would be a cycle. Reaching into another
+module's repository for a read-only lookup is this project's established pattern
+(see the javadoc on `ChannelService`).
+
+**Storage.** Permissions are a 63-bit field in a `BIGINT`, 23 bits in use. The
+bit indexes are a persistence contract — see docs/DECISIONS.md D20. On the wire
+they are always permission *names*, never the number.
+
+**Voice.** `MediaService` derives the LiveKit grant's `canPublishSources` from
+the member's `SPEAK`, `USE_VIDEO` and `SHARE_SCREEN`, so LiveKit itself rejects a
+track the user may not publish. No Server API call to LiveKit is made; a
+permission change mid-call is picked up by fetching a fresh token and
+reconnecting.
+
+**Realtime.** `PERMISSIONS_UPDATE` joins the WebSocket vocabulary (§16). Its
+payload carries only the `serverId`: clients react by refetching, and every GET
+already returns the caller's own effective permissions, so the backend never has
+to compute a different payload per recipient.

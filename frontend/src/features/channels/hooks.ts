@@ -2,6 +2,7 @@ import type { Channel } from "../../types/channel";
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
 import * as api from './api';
+import { hasPermission, type Permission } from '../../types/permission';
 
 export function useChannels(serverId: string | undefined) {
   return useQuery({
@@ -17,6 +18,18 @@ export function useChannel(channelId: string | undefined) {
     queryFn: () => api.getChannel(channelId!),
     enabled: channelId != null,
   });
+}
+
+/**
+ * Whether the current user holds a permission inside one channel, channel overrides already
+ * applied by the backend.
+ *
+ * <p>Container components use this and pass the result down as a prop; presentation components
+ * such as MessageList and MessageInput stay free of data fetching (AGENTS.md).
+ */
+export function useChannelPermission(channelId: string | undefined, permission: Permission): boolean {
+  const { data: channel } = useChannel(channelId);
+  return hasPermission(channel?.permissions, permission);
 }
 
 export function useCreateChannel(serverId: string) {

@@ -22,6 +22,9 @@ const server: Server = {
   ownerId: 'owner-1',
   createdAt: '2026-01-01',
   updatedAt: '2026-01-01',
+  // The sidebar's create/delete controls now hang off MANAGE_CHANNELS rather than ownership,
+  // and the voice context menu off DISCONNECT_MEMBERS.
+  permissions: ['MANAGE_CHANNELS', 'DISCONNECT_MEMBERS', 'VIEW_CHANNEL'],
 };
 
 const channels: Channel[] = [
@@ -95,11 +98,12 @@ describe('ChannelSidebar', () => {
     expect(headings.indexOf('Onboarding')).toBeLessThan(headings.indexOf('Text channels'));
   });
 
-  it('hides the Create Channel affordance for a non-owner member', async () => {
+  it('hides the Create Channel affordance from a member without MANAGE_CHANNELS', async () => {
     useAuthStore.setState({
       isAuthenticated: true,
       user: { id: 'member-1', username: 'm', displayName: 'M', email: 'm@x.com', avatarUrl: null },
     });
+    vi.mocked(serversApi.getServer).mockResolvedValue({ ...server, permissions: ['VIEW_CHANNEL'] });
     renderSidebar();
 
     await screen.findByText('Alpha');
@@ -135,11 +139,12 @@ describe('ChannelSidebar', () => {
     expect(screen.getByRole('button', { name: 'Delete voice channel lobby' })).toBeInTheDocument();
   });
 
-  it('hides the delete icon for a non-owner member', async () => {
+  it('hides the delete icon from a member without MANAGE_CHANNELS', async () => {
     useAuthStore.setState({
       isAuthenticated: true,
       user: { id: 'member-1', username: 'm', displayName: 'M', email: 'm@x.com', avatarUrl: null },
     });
+    vi.mocked(serversApi.getServer).mockResolvedValue({ ...server, permissions: ['VIEW_CHANNEL'] });
     renderSidebar();
 
     await screen.findByText('Alpha');
