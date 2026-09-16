@@ -168,13 +168,14 @@ export function ScreenShareTile({ participant, className = '', onWatchClick, can
       role={clickToRemove ? 'button' : undefined}
       tabIndex={clickToRemove ? 0 : undefined}
       aria-label={clickToRemove ? `Stop watching ${participant.name}'s screen` : undefined}
+      title={clickToRemove ? `Stop watching ${participant.name}'s screen` : undefined}
       onClick={clickToRemove ? onWatchClick : undefined}
       onKeyDown={handleKeyDown}
       onContextMenu={handleContextMenu}
       className={
         isFullscreen
           ? 'fixed inset-0 z-50 flex items-center justify-center bg-gray-900'
-          : `group/participant-tile relative flex w-full items-center justify-center overflow-hidden rounded bg-gray-900 ${className}`
+          : `group/participant-tile relative flex w-full items-center justify-center overflow-hidden rounded bg-gray-900 ${clickToRemove ? 'cursor-pointer' : ''} ${className}`
       }
     >
       <video ref={videoRef} muted autoPlay playsInline className="h-full w-full object-contain" />
@@ -190,9 +191,9 @@ export function ScreenShareTile({ participant, className = '', onWatchClick, can
             type="button"
             aria-label="Enter fullscreen"
             onClick={handleEnterFullscreen}
-            className="absolute left-1 top-1 opacity-0 transition-opacity focus-visible:opacity-100 group-hover/camera-grid:opacity-100"
+            className="absolute left-1 top-1 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity hover:bg-black/80 focus-visible:opacity-100 group-hover/camera-grid:opacity-100"
           >
-            <Maximize2 size={16} className="text-white" aria-hidden="true" />
+            <Maximize2 size={16} aria-hidden="true" />
           </button>
           {!participant.isLocal && participant.screenShareHasAudio && participant.screenShareAudioEnabled && (
             <div

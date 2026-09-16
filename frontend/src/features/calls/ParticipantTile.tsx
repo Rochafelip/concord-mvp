@@ -126,10 +126,11 @@ export function ParticipantTile({
     <div
       className={`group/participant-tile relative flex min-h-0 min-w-0 items-center justify-center overflow-hidden rounded ${className} ${
         showVideo ? 'bg-gray-800' : 'bg-gray-800'
-      } ${participant.speaking ? 'ring-2 ring-brand/50' : ''}`}
+      } ${participant.speaking ? 'ring-2 ring-brand/50' : ''} ${onWatchClick ? 'cursor-pointer' : ''}`}
       role={onWatchClick ? 'button' : undefined}
       tabIndex={onWatchClick ? 0 : undefined}
       aria-label={onWatchClick ? `Focus on ${participant.name}'s camera` : undefined}
+      title={onWatchClick ? `Focus on ${participant.name}'s camera` : undefined}
       onClick={onWatchClick}
       onKeyDown={handleKeyDown}
       onContextMenu={handleContextMenu}

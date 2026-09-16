@@ -221,6 +221,17 @@ describe('ScreenShareTile', () => {
       expect(button).not.toHaveClass('group-hover:opacity-100');
     });
 
+    it('gives the fullscreen button a real touch target, not just the bare 16px icon', () => {
+      // It sits at the tile's extreme corner (left-1 top-1) — without a sized, padded hit box
+      // like every other overlay button in this file has (h-9 w-9), a finger tap that's a few
+      // pixels off the icon misses it entirely and silently does nothing.
+      render(<ScreenShareTile participant={sharingParticipant()} />);
+
+      const button = screen.getByRole('button', { name: 'Enter fullscreen' });
+      expect(button).toHaveClass('h-9');
+      expect(button).toHaveClass('w-9');
+    });
+
     it('reveals the volume icon when this share tile is hovered', () => {
       render(<ScreenShareTile participant={sharingParticipant({ screenShareHasAudio: true })} />);
 
@@ -253,6 +264,20 @@ describe('ScreenShareTile', () => {
       const { container } = render(<ScreenShareTile participant={sharingParticipant({ isLocal: true })} onWatchClick={vi.fn()} />);
 
       expect(container.firstChild).not.toHaveAttribute('role', 'button');
+    });
+
+    it('shows a pointer cursor and a tooltip so the click-to-stop-watching affordance is discoverable', () => {
+      render(<ScreenShareTile participant={sharingParticipant({ isLocal: false, name: 'Felipe' })} onWatchClick={vi.fn()} />);
+
+      const tile = screen.getByRole('button', { name: "Stop watching Felipe's screen" });
+      expect(tile).toHaveClass('cursor-pointer');
+      expect(tile).toHaveAttribute('title', "Stop watching Felipe's screen");
+    });
+
+    it('does not show the click-to-stop-watching cursor when the tile is not clickable', () => {
+      const { container } = render(<ScreenShareTile participant={sharingParticipant()} />);
+
+      expect(container.firstChild).not.toHaveClass('cursor-pointer');
     });
 
     it('does not trigger onWatchClick when the fullscreen button is clicked', async () => {
