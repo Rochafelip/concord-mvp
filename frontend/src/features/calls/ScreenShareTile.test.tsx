@@ -280,6 +280,20 @@ describe('ScreenShareTile', () => {
       expect(container.firstChild).not.toHaveClass('cursor-pointer');
     });
 
+    it('shows an always-visible affordance badge, not just a hover cursor, since touch has no hover', () => {
+      render(<ScreenShareTile participant={sharingParticipant({ isLocal: false })} onWatchClick={vi.fn()} />);
+
+      const badge = screen.getByTestId('watch-affordance');
+      expect(badge).not.toHaveClass('opacity-0');
+      expect(badge).toHaveClass('pointer-events-none');
+    });
+
+    it('does not show the affordance badge when the tile is not clickable', () => {
+      render(<ScreenShareTile participant={sharingParticipant()} />);
+
+      expect(screen.queryByTestId('watch-affordance')).not.toBeInTheDocument();
+    });
+
     it('does not trigger onWatchClick when the fullscreen button is clicked', async () => {
       const user = userEvent.setup();
       const onWatchClick = vi.fn();

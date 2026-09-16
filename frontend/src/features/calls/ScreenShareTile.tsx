@@ -1,4 +1,4 @@
-import { Maximize2, Mic, MicOff, Minimize2, MonitorUp, PhoneOff } from 'lucide-react';
+import { Maximize2, Mic, MicOff, Minimize2, MonitorUp, PhoneOff, X } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import { voiceClient } from '../../services/voiceClient';
 import { disconnectVoiceParticipant } from './api';
@@ -207,6 +207,19 @@ export function ScreenShareTile({ participant, className = '', onWatchClick, can
                 onVolumeChange={(volume) => voiceClient.setScreenShareVolume(participant.identity, volume)}
               />
             </div>
+          )}
+          {clickToRemove && (
+            // Stays faintly visible at rest (not just on hover) since touch devices have no
+            // hover state to reveal it — this is the only cue that the tile is tappable to stop
+            // watching. Decorative only: pointer-events-none so it never competes with the
+            // tile's own onClick above.
+            <span
+              aria-hidden="true"
+              data-testid="watch-affordance"
+              className="pointer-events-none absolute bottom-1 right-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/50 text-white opacity-40 transition-opacity group-hover/participant-tile:opacity-100"
+            >
+              <X size={14} aria-hidden="true" />
+            </span>
           )}
         </>
       )}
