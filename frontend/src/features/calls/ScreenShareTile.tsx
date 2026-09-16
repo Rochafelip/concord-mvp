@@ -86,6 +86,18 @@ export function ScreenShareTile({ participant, className = '', onWatchClick, can
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
+  // Switching watch targets (e.g. FocusedCallView's "return to automatic layout") can unmount
+  // this exact tile while it's the browser's fullscreen element — removing a fullscreen element
+  // from the document without exiting first leaves the browser stuck presenting it, which reads
+  // as the video freezing on its last frame. Captured at mount, not read from the ref at cleanup
+  // time, since React has already nulled the ref by the time a passive-effect cleanup runs.
+  useEffect(() => {
+    const element = containerRef.current;
+    return () => {
+      if (element && document.fullscreenElement === element) void document.exitFullscreen();
+    };
+  }, []);
+
   useEffect(() => {
     if (!isFullscreen || document.fullscreenElement === containerRef.current) return;
     function handleKeyDown(event: globalThis.KeyboardEvent) {
@@ -199,6 +211,17 @@ export function ScreenShareTile({ participant, className = '', onWatchClick, can
       )}
       {isFullscreen && (
         <div className="absolute right-2 top-2 flex items-center gap-1.5 rounded bg-black/60 px-2 py-1.5">
+          {/* Leads the bar (not sandwiched between the other buttons): its slider opens
+              leftward over open space instead of overlapping a neighboring button — see the bug
+              this fixed, where wedging it mid-row put the opened slider on top of the mute
+              button. */}
+          {!participant.isLocal && participant.screenShareHasAudio && participant.screenShareAudioEnabled && (
+            <VolumeControl
+              label={`${participant.name}'s screen`}
+              initialVolume={voiceClient.getScreenShareVolume(participant.identity) ?? 0}
+              onVolumeChange={(volume) => voiceClient.setScreenShareVolume(participant.identity, volume)}
+            />
+          )}
           <button
             type="button"
             aria-label="Exit fullscreen"
@@ -220,13 +243,6 @@ export function ScreenShareTile({ participant, className = '', onWatchClick, can
                 <MicOff size={18} aria-hidden="true" />
               )}
             </button>
-          )}
-          {!participant.isLocal && participant.screenShareHasAudio && participant.screenShareAudioEnabled && (
-            <VolumeControl
-              label={`${participant.name}'s screen`}
-              initialVolume={voiceClient.getScreenShareVolume(participant.identity) ?? 0}
-              onVolumeChange={(volume) => voiceClient.setScreenShareVolume(participant.identity, volume)}
-            />
           )}
           <button
             type="button"

@@ -62,7 +62,7 @@ export function FocusedCallView({
   } = useGridLayout(watchTargets.length);
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pb-20">
       <div
         data-testid="watched-area"
         className="group/camera-grid relative flex min-h-0 min-w-0 flex-1 overflow-hidden p-4"

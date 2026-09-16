@@ -325,6 +325,24 @@ describe('ScreenShareTile', () => {
       expect(screen.getByRole('button', { name: 'Enter fullscreen' })).toBeInTheDocument();
     });
 
+    it('exits fullscreen if the tile unmounts while it is still the fullscreen element', async () => {
+      const user = userEvent.setup();
+      const { unmount } = render(<ScreenShareTile participant={sharingParticipant()} />);
+
+      await user.click(screen.getByRole('button', { name: 'Enter fullscreen' }));
+      unmount();
+
+      expect(document.exitFullscreen).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not call exitFullscreen on unmount when it was never the fullscreen element', () => {
+      const { unmount } = render(<ScreenShareTile participant={sharingParticipant()} />);
+
+      unmount();
+
+      expect(document.exitFullscreen).not.toHaveBeenCalled();
+    });
+
     it('falls back to the full-viewport layout when requestFullscreen() rejects', async () => {
       vi.mocked(Element.prototype.requestFullscreen).mockRejectedValueOnce(new Error('not allowed'));
       const user = userEvent.setup();
@@ -405,6 +423,20 @@ describe('ScreenShareTile', () => {
         await user.click(screen.getByRole('button', { name: 'Leave call' }));
 
         expect(voiceClient.disconnect).toHaveBeenCalledTimes(1);
+      });
+
+      it('places the volume control at the leading edge of the bar, so its slider opens over empty space instead of the mute/leave buttons', async () => {
+        useVoiceStore.setState({
+          participants: [{ ...sharingParticipant({ isLocal: false }), identity: 'me', isLocal: true, micEnabled: true }],
+        });
+        const user = userEvent.setup();
+        render(<ScreenShareTile participant={sharingParticipant({ isLocal: false, screenShareHasAudio: true, name: 'Felipe' })} />);
+
+        await user.click(screen.getByRole('button', { name: 'Enter fullscreen' }));
+
+        const bar = screen.getByRole('button', { name: 'Leave call' }).parentElement;
+        const slider = screen.getByRole('slider', { name: "Volume for Felipe's screen" });
+        expect(bar?.firstElementChild).toContainElement(slider);
       });
     });
   });
