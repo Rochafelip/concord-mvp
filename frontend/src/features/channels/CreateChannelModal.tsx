@@ -14,14 +14,25 @@ interface CreateChannelModalProps {
   onClose: () => void;
 }
 
+/** Matches the backend's `@Size(max = 100)` on CreateChannelRequest.name. */
+const MAX_NAME_LENGTH = 100;
+
 export function CreateChannelModal({ serverId, open, type, onClose }: CreateChannelModalProps) {
   const [name, setName] = useState('');
+  const [nameError, setNameError] = useState<string | null>(null);
   const createChannelMutation = useCreateChannel(serverId);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    // `required` alone accepts a field of spaces, which the backend then rejects as blank.
+    const trimmedName = name.trim();
+    if (trimmedName === '') {
+      setNameError('Enter a channel name.');
+      return;
+    }
+    setNameError(null);
     createChannelMutation.mutate(
-      { name, type },
+      { name: trimmedName, type },
       {
         onSuccess: () => {
           setName('');
@@ -32,11 +43,12 @@ export function CreateChannelModal({ serverId, open, type, onClose }: CreateChan
   }
 
   const errorMessage =
-    createChannelMutation.error instanceof ApiError
+    nameError ??
+    (createChannelMutation.error instanceof ApiError
       ? createChannelMutation.error.message
       : createChannelMutation.error
         ? 'Something went wrong. Please try again.'
-        : null;
+        : null);
 
   return (
     <Modal open={open} onClose={onClose}>
@@ -51,8 +63,12 @@ export function CreateChannelModal({ serverId, open, type, onClose }: CreateChan
           label="Channel name"
           name="name"
           required
+          maxLength={MAX_NAME_LENGTH}
           value={name}
-          onChange={(event) => setName(event.target.value)}
+          onChange={(event) => {
+            setName(event.target.value);
+            setNameError(null);
+          }}
         />
 
         <div className="flex justify-end gap-2">

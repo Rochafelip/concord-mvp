@@ -2,6 +2,7 @@ import { HeadphoneOff, MicOff, MonitorUp, Plus, Settings, Trash2, Video, Volume2
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Avatar } from '../../components/Avatar';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { disconnectVoiceParticipant } from '../calls/api';
 import { useVoicePresence } from '../calls/hooks';
 import { useAuthStore } from '../auth/authStore';
@@ -39,15 +40,22 @@ export function ChannelSidebar({ onNavigate }: ChannelSidebarProps) {
   const [createType, setCreateType] = useState<Exclude<ChannelType, 'ONBOARDING'> | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [voiceContextUser, setVoiceContextUser] = useState<{ channelId: string; userId: string; displayName: string } | null>(null);
+  const [channelPendingDeletion, setChannelPendingDeletion] = useState<Channel | null>(null);
   const voiceContextMenuRef = useRef<HTMLDivElement>(null);
   const deleteChannelMutation = useDeleteChannel(serverId);
 
   function handleDeleteChannel(event: MouseEvent<HTMLButtonElement>, channel: Channel) {
+    // The trash icon sits inside the channel's <Link>, so the click must not navigate.
     event.preventDefault();
     event.stopPropagation();
-    if (window.confirm(`Delete channel "${channel.name}"? This cannot be undone.`)) {
-      deleteChannelMutation.mutate(channel.id);
-    }
+    setChannelPendingDeletion(channel);
+  }
+
+  function confirmDeleteChannel() {
+    if (!channelPendingDeletion) return;
+    deleteChannelMutation.mutate(channelPendingDeletion.id, {
+      onSettled: () => setChannelPendingDeletion(null),
+    });
   }
 
   function handleVoiceParticipantContextMenu(event: MouseEvent<HTMLDivElement>, channelId: string, userId: string, displayName: string) {
@@ -269,6 +277,17 @@ export function ChannelSidebar({ onNavigate }: ChannelSidebarProps) {
           onClose={() => setCreateType(null)}
         />
       )}
+      <ConfirmDialog
+        open={channelPendingDeletion != null}
+        title="Delete channel"
+        message={`Delete "${channelPendingDeletion?.name}"? This cannot be undone.`}
+        confirmLabel="Delete channel"
+        pendingLabel="Deleting…"
+        destructive
+        pending={deleteChannelMutation.isPending}
+        onConfirm={confirmDeleteChannel}
+        onClose={() => setChannelPendingDeletion(null)}
+      />
       <ServerSettingsPanel serverId={serverId} open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </aside>
   );
