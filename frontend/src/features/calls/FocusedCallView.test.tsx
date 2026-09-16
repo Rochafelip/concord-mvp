@@ -57,6 +57,27 @@ describe('FocusedCallView', () => {
     expect(screen.getByText(/Felipe/)).toBeInTheDocument();
   });
 
+  it('reserves bottom space for the floating CallControlBar so it does not cover the off-camera roster', () => {
+    render(
+      <FocusedCallView
+        participants={[
+          participant({ identity: 'u1', name: 'Felipe', screenShareTrack: { attach: vi.fn(), detach: vi.fn() } as never }),
+          participant({ identity: 'u2', name: 'Lety' }),
+        ]}
+        watchTargets={[{ type: 'share', identity: 'u1' }]}
+        isManual={false}
+        onAddWatch={vi.fn()}
+        onRemoveWatch={vi.fn()}
+        onReturnToAutomatic={vi.fn()}
+        avatarUrlByUserId={new Map()}
+        deafenedByUserId={new Map()}
+      />,
+    );
+
+    expect(screen.getByTestId('off-camera-roster')).toBeInTheDocument();
+    expect(screen.getByTestId('watched-area').parentElement).toHaveClass('pb-20');
+  });
+
   it('keeps a watched camera tile\'s volume control scoped to its own icon', () => {
     render(
       <FocusedCallView
