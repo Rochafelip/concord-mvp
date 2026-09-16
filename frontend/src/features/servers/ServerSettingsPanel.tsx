@@ -8,6 +8,7 @@ import { useAuthStore } from '../auth/authStore';
 import {
   useDeleteServer,
   useInvite,
+  useHasPermission,
   useIsServerOwner,
   useLeaveServer,
   useRegenerateInvite,
@@ -40,9 +41,12 @@ export function ServerSettingsPanel({ serverId, open, onClose }: ServerSettingsP
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
   const [displayNameDraft, setDisplayNameDraft] = useState<{ serverId: string; value: string } | null>(null);
 
+  // Deleting the server and transferring ownership are not delegable by permission (D20), so
+  // they stay on isOwner. The invite code moved to MANAGE_INVITES.
   const isOwner = useIsServerOwner(serverId);
+  const canManageInvites = useHasPermission(serverId, 'MANAGE_INVITES');
 
-  const inviteQuery = useInvite(open && isOwner ? serverId : undefined);
+  const inviteQuery = useInvite(open && canManageInvites ? serverId : undefined);
   const regenerateInviteMutation = useRegenerateInvite(serverId);
   const transferOwnershipMutation = useTransferOwnership(serverId);
   const updateMemberMutation = useUpdateMyServerMember(serverId);
@@ -102,7 +106,7 @@ export function ServerSettingsPanel({ serverId, open, onClose }: ServerSettingsP
       <div className="w-80 space-y-4">
         <h2 className="text-heading font-semibold text-ink">{server?.name ?? 'Server'} settings</h2>
 
-        {isOwner && (
+        {canManageInvites && (
           <section className="space-y-2">
             <h3 className="text-body font-medium text-muted">Invite code</h3>
             <ErrorBanner

@@ -22,6 +22,7 @@ export type WsEventType =
   | 'VOICE_PRESENCE_LEAVE'
   | 'VOICE_KICK'
   | 'USER_PROFILE_UPDATE'
+  | 'PERMISSIONS_UPDATE'
   | 'ERROR';
 
 /** Generic envelope for a WebSocket frame in both directions: {"type": "...", "payload": {...}}. */
@@ -90,6 +91,14 @@ export interface UserProfileUpdatePayload {
     avatarUrl: string | null;
   };
 }
+/**
+ * Deliberately thin: the client reacts by refetching, and every GET already returns the caller's
+ * own effective permissions. A per-recipient payload would have to be computed per socket.
+ */
+export interface PermissionsUpdatePayload {
+  serverId: string;
+}
+
 export interface ChannelReadPayload {
   channelId: string;
   userId: string;

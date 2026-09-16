@@ -11,6 +11,11 @@ import { MessageContent } from './MessageContent';
 
 interface MessageListProps {
   channelId: string;
+  /**
+   * MANAGE_MESSAGES in this channel, resolved by ChatWindow. Lets a moderator delete somebody
+   * else's message; authors can always delete their own regardless.
+   */
+  canManageMessages?: boolean;
 }
 
 const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'avif'];
@@ -57,7 +62,7 @@ function formatDateDivider(date: Date): string {
   });
 }
 
-export function MessageList({ channelId }: MessageListProps) {
+export function MessageList({ channelId, canManageMessages = false }: MessageListProps) {
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isPending } =
     useMessageHistory(channelId);
 
@@ -207,7 +212,7 @@ try {
                 </div>
                 <div className="group relative">
                   {message.content && <MessageContent content={message.content} />}
-                  {message.author.id === currentUserId && (
+                  {(message.author.id === currentUserId || canManageMessages) && (
                     <TextDeleteButton
                       disabled={deletingMessageId === message.id}
                       onClick={() => void handleDeleteMessage(message)}

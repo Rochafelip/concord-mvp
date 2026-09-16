@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { Spinner } from '../../components/Spinner';
 import { FocusedCallView } from './FocusedCallView';
 import { useVoiceParticipants, useVoicePresence } from './hooks';
-import { useIsServerOwner } from '../servers/hooks';
+import { useHasPermission } from '../servers/hooks';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { ParticipantGrid } from './ParticipantGrid';
 import { useWatchTargets } from './useWatchTargets';
@@ -21,7 +21,7 @@ interface ParticipantListProps {
 export function ParticipantList({ serverId }: ParticipantListProps) {
   const participants = useVoiceParticipants();
   const channelId = useVoiceStore((state) => state.channelId);
-  const canDisconnect = useIsServerOwner(serverId);
+  const canDisconnect = useHasPermission(serverId, 'DISCONNECT_MEMBERS');
   const { data: presence } = useVoicePresence(serverId);
   const { watchTargets, isManual, addWatch, removeWatch, clearManual } = useWatchTargets(participants);
 
