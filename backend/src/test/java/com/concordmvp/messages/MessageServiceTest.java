@@ -7,6 +7,8 @@ import com.concordmvp.common.exception.BadRequestException;
 import com.concordmvp.common.exception.ForbiddenException;
 import com.concordmvp.messages.dto.AttachmentRequest;
 import com.concordmvp.messages.dto.MessageResponse;
+import com.concordmvp.permissions.Permission;
+import com.concordmvp.permissions.PermissionService;
 import com.concordmvp.realtime.RealtimeEventPublisher;
 import com.concordmvp.realtime.WsEvent;
 import com.concordmvp.realtime.WsEventType;
@@ -35,6 +37,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -68,12 +72,16 @@ class MessageServiceTest {
     @Mock
     private ChannelReadStateService channelReadStateService;
 
+    @Mock
+    private PermissionService permissionService;
+
     private MessageService messageService;
 
     @BeforeEach
     void setUp() {
         messageService = new MessageService(messageRepository, messageAttachmentRepository, channelService,
-                serverMemberRepository, userRepository, realtimeEventPublisher, attachmentCleanupService, null);
+                serverMemberRepository, userRepository, realtimeEventPublisher, attachmentCleanupService,
+                permissionService, null);
     }
 
     private Channel channel(UUID id, UUID serverId) {
@@ -682,5 +690,130 @@ class MessageServiceTest {
         } catch (ReflectiveOperationException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    // --- permission enforcement ---
+
+    @Test
+    void sendMessage_withoutSendMessages_throwsForbidden_andDoesNotSave() {
+        UUID channelId = UUID.randomUUID();
+        UUID serverId = UUID.randomUUID();
+        UUID authorId = UUID.randomUUID();
+        Channel target = channel(channelId, serverId);
+        when(channelService.getChannel(channelId, authorId)).thenReturn(target);
+        doThrow(new ForbiddenException("denied")).when(permissionService)
+                .requireChannel(target, authorId, Permission.SEND_MESSAGES);
+
+        assertThatThrownBy(() -> messageService.sendMessage(channelId, "oi", List.of(), authorId))
+                .isInstanceOf(ForbiddenException.class);
+
+        verify(messageRepository, never()).save(any());
+        verifyNoInteractions(realtimeEventPublisher);
+    }
+
+    @Test
+    void sendMessage_withAttachmentsButWithoutAttachFiles_throwsForbidden_andDoesNotSave() {
+        UUID channelId = UUID.randomUUID();
+        UUID serverId = UUID.randomUUID();
+        UUID authorId = UUID.randomUUID();
+        Channel target = channel(channelId, serverId);
+        when(channelService.getChannel(channelId, authorId)).thenReturn(target);
+        doNothing().when(permissionService).requireChannel(target, authorId, Permission.SEND_MESSAGES);
+        doThrow(new ForbiddenException("denied")).when(permissionService)
+                .requireChannel(target, authorId, Permission.ATTACH_FILES);
+
+        assertThatThrownBy(() -> messageService.sendMessage(channelId, "",
+                List.of(new AttachmentRequest("/api/v1/uploads/a.png", "a.png", 1L)), authorId))
+                .isInstanceOf(ForbiddenException.class);
+
+        verify(messageRepository, never()).save(any());
+    }
+
+    @Test
+    void sendMessage_withoutAttachments_doesNotRequireAttachFiles() {
+        UUID channelId = UUID.randomUUID();
+        UUID serverId = UUID.randomUUID();
+        UUID authorId = UUID.randomUUID();
+        Channel target = channel(channelId, serverId);
+        when(channelService.getChannel(channelId, authorId)).thenReturn(target);
+        when(userRepository.findById(authorId)).thenReturn(Optional.of(user(authorId, "alice", "Alice")));
+        stubMessageSaveAssignsId();
+
+        messageService.sendMessage(channelId, "oi", List.of(), authorId);
+
+        verify(permissionService, never()).requireChannel(target, authorId, Permission.ATTACH_FILES);
+    }
+
+    @Test
+    void getHistory_withoutReadMessageHistory_throwsForbidden() {
+        UUID channelId = UUID.randomUUID();
+        UUID serverId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        Channel target = channel(channelId, serverId);
+        when(channelService.getChannel(channelId, requesterId)).thenReturn(target);
+        doThrow(new ForbiddenException("denied")).when(permissionService)
+                .requireChannel(target, requesterId, Permission.READ_MESSAGE_HISTORY);
+
+        assertThatThrownBy(() -> messageService.getHistory(channelId, null, null, 50, requesterId))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void deleteMessage_author_deletesItsOwnMessageWithoutNeedingManageMessages() {
+        UUID channelId = UUID.randomUUID();
+        UUID serverId = UUID.randomUUID();
+        UUID authorId = UUID.randomUUID();
+        Message message = new Message();
+        message.setId(UUID.randomUUID());
+        message.setChannelId(channelId);
+        message.setAuthorId(authorId);
+        when(messageRepository.findById(message.getId())).thenReturn(Optional.of(message));
+        when(channelService.getChannel(channelId, authorId)).thenReturn(channel(channelId, serverId));
+
+        messageService.deleteMessage(message.getId(), authorId);
+
+        verify(messageRepository).delete(message);
+        verify(permissionService, never()).requireChannel(any(Channel.class), any(), any());
+    }
+
+    @Test
+    void deleteMessage_moderatorWithManageMessages_deletesSomebodyElsesMessage() {
+        UUID channelId = UUID.randomUUID();
+        UUID serverId = UUID.randomUUID();
+        UUID moderatorId = UUID.randomUUID();
+        Message message = new Message();
+        message.setId(UUID.randomUUID());
+        message.setChannelId(channelId);
+        message.setAuthorId(UUID.randomUUID());
+        Channel target = channel(channelId, serverId);
+        when(messageRepository.findById(message.getId())).thenReturn(Optional.of(message));
+        when(channelService.getChannel(channelId, moderatorId)).thenReturn(target);
+
+        messageService.deleteMessage(message.getId(), moderatorId);
+
+        verify(permissionService).requireChannel(target, moderatorId, Permission.MANAGE_MESSAGES);
+        verify(messageRepository).delete(message);
+    }
+
+    @Test
+    void deleteMessage_nonAuthorWithoutManageMessages_throwsForbidden_andDeletesNothing() {
+        UUID channelId = UUID.randomUUID();
+        UUID serverId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        Message message = new Message();
+        message.setId(UUID.randomUUID());
+        message.setChannelId(channelId);
+        message.setAuthorId(UUID.randomUUID());
+        Channel target = channel(channelId, serverId);
+        when(messageRepository.findById(message.getId())).thenReturn(Optional.of(message));
+        when(channelService.getChannel(channelId, requesterId)).thenReturn(target);
+        doThrow(new ForbiddenException("denied")).when(permissionService)
+                .requireChannel(target, requesterId, Permission.MANAGE_MESSAGES);
+
+        assertThatThrownBy(() -> messageService.deleteMessage(message.getId(), requesterId))
+                .isInstanceOf(ForbiddenException.class);
+
+        verify(messageRepository, never()).delete(any());
+        verifyNoInteractions(attachmentCleanupService);
     }
 }

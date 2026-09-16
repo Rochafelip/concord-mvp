@@ -26,6 +26,11 @@ function useIsMobile(): boolean {
 
 interface CallControlBarProps {
   onLeave: () => void;
+  /**
+   * USE_VIDEO in this voice channel, resolved by CallView. Cosmetic: without it the LiveKit token
+   * omits the camera source, so LiveKit rejects the track regardless of what this bar shows.
+   */
+  canUseVideo?: boolean;
 }
 
 /**
@@ -33,7 +38,7 @@ interface CallControlBarProps {
  * by CallView, replacing the local tile's former in-tile control bar. See
  * docs/superpowers/specs/2026-09-08-call-view-control-bar-redesign-design.md §5.
  */
-export function CallControlBar({ onLeave }: CallControlBarProps) {
+export function CallControlBar({ onLeave, canUseVideo = false }: CallControlBarProps) {
   const localParticipant = useVoiceParticipants().find((participant) => participant.isLocal);
   const [suppressionEnabled, setSuppressionEnabled] = useState(getNoiseSuppressionPreference);
   const [showDeviceSelector, setShowDeviceSelector] = useState(false);
@@ -91,20 +96,22 @@ export function CallControlBar({ onLeave }: CallControlBarProps) {
       >
         <Settings size={16} aria-hidden="true" />
       </button>
-      <button
-        type="button"
-        aria-label={localParticipant.cameraEnabled ? 'Camera off' : 'Camera on'}
-        title={localParticipant.cameraEnabled ? 'Turn camera off' : 'Turn camera on'}
-        onClick={() => voiceClient.toggleCamera()}
-        className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
-      >
-        {localParticipant.cameraEnabled ? (
-          <Video size={16} aria-hidden="true" />
-        ) : (
-          <VideoOff size={16} aria-hidden="true" />
-        )}
-      </button>
-      {isMobile && localParticipant.cameraEnabled && (
+      {canUseVideo && (
+        <button
+          type="button"
+          aria-label={localParticipant.cameraEnabled ? 'Camera off' : 'Camera on'}
+          title={localParticipant.cameraEnabled ? 'Turn camera off' : 'Turn camera on'}
+          onClick={() => voiceClient.toggleCamera()}
+          className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
+        >
+          {localParticipant.cameraEnabled ? (
+            <Video size={16} aria-hidden="true" />
+          ) : (
+            <VideoOff size={16} aria-hidden="true" />
+          )}
+        </button>
+      )}
+      {canUseVideo && isMobile && localParticipant.cameraEnabled && (
         <button
           type="button"
           aria-label="Flip camera"

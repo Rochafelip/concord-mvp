@@ -183,6 +183,35 @@ The exact ownership behavior should be kept simple for the MVP.
 
 Selecting a server should display its available channels.
 
+## 7.6 Roles and Permissions
+
+A server owner can create roles and decide what each one is allowed to do.
+
+Every server has an `@everyone` role that applies to all members and cannot be
+deleted. It starts out granting what every member could already do: see and read
+channels, send messages, attach files, and join voice with microphone, camera and
+screen sharing.
+
+A member can hold several roles at once and gets the union of what they allow.
+
+Roles are ordered. A member can only manage roles and members below its own
+position, so a moderator can remove a regular member but never an administrator.
+The owner is above everything and is the only one who can delete the server or
+hand it over.
+
+Permissions can also be adjusted for a single channel — allowing or denying
+something there without changing the role itself — and, as an exception, for one
+specific person in one specific channel.
+
+A user only sees the channels they are allowed to see. Someone without permission
+to speak can still join a voice channel and listen.
+
+Changes take effect immediately, without a page refresh.
+
+**Not available yet**: kicking, banning, timing out, muting or moving members; the
+audit log; and the role management screen. Until that screen exists, roles are
+managed through the API.
+
 ---
 
 # 8. Channels

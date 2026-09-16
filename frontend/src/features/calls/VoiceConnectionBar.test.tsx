@@ -26,6 +26,8 @@ const channel: Channel = {
   type: 'VOICE',
   createdAt: '2026-01-01',
   updatedAt: '2026-01-01',
+  // The screen-share button is gated on SHARE_SCREEN now.
+  permissions: ['VIEW_CHANNEL', 'CONNECT', 'SPEAK', 'USE_VIDEO', 'SHARE_SCREEN'],
 };
 
 const server: Server = {

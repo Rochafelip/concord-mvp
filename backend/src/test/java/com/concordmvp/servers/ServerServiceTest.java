@@ -10,6 +10,11 @@ import com.concordmvp.messages.AttachmentCleanupService;
 import com.concordmvp.messages.MessageRepository;
 import com.concordmvp.messages.MessageService;
 import com.concordmvp.messages.ChannelReadStateService;
+import com.concordmvp.permissions.Permission;
+import com.concordmvp.permissions.PermissionService;
+import com.concordmvp.permissions.Role;
+import com.concordmvp.permissions.RoleRepository;
+import com.concordmvp.permissions.RoleService;
 import com.concordmvp.realtime.RealtimeEventPublisher;
 import com.concordmvp.realtime.WsEvent;
 import com.concordmvp.realtime.WsEventType;
@@ -36,6 +41,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -76,13 +82,22 @@ class ServerServiceTest {
     @Mock
     private ChannelReadStateService channelReadStateService;
 
+    @Mock
+    private PermissionService permissionService;
+
+    @Mock
+    private RoleService roleService;
+
+    @Mock
+    private RoleRepository roleRepository;
+
     private ServerService serverService;
 
     @BeforeEach
     void setUp() {
         serverService = new ServerService(serverRepository, serverMemberRepository, serverInviteRepository,
                 channelRepository, messageRepository, attachmentCleanupService, messageService, userRepository,
-                realtimeEventPublisher, null);
+                realtimeEventPublisher, permissionService, roleService, roleRepository, null);
     }
 
     /** Mimics JPA assigning an id on save/persist for a {@link Server} that doesn't already have one. */
@@ -177,6 +192,21 @@ class ServerServiceTest {
                 "Alice entrou no servidor");
     }
 
+    @Test
+    void createServer_bootstrapsTheEveryoneRole_soTheNewServerHasABaselineFromTheStart() {
+        // Without this the members of a brand-new server would resolve to zero permissions, while
+        // servers that existed before V18 got their @everyone from the migration's backfill.
+        UUID ownerId = UUID.randomUUID();
+        stubServerSaveAssignsId();
+        stubMemberSaveAssignsId();
+        stubChannelSaveAssignsId();
+        when(userRepository.findById(ownerId)).thenReturn(Optional.of(user(ownerId, "Alice")));
+
+        Server result = serverService.createServer("My Server", ownerId);
+
+        verify(roleService).createEveryoneRole(result.getId());
+    }
+
     // --- listServersForUser ---
 
     @Test
@@ -225,6 +255,34 @@ class ServerServiceTest {
                 .isInstanceOf(ForbiddenException.class);
     }
 
+    @Test
+    void listMembers_memberWithoutViewMemberList_throwsForbidden() {
+        UUID serverId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        when(serverRepository.findById(serverId)).thenReturn(Optional.of(server(serverId, UUID.randomUUID())));
+        when(serverMemberRepository.existsByServerIdAndUserId(serverId, requesterId)).thenReturn(true);
+        doThrow(new ForbiddenException("denied")).when(permissionService)
+                .requireServer(serverId, requesterId, Permission.VIEW_MEMBER_LIST);
+
+        assertThatThrownBy(() -> serverService.listMembers(serverId, requesterId))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void deleteServer_alsoDeletesTheServersRoles() {
+        UUID serverId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        Server existing = server(serverId, ownerId);
+        when(serverRepository.findById(serverId)).thenReturn(Optional.of(existing));
+        when(serverMemberRepository.findByServerId(serverId)).thenReturn(List.of(member(serverId, ownerId)));
+        when(channelRepository.findByServerId(serverId)).thenReturn(List.of());
+        when(messageRepository.findByChannelIdIn(List.of())).thenReturn(List.of());
+
+        serverService.deleteServer(serverId, ownerId);
+
+        verify(roleRepository).deleteByServerId(serverId);
+    }
+
     // --- owner-only actions ---
 
     @Test
@@ -253,22 +311,26 @@ class ServerServiceTest {
     }
 
     @Test
-    void regenerateInvite_nonOwner_throwsForbidden() {
+    void regenerateInvite_withoutManageInvites_throwsForbidden() {
         UUID serverId = UUID.randomUUID();
         UUID ownerId = UUID.randomUUID();
         UUID requesterId = UUID.randomUUID();
         when(serverRepository.findById(serverId)).thenReturn(Optional.of(server(serverId, ownerId)));
+        doThrow(new ForbiddenException("denied")).when(permissionService)
+                .requireServer(serverId, requesterId, Permission.MANAGE_INVITES);
 
         assertThatThrownBy(() -> serverService.regenerateInvite(serverId, requesterId))
                 .isInstanceOf(ForbiddenException.class);
     }
 
     @Test
-    void getOrCreateInvite_nonOwner_throwsForbidden() {
+    void getOrCreateInvite_withoutManageInvites_throwsForbidden() {
         UUID serverId = UUID.randomUUID();
         UUID ownerId = UUID.randomUUID();
         UUID requesterId = UUID.randomUUID();
         when(serverRepository.findById(serverId)).thenReturn(Optional.of(server(serverId, ownerId)));
+        doThrow(new ForbiddenException("denied")).when(permissionService)
+                .requireServer(serverId, requesterId, Permission.MANAGE_INVITES);
 
         assertThatThrownBy(() -> serverService.getOrCreateInvite(serverId, requesterId))
                 .isInstanceOf(ForbiddenException.class);

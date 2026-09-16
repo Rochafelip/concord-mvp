@@ -10,6 +10,8 @@ import com.concordmvp.messages.dto.AttachmentRequest;
 import com.concordmvp.messages.dto.AttachmentResponse;
 import com.concordmvp.messages.dto.MessageResponse;
 import com.concordmvp.messages.dto.MessageDeletedPayload;
+import com.concordmvp.permissions.Permission;
+import com.concordmvp.permissions.PermissionService;
 import com.concordmvp.realtime.RealtimeEventPublisher;
 import com.concordmvp.realtime.WsEvent;
 import com.concordmvp.realtime.WsEventType;
@@ -66,6 +68,7 @@ public class MessageService {
     private final RealtimeEventPublisher realtimeEventPublisher;
     private final AttachmentCleanupService attachmentCleanupService;
     private final ChannelReadStateService channelReadStateService;
+    private final PermissionService permissionService;
 
     @Autowired
     public MessageService(MessageRepository messageRepository,
@@ -75,7 +78,9 @@ public class MessageService {
                            UserRepository userRepository,
                            RealtimeEventPublisher realtimeEventPublisher,
                            AttachmentCleanupService attachmentCleanupService,
+                           PermissionService permissionService,
                            ChannelReadStateService channelReadStateService) {
+        this.permissionService = permissionService;
         this.messageRepository = messageRepository;
         this.messageAttachmentRepository = messageAttachmentRepository;
         this.channelService = channelService;
@@ -86,30 +91,25 @@ public class MessageService {
         this.channelReadStateService = channelReadStateService;
     }
 
-    // Constructor for backward compatibility with tests
-    public MessageService(MessageRepository messageRepository,
-                           MessageAttachmentRepository messageAttachmentRepository,
-                           ChannelService channelService,
-                           ServerMemberRepository serverMemberRepository,
-                           UserRepository userRepository,
-                           RealtimeEventPublisher realtimeEventPublisher,
-                           AttachmentCleanupService attachmentCleanupService) {
-        this(messageRepository, messageAttachmentRepository, channelService, serverMemberRepository,
-             userRepository, realtimeEventPublisher, attachmentCleanupService, null);
-    }
-
     public static final UUID SYSTEM_USER_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
 
     @Transactional
     public Message sendMessage(UUID channelId, String content, List<AttachmentRequest> attachments, UUID authorId) {
+        // getChannel already enforces membership and VIEW_CHANNEL.
         Channel channel = channelService.getChannel(channelId, authorId);
 
         if (channel.getType() == ChannelType.ONBOARDING) {
             throw new ForbiddenException("This channel is read-only");
         }
 
+        permissionService.requireChannel(channel, authorId, Permission.SEND_MESSAGES);
+
         String trimmed = content == null ? "" : content.trim();
         List<AttachmentRequest> normalized = normalizeAttachments(attachments);
+
+        if (!normalized.isEmpty()) {
+            permissionService.requireChannel(channel, authorId, Permission.ATTACH_FILES);
+        }
 
         if (trimmed.isEmpty() && normalized.isEmpty()) {
             throw new BadRequestException("Message must contain text or an attachment");
@@ -222,7 +222,8 @@ public class MessageService {
      *                 messages created in the same instant.
      */
     public List<MessageResponse> getHistory(UUID channelId, Instant before, UUID beforeId, int limit, UUID requesterId) {
-        channelService.getChannel(channelId, requesterId);
+        Channel channel = channelService.getChannel(channelId, requesterId);
+        permissionService.requireChannel(channel, requesterId, Permission.READ_MESSAGE_HISTORY);
 
         if (before != null && beforeId == null) {
             throw new BadRequestException("beforeId is required when before is provided");
@@ -260,7 +261,8 @@ public class MessageService {
                 .orElseThrow(() -> new ResourceNotFoundException("Message not found: " + messageId));
         Channel channel = channelService.getChannel(message.getChannelId(), requesterId);
         if (!message.getAuthorId().equals(requesterId)) {
-            throw new ForbiddenException("Only the message author can delete this message");
+            // Anyone else needs moderation rights in this channel.
+            permissionService.requireChannel(channel, requesterId, Permission.MANAGE_MESSAGES);
         }
 
         // Before the delete: the message_attachments rows go with the message via ON DELETE

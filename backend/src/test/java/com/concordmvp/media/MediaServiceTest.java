@@ -7,6 +7,11 @@ import com.concordmvp.common.exception.BadRequestException;
 import com.concordmvp.common.exception.ForbiddenException;
 import com.concordmvp.common.exception.ResourceNotFoundException;
 import com.concordmvp.media.dto.VoiceTokenResponse;
+import com.concordmvp.permissions.Permission;
+import com.concordmvp.permissions.PermissionService;
+import com.concordmvp.permissions.PermissionSet;
+import com.concordmvp.servers.ServerMember;
+import com.concordmvp.servers.ServerMemberRepository;
 import com.concordmvp.users.User;
 import com.concordmvp.users.UserRepository;
 import io.jsonwebtoken.Claims;
@@ -20,12 +25,17 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -41,11 +51,43 @@ class MediaServiceTest {
     @Mock
     private UserRepository userRepository;
 
+    @Mock
+    private ServerMemberRepository serverMemberRepository;
+
+    @Mock
+    private PermissionService permissionService;
+
     private MediaService mediaService;
 
     @BeforeEach
     void setUp() {
-        mediaService = new MediaService(channelService, userRepository, API_KEY, API_SECRET, PUBLIC_URL);
+        mediaService = new MediaService(channelService, userRepository, API_KEY, API_SECRET, PUBLIC_URL,
+                serverMemberRepository, permissionService);
+    }
+
+    /**
+     * Makes the requester a member (needed for the per-server nickname lookup) and grants it the
+     * given voice permissions in the channel under test.
+     */
+    private void voicePermissions(UUID channelId, UUID requesterId, Permission... permissions) {
+        ServerMember membership = new ServerMember();
+        membership.setId(UUID.randomUUID());
+        membership.setUserId(requesterId);
+        when(serverMemberRepository.findByServerIdAndUserId(any(), eq(requesterId)))
+                .thenReturn(Optional.of(membership));
+        when(permissionService.channelPermissions(any(Channel.class), eq(requesterId)))
+                .thenReturn(PermissionSet.toBitmask(Set.of(permissions)));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<String> publishSources(Claims claims) {
+        Map<String, Object> video = claims.get("video", Map.class);
+        return (List<String>) video.get("canPublishSources");
+    }
+
+    private static Claims parse(String token) {
+        SecretKey key = Keys.hmacShaKeyFor(API_SECRET.getBytes(StandardCharsets.UTF_8));
+        return Jwts.parser().verifyWith(key).build().parseSignedClaims(token).getPayload();
     }
 
     private Channel channel(UUID id, UUID serverId, ChannelType type) {
@@ -122,6 +164,8 @@ class MediaServiceTest {
         when(channelService.getChannel(channelId, requesterId))
                 .thenReturn(channel(channelId, serverId, ChannelType.VOICE));
         when(userRepository.findById(requesterId)).thenReturn(Optional.of(user(requesterId, "Felipe R")));
+        voicePermissions(channelId, requesterId, Permission.CONNECT, Permission.SPEAK,
+                Permission.USE_VIDEO, Permission.SHARE_SCREEN);
 
         VoiceTokenResponse response = mediaService.issueVoiceToken(channelId, requesterId);
 
@@ -143,5 +187,84 @@ class MediaServiceTest {
         assertThat(video.get("roomJoin")).isEqualTo(true);
         assertThat(video.get("canPublish")).isEqualTo(true);
         assertThat(video.get("canSubscribe")).isEqualTo(true);
+    }
+
+    // --- voice permissions are enforced by the LiveKit grant itself ---
+
+    @Test
+    void issueVoiceToken_withoutConnect_throwsForbidden_andMintsNoToken() {
+        UUID serverId = UUID.randomUUID();
+        UUID channelId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        Channel voice = channel(channelId, serverId, ChannelType.VOICE);
+        when(channelService.getChannel(channelId, requesterId)).thenReturn(voice);
+        doThrow(new ForbiddenException("denied")).when(permissionService)
+                .requireChannel(voice, requesterId, Permission.CONNECT);
+
+        assertThatThrownBy(() -> mediaService.issueVoiceToken(channelId, requesterId))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void issueVoiceToken_allVoicePermissions_grantsEveryPublishSource() {
+        UUID channelId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        when(channelService.getChannel(channelId, requesterId))
+                .thenReturn(channel(channelId, UUID.randomUUID(), ChannelType.VOICE));
+        when(userRepository.findById(requesterId)).thenReturn(Optional.of(user(requesterId, "Felipe R")));
+        voicePermissions(channelId, requesterId, Permission.CONNECT, Permission.SPEAK,
+                Permission.USE_VIDEO, Permission.SHARE_SCREEN);
+
+        Claims claims = parse(mediaService.issueVoiceToken(channelId, requesterId).token());
+
+        assertThat(publishSources(claims))
+                .containsExactlyInAnyOrder("microphone", "camera", "screen_share", "screen_share_audio");
+    }
+
+    @Test
+    void issueVoiceToken_withoutShareScreen_omitsTheScreenShareSourceSoLiveKitRefusesIt() {
+        UUID channelId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        when(channelService.getChannel(channelId, requesterId))
+                .thenReturn(channel(channelId, UUID.randomUUID(), ChannelType.VOICE));
+        when(userRepository.findById(requesterId)).thenReturn(Optional.of(user(requesterId, "Felipe R")));
+        voicePermissions(channelId, requesterId, Permission.CONNECT, Permission.SPEAK, Permission.USE_VIDEO);
+
+        Claims claims = parse(mediaService.issueVoiceToken(channelId, requesterId).token());
+
+        assertThat(publishSources(claims)).containsExactlyInAnyOrder("microphone", "camera");
+    }
+
+    @Test
+    void issueVoiceToken_withoutSpeak_omitsTheMicrophoneSource() {
+        UUID channelId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        when(channelService.getChannel(channelId, requesterId))
+                .thenReturn(channel(channelId, UUID.randomUUID(), ChannelType.VOICE));
+        when(userRepository.findById(requesterId)).thenReturn(Optional.of(user(requesterId, "Felipe R")));
+        voicePermissions(channelId, requesterId, Permission.CONNECT, Permission.USE_VIDEO);
+
+        Claims claims = parse(mediaService.issueVoiceToken(channelId, requesterId).token());
+
+        assertThat(publishSources(claims)).containsExactly("camera");
+    }
+
+    @Test
+    void issueVoiceToken_listenerOnly_canJoinAndSubscribeButNotPublishAnything() {
+        UUID channelId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        when(channelService.getChannel(channelId, requesterId))
+                .thenReturn(channel(channelId, UUID.randomUUID(), ChannelType.VOICE));
+        when(userRepository.findById(requesterId)).thenReturn(Optional.of(user(requesterId, "Felipe R")));
+        voicePermissions(channelId, requesterId, Permission.CONNECT);
+
+        Claims claims = parse(mediaService.issueVoiceToken(channelId, requesterId).token());
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> video = claims.get("video", Map.class);
+        assertThat(video.get("canPublish")).isEqualTo(false);
+        assertThat(video.get("roomJoin")).isEqualTo(true);
+        assertThat(video.get("canSubscribe")).isEqualTo(true);
+        assertThat(publishSources(claims)).isEmpty();
     }
 }
