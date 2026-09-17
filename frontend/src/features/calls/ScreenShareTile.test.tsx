@@ -260,6 +260,25 @@ describe('ScreenShareTile', () => {
       expect(onWatchClick).toHaveBeenCalledTimes(1);
     });
 
+    it('silences the screen-share audio when stopping watching, so it does not keep playing after the tile disappears', async () => {
+      const user = userEvent.setup();
+      // A volume already on file (not undefined) means the mount-time "silence by default" effect
+      // stays a no-op here — any setScreenShareVolume(..., 0) call must come from the stop-watching
+      // click itself, not from that unrelated effect.
+      vi.mocked(voiceClient.getScreenShareVolume).mockReturnValue(0.6);
+      vi.mocked(voiceClient.setScreenShareVolume).mockClear();
+      render(
+        <ScreenShareTile
+          participant={sharingParticipant({ isLocal: false, identity: 'bob', name: 'Felipe', screenShareHasAudio: true })}
+          onWatchClick={vi.fn()}
+        />,
+      );
+
+      await user.click(screen.getByRole('button', { name: "Stop watching Felipe's screen" }));
+
+      expect(voiceClient.setScreenShareVolume).toHaveBeenCalledWith('bob', 0);
+    });
+
     it('is never clickable for the local participant\'s own share, even if onWatchClick is passed', () => {
       const { container } = render(<ScreenShareTile participant={sharingParticipant({ isLocal: true })} onWatchClick={vi.fn()} />);
 

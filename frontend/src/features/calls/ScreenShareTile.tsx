@@ -155,11 +155,20 @@ export function ScreenShareTile({ participant, className = '', onWatchClick, can
 
   const clickToRemove = !participant.isLocal && !isFullscreen && onWatchClick;
 
+  // The <audio> element for this share's sound lives in voiceClient, independent of whether this
+  // tile is mounted (see the class doc comment above) — unmounting it alone doesn't stop the
+  // sound. Stopping watching reads as "close this" to viewers, so it silences the audio too,
+  // rather than leaving it playing invisibly once the video is gone.
+  function stopWatching() {
+    if (participant.screenShareHasAudio) voiceClient.setScreenShareVolume(participant.identity, 0);
+    onWatchClick?.();
+  }
+
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (!clickToRemove) return;
     if (event.key !== 'Enter' && event.key !== ' ') return;
     event.preventDefault();
-    onWatchClick?.();
+    stopWatching();
   }
 
   return (
@@ -169,7 +178,7 @@ export function ScreenShareTile({ participant, className = '', onWatchClick, can
       tabIndex={clickToRemove ? 0 : undefined}
       aria-label={clickToRemove ? `Stop watching ${participant.name}'s screen` : undefined}
       title={clickToRemove ? `Stop watching ${participant.name}'s screen` : undefined}
-      onClick={clickToRemove ? onWatchClick : undefined}
+      onClick={clickToRemove ? stopWatching : undefined}
       onKeyDown={handleKeyDown}
       onContextMenu={handleContextMenu}
       className={
