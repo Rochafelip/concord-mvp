@@ -5,6 +5,7 @@ import { ErrorBanner } from '../../components/ErrorBanner';
 import { Modal } from '../../components/Modal';
 import { ApiError } from '../../services/apiClient';
 import { useAuthStore } from '../auth/authStore';
+import { AddFriendButton } from '../friends/AddFriendButton';
 import { MemberRoleEditor } from '../permissions/MemberRoleEditor';
 import { useRoles } from '../permissions/hooks';
 import { RolesTab } from '../permissions/RolesTab';
@@ -250,15 +251,18 @@ export function ServerSettingsPanel({ serverId, open, onClose }: ServerSettingsP
                         <span className="text-caption uppercase text-muted">Owner</span>
                       )}
                     </span>
-                    {isOwner && member.user.id !== currentUserId && (
-                      <button
-                        type="button"
-                        className="text-caption text-brand hover:underline"
-                        onClick={() => handleTransfer(member.user.id, member.displayName ?? member.user.displayName)}
-                      >
-                        Make owner
-                      </button>
-                    )}
+                    <span className="flex items-center gap-3">
+                      {isOwner && member.user.id !== currentUserId && (
+                        <button
+                          type="button"
+                          className="text-caption text-brand hover:underline"
+                          onClick={() => handleTransfer(member.user.id, member.displayName ?? member.user.displayName)}
+                        >
+                          Make owner
+                        </button>
+                      )}
+                      <AddFriendButton userId={member.user.id} />
+                    </span>
                   </div>
                   {canManageRoles && server?.ownerId !== member.user.id && member.user.id !== currentUserId && (
                     <MemberRoleEditor serverId={serverId} userId={member.user.id} roles={roles ?? []} />

@@ -1,7 +1,7 @@
 import type { InfiniteData } from '@tanstack/react-query';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useLayoutEffect, useRef } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { toVoicePresenceEntry } from '../features/calls/api';
 import { useAuthStore } from '../features/auth/authStore';
 import { getWsTicket } from '../features/auth/api';
@@ -12,12 +12,14 @@ import { voiceClient } from '../services/voiceClient';
 import { useNotificationStore } from '../stores/notificationStore';
 import { useVoiceStore } from '../stores/voiceStore';
 import type { Channel } from '../types/channel';
+import type { DmMessage } from '../types/dm';
 import type { Message } from '../types/message';
 import type { Server } from '../types/server';
 import type { VoicePresenceEntry } from '../types/voice';
 import type {
   ChannelDeletedPayload,
   ErrorPayload,
+  FriendUpdatePayload,
   MessageDeletedPayload,
   PermissionsUpdatePayload,
   ServerDeletedPayload,
@@ -42,13 +44,16 @@ function truncate(text: string, maxLength: number): string {
 export function useRealtimeSync(): void {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const { serverId: currentServerId, channelId: currentChannelId } = useParams<{
+  const location = useLocation();
+  const { serverId: currentServerId, channelId: currentChannelId, friendUserId: currentFriendUserId } = useParams<{
     serverId?: string;
     channelId?: string;
+    friendUserId?: string;
   }>();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const setNotification = useNotificationStore((state) => state.setMessage);
   const markServerUnread = useNotificationStore((state) => state.markServerUnread);
+  const markFriendUnread = useNotificationStore((state) => state.markFriendUnread);
 
   // The SERVER_DELETE and CHANNEL_DELETE subscribers below are set up once (empty-ish dep
   // effect) but need the *current* route's serverId/channelId at the moment the event arrives,
@@ -56,10 +61,14 @@ export function useRealtimeSync(): void {
   // every navigation.
   const currentServerIdRef = useRef(currentServerId);
   const currentChannelIdRef = useRef(currentChannelId);
+  const currentFriendUserIdRef = useRef(currentFriendUserId);
+  const currentPathRef = useRef(location.pathname);
   useLayoutEffect(() => {
     currentServerIdRef.current = currentServerId;
     currentChannelIdRef.current = currentChannelId;
-  }, [currentServerId, currentChannelId]);
+    currentFriendUserIdRef.current = currentFriendUserId;
+    currentPathRef.current = location.pathname;
+  }, [currentServerId, currentChannelId, currentFriendUserId, location.pathname]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -368,6 +377,53 @@ export function useRealtimeSync(): void {
         });
       }),
 
+      websocketClient.subscribe('DM_MESSAGE_CREATE', (payload) => {
+        const message = payload as DmMessage;
+        const currentUserId = useAuthStore.getState().user?.id;
+        const otherUserId = message.author.id === currentUserId ? message.recipientId : message.author.id;
+
+        queryClient.setQueryData<InfiniteData<DmMessage[]>>(['dm', otherUserId, 'messages'], (old) => {
+          // Same guards as MESSAGE_CREATE above: don't force-create a cache entry for a
+          // conversation nobody has opened, and never insert a redelivered message twice.
+          if (!old || old.pages.length === 0) return old;
+          if (old.pages.some((page) => page.some((existing) => existing.id === message.id))) {
+            return old;
+          }
+          const pages = old.pages.map((page, index) => (index === 0 ? [...page, message] : page));
+          return { ...old, pages };
+        });
+
+        if (message.author.id !== currentUserId) {
+          if (otherUserId !== currentFriendUserIdRef.current) {
+            markFriendUnread(otherUserId);
+          }
+
+          const { messageNotifications } = useNotificationStore.getState().preferences;
+          if (messageNotifications && (document.hidden || !document.hasFocus())) {
+            playChime();
+            notify({
+              title: message.author.displayName,
+              body: truncate(message.content, 120),
+              onClick: () => navigate(`/app/dm/${otherUserId}`),
+            });
+          }
+        }
+      }),
+
+      websocketClient.subscribe('FRIEND_UPDATE', (payload) => {
+        const { userId, otherUserId } = payload as FriendUpdatePayload;
+        const currentUserId = useAuthStore.getState().user?.id;
+
+        // Prefix match: also covers ['friends', 'requests'] — same reasoning as
+        // PERMISSIONS_UPDATE's invalidation above.
+        queryClient.invalidateQueries({ queryKey: ['friends'] });
+
+        const relevantOtherId = userId === currentUserId ? otherUserId : userId;
+        if (!currentPathRef.current.startsWith('/app/friends')) {
+          markFriendUnread(relevantOtherId);
+        }
+      }),
+
       websocketClient.subscribe('CHANNEL_READ', (payload) => {
         const { channelId, userId, unreadCount } = payload as ChannelReadPayload;
         if (userId !== useAuthStore.getState().user?.id) return;
@@ -391,5 +447,5 @@ export function useRealtimeSync(): void {
     return () => {
       unsubscribers.forEach((unsubscribe) => unsubscribe());
     };
-  }, [markServerUnread, queryClient, navigate, setNotification]);
+  }, [markServerUnread, markFriendUnread, queryClient, navigate, setNotification]);
 }

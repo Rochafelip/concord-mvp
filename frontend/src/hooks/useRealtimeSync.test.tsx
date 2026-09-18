@@ -93,6 +93,8 @@ function renderHarness(queryClient: QueryClient, initialPath: string) {
               path="servers/:serverId/channels/:channelId"
               element={<div data-testid="channel-view">channel view</div>}
             />
+            <Route path="friends" element={<div data-testid="friends-view">friends view</div>} />
+            <Route path="dm/:friendUserId" element={<div data-testid="dm-view">dm view</div>} />
           </Route>
         </Routes>
       </MemoryRouter>
@@ -121,6 +123,7 @@ describe('useRealtimeSync', () => {
     useNotificationStore.setState({
       message: null,
       unreadServerIds: [],
+      unreadFriendIds: [],
       preferences: { messageNotifications: true, onboardingNotifications: true },
     });
   });
@@ -700,5 +703,95 @@ describe('useRealtimeSync', () => {
         deafened: false,
       },
     ]);
+  });
+
+  it('DM_MESSAGE_CREATE appends to the cached conversation when a cache entry already exists', () => {
+    const queryClient = newQueryClient();
+    queryClient.setQueryData(['dm', 'u2', 'messages'], {
+      pages: [[{ id: 'm1', author: { id: 'u2' }, recipientId: 'u1', content: 'hi', createdAt: '2026-01-01T00:00:00Z' }]],
+      pageParams: [undefined],
+    });
+    renderHarness(queryClient, '/app');
+
+    const incoming = {
+      id: 'm2',
+      author: { id: 'u2', username: 'b', displayName: 'B', avatarUrl: null },
+      recipientId: 'u1',
+      content: 'hello',
+      createdAt: '2026-01-01T00:00:01Z',
+    };
+    emit('DM_MESSAGE_CREATE', incoming);
+
+    const cached = queryClient.getQueryData<{ pages: unknown[][] }>(['dm', 'u2', 'messages']);
+    expect(cached?.pages[0]).toEqual([
+      { id: 'm1', author: { id: 'u2' }, recipientId: 'u1', content: 'hi', createdAt: '2026-01-01T00:00:00Z' },
+      incoming,
+    ]);
+  });
+
+  it('DM_MESSAGE_CREATE from someone else marks that friend unread when not viewing that conversation', () => {
+    const queryClient = newQueryClient();
+    renderHarness(queryClient, '/app');
+
+    emit('DM_MESSAGE_CREATE', {
+      id: 'm1',
+      author: { id: 'u2', username: 'b', displayName: 'B', avatarUrl: null },
+      recipientId: 'u1',
+      content: 'oi',
+      createdAt: '2026-01-01T00:00:00Z',
+    });
+
+    expect(useNotificationStore.getState().unreadFriendIds).toEqual(['u2']);
+  });
+
+  it('DM_MESSAGE_CREATE from the conversation currently open does not mark it unread', () => {
+    const queryClient = newQueryClient();
+    renderHarness(queryClient, '/app/dm/u2');
+
+    emit('DM_MESSAGE_CREATE', {
+      id: 'm1',
+      author: { id: 'u2', username: 'b', displayName: 'B', avatarUrl: null },
+      recipientId: 'u1',
+      content: 'oi',
+      createdAt: '2026-01-01T00:00:00Z',
+    });
+
+    expect(useNotificationStore.getState().unreadFriendIds).toEqual([]);
+  });
+
+  it('DM_MESSAGE_CREATE echoed back to its own sender does not mark anything unread', () => {
+    const queryClient = newQueryClient();
+    renderHarness(queryClient, '/app');
+
+    emit('DM_MESSAGE_CREATE', {
+      id: 'm1',
+      author: { id: 'u1', username: 'a', displayName: 'A', avatarUrl: null },
+      recipientId: 'u2',
+      content: 'oi',
+      createdAt: '2026-01-01T00:00:00Z',
+    });
+
+    expect(useNotificationStore.getState().unreadFriendIds).toEqual([]);
+  });
+
+  it('FRIEND_UPDATE invalidates the friends queries and marks the other user unread', async () => {
+    const queryClient = newQueryClient();
+    queryClient.setQueryData(['friends'], []);
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    renderHarness(queryClient, '/app');
+
+    emit('FRIEND_UPDATE', { userId: 'u2', otherUserId: 'u1' });
+
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['friends'] });
+    expect(useNotificationStore.getState().unreadFriendIds).toEqual(['u2']);
+  });
+
+  it('FRIEND_UPDATE does not mark anything unread while already viewing the friends page', () => {
+    const queryClient = newQueryClient();
+    renderHarness(queryClient, '/app/friends');
+
+    emit('FRIEND_UPDATE', { userId: 'u2', otherUserId: 'u1' });
+
+    expect(useNotificationStore.getState().unreadFriendIds).toEqual([]);
   });
 });
