@@ -1,12 +1,15 @@
-import { HeadphoneOff, MicOff, MonitorUp, Plus, Settings, Trash2, Video, Volume2 } from 'lucide-react';
+import { HeadphoneOff, MicOff, MonitorUp, Plus, Settings, Trash2, UserPlus, Video, Volume2 } from 'lucide-react';
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Avatar } from '../../components/Avatar';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { disconnectVoiceParticipant } from '../calls/api';
 import { useVoicePresence } from '../calls/hooks';
+import { ScreenShareHoverPreview } from '../calls/ScreenShareHoverPreview';
+import { useVoiceStore } from '../../stores/voiceStore';
 import { useAuthStore } from '../auth/authStore';
 import { useHasPermission, useServer } from '../servers/hooks';
+import { InvitePeopleModal } from '../servers/InvitePeopleModal';
 import { ServerSettingsPanel } from '../servers/ServerSettingsPanel';
 import type { Channel, ChannelType } from '../../types/channel';
 import { CreateChannelModal } from './CreateChannelModal';
@@ -36,13 +39,43 @@ export function ChannelSidebar({ onNavigate }: ChannelSidebarProps) {
   // here — these two only decide which controls to draw.
   const canManageChannels = useHasPermission(serverId, 'MANAGE_CHANNELS');
   const canDisconnect = useHasPermission(serverId, 'DISCONNECT_MEMBERS');
+  const canManageInvites = useHasPermission(serverId, 'MANAGE_INVITES');
   const currentUserId = useAuthStore((state) => state.user?.id);
+  // Only relevant for the hover-preview gate below: previewing a channel you're already
+  // connected to would join a second, identically-identified LiveKit session to the same room.
+  const activeVoiceChannelId = useVoiceStore((state) => state.channelId);
   const [createType, setCreateType] = useState<Exclude<ChannelType, 'ONBOARDING'> | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
   const [voiceContextUser, setVoiceContextUser] = useState<{ channelId: string; userId: string; displayName: string } | null>(null);
+  const [hoveredPreview, setHoveredPreview] = useState<{ channelId: string; identity: string; displayName: string } | null>(null);
   const [channelPendingDeletion, setChannelPendingDeletion] = useState<Channel | null>(null);
   const voiceContextMenuRef = useRef<HTMLDivElement>(null);
+  const hoverPreviewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const deleteChannelMutation = useDeleteChannel(serverId);
+
+  // A short delay before opening the preview avoids connecting a LiveKit session for every row the
+  // mouse merely passes over while scrolling the list.
+  const HOVER_PREVIEW_DELAY_MS = 400;
+
+  function handlePreviewHoverStart(previewChannelId: string, identity: string, displayName: string) {
+    if (hoverPreviewTimerRef.current) clearTimeout(hoverPreviewTimerRef.current);
+    hoverPreviewTimerRef.current = setTimeout(() => {
+      setHoveredPreview({ channelId: previewChannelId, identity, displayName });
+    }, HOVER_PREVIEW_DELAY_MS);
+  }
+
+  function handlePreviewHoverEnd() {
+    if (hoverPreviewTimerRef.current) {
+      clearTimeout(hoverPreviewTimerRef.current);
+      hoverPreviewTimerRef.current = null;
+    }
+    setHoveredPreview(null);
+  }
+
+  useEffect(() => () => {
+    if (hoverPreviewTimerRef.current) clearTimeout(hoverPreviewTimerRef.current);
+  }, []);
 
   function handleDeleteChannel(event: MouseEvent<HTMLButtonElement>, channel: Channel) {
     // The trash icon sits inside the channel's <Link>, so the click must not navigate.
@@ -99,14 +132,27 @@ export function ChannelSidebar({ onNavigate }: ChannelSidebarProps) {
     <aside className="flex h-full flex-col border-r bg-sidebar">
       <div className="flex h-16 flex-shrink-0 items-center justify-between border-b px-3">
         <span className="truncate text-heading font-semibold text-ink">{server?.name ?? 'Loading…'}</span>
-        <button
-          type="button"
-          aria-label="Server settings"
-          onClick={() => setSettingsOpen(true)}
-          className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded text-muted hover:text-ink"
-        >
-          <Settings size={18} aria-hidden="true" />
-        </button>
+        <div className="flex flex-shrink-0 items-center">
+          {canManageInvites && (
+            <button
+              type="button"
+              aria-label="Invite people"
+              title="Invite people"
+              onClick={() => setInviteOpen(true)}
+              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded text-muted hover:text-ink"
+            >
+              <UserPlus size={18} aria-hidden="true" />
+            </button>
+          )}
+          <button
+            type="button"
+            aria-label="Server settings"
+            onClick={() => setSettingsOpen(true)}
+            className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded text-muted hover:text-ink"
+          >
+            <Settings size={18} aria-hidden="true" />
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 space-y-4 overflow-y-auto px-2 py-3">
@@ -222,8 +268,30 @@ export function ChannelSidebar({ onNavigate }: ChannelSidebarProps) {
                   </div>
                   {participants.length > 0 && (
                     <ul className="ml-5 mt-0.5 space-y-0.5">
-                      {participants.map((participant) => (
-                        <li key={participant.userId} className="relative flex items-center gap-1.5 px-1 py-0.5">
+                      {participants.map((participant) => {
+                        // Only offer a hover preview when there's actually something to preview,
+                        // it's not the viewer's own share, and the viewer isn't already connected
+                        // to this channel — joining a second, identically-identified LiveKit
+                        // session into a room you're already in would collide (see
+                        // useScreenSharePreview's doc comment).
+                        const canPreview =
+                          participant.screenSharing &&
+                          participant.userId !== currentUserId &&
+                          activeVoiceChannelId !== channel.id;
+                        const isPreviewing =
+                          hoveredPreview?.channelId === channel.id && hoveredPreview.identity === participant.userId;
+
+                        return (
+                        <li
+                          key={participant.userId}
+                          className="relative flex items-center gap-1.5 px-1 py-0.5"
+                          onMouseEnter={
+                            canPreview
+                              ? () => handlePreviewHoverStart(channel.id, participant.userId, participant.displayName)
+                              : undefined
+                          }
+                          onMouseLeave={canPreview ? handlePreviewHoverEnd : undefined}
+                        >
                           <div
                             className="flex min-w-0 flex-1 items-center gap-1.5"
                             onContextMenu={(event) => handleVoiceParticipantContextMenu(event, channel.id, participant.userId, participant.displayName)}
@@ -258,8 +326,16 @@ export function ChannelSidebar({ onNavigate }: ChannelSidebarProps) {
                             {participant.cameraOn && <Video aria-label="Camera on" size={14} />}
                             {participant.screenSharing && <MonitorUp aria-label="Sharing screen" size={14} />}
                           </span>
+                          {isPreviewing && (
+                            <ScreenShareHoverPreview
+                              channelId={channel.id}
+                              identity={participant.userId}
+                              displayName={participant.displayName}
+                            />
+                          )}
                         </li>
-                      ))}
+                        );
+                      })}
                     </ul>
                   )}
                 </li>
@@ -289,6 +365,7 @@ export function ChannelSidebar({ onNavigate }: ChannelSidebarProps) {
         onClose={() => setChannelPendingDeletion(null)}
       />
       <ServerSettingsPanel serverId={serverId} open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <InvitePeopleModal serverId={serverId} open={inviteOpen} onClose={() => setInviteOpen(false)} />
     </aside>
   );
 }

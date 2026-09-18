@@ -1,9 +1,8 @@
-import { Plus, UserPlus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { CreateServerModal } from './CreateServerModal';
 import { useServers } from './hooks';
-import { JoinServerModal } from './JoinServerModal';
 import { useNotificationStore } from '../../stores/notificationStore';
 
 /**
@@ -15,7 +14,6 @@ export function ServerSidebar() {
   const { serverId } = useParams<{ serverId: string }>();
   const { data: servers } = useServers();
   const [createOpen, setCreateOpen] = useState(false);
-  const [joinOpen, setJoinOpen] = useState(false);
   const unreadServerIds = useNotificationStore((state) => state.unreadServerIds);
   const clearServerUnread = useNotificationStore((state) => state.clearServerUnread);
 
@@ -28,16 +26,6 @@ export function ServerSidebar() {
       aria-label="Servers"
       className="flex w-14 flex-shrink-0 flex-col items-center gap-2 overflow-y-auto border-r bg-rail py-2 sm:w-16 sm:py-3"
     >
-      <button
-        type="button"
-        aria-label="Join server"
-        title="Join a server"
-        onClick={() => setJoinOpen(true)}
-        className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-sidebar text-muted hover:bg-brand/20 hover:text-brand"
-      >
-        <UserPlus size={17} aria-hidden="true" />
-      </button>
-
       {(servers ?? []).map((server) => {
         const isSelected = server.id === serverId;
         const hasUnread = unreadServerIds.includes(server.id) && !isSelected;
@@ -81,7 +69,6 @@ export function ServerSidebar() {
       </div>
 
       <CreateServerModal open={createOpen} onClose={() => setCreateOpen(false)} />
-      <JoinServerModal open={joinOpen} onClose={() => setJoinOpen(false)} />
     </nav>
   );
 }

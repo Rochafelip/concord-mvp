@@ -47,7 +47,8 @@ public class SecurityConfig {
                                 "/api/v1/auth/reset-password",
                                 "/actuator/health",
                                 "/ws",
-                                "/api/v1/uploads/**"
+                                "/api/v1/uploads/**",
+                                "/api/v1/invites/**"
                         ).permitAll()
                         .anyRequest().authenticated()
                 )

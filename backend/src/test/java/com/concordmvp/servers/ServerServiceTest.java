@@ -18,6 +18,7 @@ import com.concordmvp.permissions.RoleService;
 import com.concordmvp.realtime.RealtimeEventPublisher;
 import com.concordmvp.realtime.WsEvent;
 import com.concordmvp.realtime.WsEventType;
+import com.concordmvp.servers.dto.InvitePreview;
 import com.concordmvp.servers.dto.ServerMemberEventPayload;
 import com.concordmvp.servers.dto.ServerOwnerChangePayload;
 import com.concordmvp.users.User;
@@ -357,6 +358,37 @@ class ServerServiceTest {
         // D10: regeneration is an UPDATE (server_invites has UNIQUE(server_id)) — same row, new code.
         assertThat(inviteCaptor.getValue().getId()).isEqualTo(existingInviteId);
         assertThat(inviteCaptor.getValue().getCode()).isNotEqualTo("oldcode1");
+    }
+
+    // --- getInvitePreview ---
+
+    @Test
+    void getInvitePreview_invalidCode_throwsResourceNotFound() {
+        when(serverInviteRepository.findByCode("bad-code")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> serverService.getInvitePreview("bad-code"))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void getInvitePreview_validCode_returnsServerNameAndMemberCount() {
+        UUID serverId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        ServerInvite invite = new ServerInvite();
+        invite.setId(UUID.randomUUID());
+        invite.setServerId(serverId);
+        invite.setCode("code123");
+
+        when(serverInviteRepository.findByCode("code123")).thenReturn(Optional.of(invite));
+        when(serverRepository.findById(serverId)).thenReturn(Optional.of(server(serverId, ownerId)));
+        when(serverMemberRepository.findByServerId(serverId))
+                .thenReturn(List.of(member(serverId, ownerId), member(serverId, UUID.randomUUID())));
+
+        InvitePreview preview = serverService.getInvitePreview("code123");
+
+        assertThat(preview.serverId()).isEqualTo(serverId);
+        assertThat(preview.serverName()).isEqualTo("Test Server");
+        assertThat(preview.memberCount()).isEqualTo(2);
     }
 
     // --- leaveServer ---

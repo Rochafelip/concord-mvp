@@ -253,7 +253,7 @@ describe('ParticipantList', () => {
 
       expect(screen.getByText(/Felipe's screen/)).toBeInTheDocument();
       expect(screen.getByText(/João's screen/)).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Return to automatic layout' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Show all participants' })).toBeInTheDocument();
     });
 
     it('lets a manual camera pin persist when a screen share starts, overriding the auto-focused share', async () => {
@@ -276,10 +276,10 @@ describe('ParticipantList', () => {
         ],
       });
 
-      expect(screen.getByRole('button', { name: 'Return to automatic layout' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Show all participants' })).toBeInTheDocument();
     });
 
-    it('clicking "return to automatic" reverts to the auto-watched share', async () => {
+    it('clicking "Show all participants" drops to the plain grid, not back to the auto-watched share', async () => {
       const user = userEvent.setup();
       const track = { attach: vi.fn(), detach: vi.fn() } as never;
       useVoiceStore.setState({
@@ -291,12 +291,17 @@ describe('ParticipantList', () => {
       renderList();
 
       await user.click(screen.getByRole('button', { name: "Focus on Felipe's camera" }));
-      expect(screen.getByRole('button', { name: 'Return to automatic layout' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Show all participants' })).toBeInTheDocument();
 
-      await user.click(screen.getByRole('button', { name: 'Return to automatic layout' }));
+      await user.click(screen.getByRole('button', { name: 'Show all participants' }));
 
-      expect(screen.queryByRole('button', { name: 'Return to automatic layout' })).not.toBeInTheDocument();
-      expect(screen.getByText(/João's screen/)).toBeInTheDocument();
+      // Resetting to null here (the true "untouched" default) would re-select João's still-active
+      // share and land right back in the focused view — indistinguishable from the button doing
+      // nothing. It must land on the plain grid instead, same as clearing the last watched share
+      // directly does.
+      expect(screen.queryByRole('button', { name: 'Show all participants' })).not.toBeInTheDocument();
+      expect(screen.getByTestId('participant-grid')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: "Focus on João's screen" })).toBeInTheDocument();
     });
 
     it('reverts to the plain grid when a manual watch is cleared and nobody is sharing', async () => {
@@ -310,7 +315,7 @@ describe('ParticipantList', () => {
       renderList();
 
       await user.click(screen.getByRole('button', { name: "Focus on João's camera" }));
-      await user.click(screen.getByRole('button', { name: 'Return to automatic layout' }));
+      await user.click(screen.getByRole('button', { name: 'Show all participants' }));
 
       expect(screen.getByTestId('participant-grid')).toBeInTheDocument();
       expect(screen.queryByTestId('focusable-strip')).not.toBeInTheDocument();
@@ -335,7 +340,7 @@ describe('ParticipantList', () => {
       expect(screen.queryByRole('button', { name: "Stop watching Felipe's screen" })).not.toBeInTheDocument();
       expect(screen.getByRole('button', { name: "Focus on Felipe's screen" })).toBeInTheDocument();
       expect(screen.getByText(/João's screen/)).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Return to automatic layout' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Show all participants' })).toBeInTheDocument();
     });
 
     // The reported dead end: removing the only watched share drops the whole view back to the
