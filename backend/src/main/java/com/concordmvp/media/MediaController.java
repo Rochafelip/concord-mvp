@@ -21,4 +21,9 @@ public class MediaController {
     public VoiceTokenResponse issueVoiceToken(@PathVariable UUID channelId) {
         return mediaService.issueVoiceToken(channelId, CurrentUser.id());
     }
+
+    @PostMapping("/api/v1/channels/{channelId}/voice/preview-token")
+    public VoiceTokenResponse issuePreviewToken(@PathVariable UUID channelId) {
+        return mediaService.issuePreviewToken(channelId, CurrentUser.id());
+    }
 }

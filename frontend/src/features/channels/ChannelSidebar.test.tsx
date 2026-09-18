@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useVoiceStore } from '../../stores/voiceStore';
 import type { Channel } from '../../types/channel';
 import type { Server } from '../../types/server';
 import type { VoicePresenceEntry } from '../../types/voice';
@@ -15,6 +16,13 @@ import { ChannelSidebar } from './ChannelSidebar';
 vi.mock('./api');
 vi.mock('../servers/api');
 vi.mock('../calls/api');
+// Isolates ChannelSidebar's hover-gating logic (who/when a preview is offered) from the preview
+// popover's own LiveKit connection — that behavior belongs to ScreenShareHoverPreview.test.tsx.
+vi.mock('../calls/ScreenShareHoverPreview', () => ({
+  ScreenShareHoverPreview: ({ displayName }: { displayName: string }) => (
+    <div role="tooltip" aria-label={`${displayName}'s screen`} />
+  ),
+}));
 
 const server: Server = {
   id: 's1',
@@ -301,6 +309,113 @@ describe('ChannelSidebar', () => {
 
       await screen.findByRole('link', { name: /lobby/ });
       expect(screen.queryByText('Ana')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('screen-share hover preview', () => {
+    function presence(overrides: Partial<VoicePresenceEntry> = {}): VoicePresenceEntry {
+      return {
+        channelId: 'c2',
+        userId: 'u2',
+        displayName: 'Ana',
+        avatarUrl: null,
+        muted: false,
+        cameraOn: false,
+        screenSharing: true,
+        speaking: false,
+        deafened: false,
+        ...overrides,
+      };
+    }
+
+    beforeEach(() => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      useAuthStore.setState({
+        isAuthenticated: true,
+        user: { id: 'member-1', username: 'm', displayName: 'M', email: 'm@x.com', avatarUrl: null },
+      });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('does not show a preview before the hover delay elapses', async () => {
+      vi.mocked(callsApi.getVoicePresence).mockResolvedValue([presence()]);
+      renderSidebar();
+      const row = await screen.findByText('Ana');
+
+      fireEvent.mouseEnter(row.closest('li')!);
+
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+    });
+
+    it('shows the preview popover after hovering a screen-sharing participant', async () => {
+      vi.mocked(callsApi.getVoicePresence).mockResolvedValue([presence()]);
+      renderSidebar();
+      const row = await screen.findByText('Ana');
+
+      fireEvent.mouseEnter(row.closest('li')!);
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+
+      expect(screen.getByRole('tooltip', { name: "Ana's screen" })).toBeInTheDocument();
+    });
+
+    it('cancels the pending preview if the mouse leaves before the delay elapses', async () => {
+      vi.mocked(callsApi.getVoicePresence).mockResolvedValue([presence()]);
+      renderSidebar();
+      const row = (await screen.findByText('Ana')).closest('li')!;
+
+      fireEvent.mouseEnter(row);
+      fireEvent.mouseLeave(row);
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+    });
+
+    it('does not offer a preview for a participant who is not sharing their screen', async () => {
+      vi.mocked(callsApi.getVoicePresence).mockResolvedValue([presence({ screenSharing: false })]);
+      renderSidebar();
+      const row = (await screen.findByText('Ana')).closest('li')!;
+
+      fireEvent.mouseEnter(row);
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+    });
+
+    it('does not offer a preview for the viewer\'s own screen share', async () => {
+      vi.mocked(callsApi.getVoicePresence).mockResolvedValue([presence({ userId: 'member-1', displayName: 'M' })]);
+      renderSidebar();
+      const row = (await screen.findByText('M')).closest('li')!;
+
+      fireEvent.mouseEnter(row);
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+    });
+
+    it('does not offer a preview for a channel the viewer is already connected to', async () => {
+      useVoiceStore.setState({ channelId: 'c2' });
+      vi.mocked(callsApi.getVoicePresence).mockResolvedValue([presence()]);
+      renderSidebar();
+      const row = (await screen.findByText('Ana')).closest('li')!;
+
+      fireEvent.mouseEnter(row);
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+      useVoiceStore.setState({ channelId: null });
     });
   });
 });
