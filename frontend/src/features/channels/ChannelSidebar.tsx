@@ -1,4 +1,4 @@
-import { HeadphoneOff, MicOff, MonitorUp, Plus, Settings, Trash2, Video, Volume2 } from 'lucide-react';
+import { HeadphoneOff, MicOff, MonitorUp, Plus, Settings, Trash2, UserPlus, Video, Volume2 } from 'lucide-react';
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Avatar } from '../../components/Avatar';
@@ -7,6 +7,7 @@ import { disconnectVoiceParticipant } from '../calls/api';
 import { useVoicePresence } from '../calls/hooks';
 import { useAuthStore } from '../auth/authStore';
 import { useHasPermission, useServer } from '../servers/hooks';
+import { InvitePeopleModal } from '../servers/InvitePeopleModal';
 import { ServerSettingsPanel } from '../servers/ServerSettingsPanel';
 import type { Channel, ChannelType } from '../../types/channel';
 import { CreateChannelModal } from './CreateChannelModal';
@@ -36,9 +37,11 @@ export function ChannelSidebar({ onNavigate }: ChannelSidebarProps) {
   // here — these two only decide which controls to draw.
   const canManageChannels = useHasPermission(serverId, 'MANAGE_CHANNELS');
   const canDisconnect = useHasPermission(serverId, 'DISCONNECT_MEMBERS');
+  const canManageInvites = useHasPermission(serverId, 'MANAGE_INVITES');
   const currentUserId = useAuthStore((state) => state.user?.id);
   const [createType, setCreateType] = useState<Exclude<ChannelType, 'ONBOARDING'> | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
   const [voiceContextUser, setVoiceContextUser] = useState<{ channelId: string; userId: string; displayName: string } | null>(null);
   const [channelPendingDeletion, setChannelPendingDeletion] = useState<Channel | null>(null);
   const voiceContextMenuRef = useRef<HTMLDivElement>(null);
@@ -99,14 +102,27 @@ export function ChannelSidebar({ onNavigate }: ChannelSidebarProps) {
     <aside className="flex h-full flex-col border-r bg-sidebar">
       <div className="flex h-16 flex-shrink-0 items-center justify-between border-b px-3">
         <span className="truncate text-heading font-semibold text-ink">{server?.name ?? 'Loading…'}</span>
-        <button
-          type="button"
-          aria-label="Server settings"
-          onClick={() => setSettingsOpen(true)}
-          className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded text-muted hover:text-ink"
-        >
-          <Settings size={18} aria-hidden="true" />
-        </button>
+        <div className="flex flex-shrink-0 items-center">
+          {canManageInvites && (
+            <button
+              type="button"
+              aria-label="Invite people"
+              title="Invite people"
+              onClick={() => setInviteOpen(true)}
+              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded text-muted hover:text-ink"
+            >
+              <UserPlus size={18} aria-hidden="true" />
+            </button>
+          )}
+          <button
+            type="button"
+            aria-label="Server settings"
+            onClick={() => setSettingsOpen(true)}
+            className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded text-muted hover:text-ink"
+          >
+            <Settings size={18} aria-hidden="true" />
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 space-y-4 overflow-y-auto px-2 py-3">
@@ -289,6 +305,7 @@ export function ChannelSidebar({ onNavigate }: ChannelSidebarProps) {
         onClose={() => setChannelPendingDeletion(null)}
       />
       <ServerSettingsPanel serverId={serverId} open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <InvitePeopleModal serverId={serverId} open={inviteOpen} onClose={() => setInviteOpen(false)} />
     </aside>
   );
 }

@@ -25,3 +25,9 @@ export interface ServerMember {
 export interface InviteCode {
   code: string;
 }
+
+export interface InvitePreview {
+  serverId: string;
+  serverName: string;
+  memberCount: number;
+}
