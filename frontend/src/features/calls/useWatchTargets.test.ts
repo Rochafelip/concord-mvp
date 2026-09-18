@@ -149,7 +149,7 @@ describe('useWatchTargets', () => {
     expect(result.current.isManual).toBe(true);
   });
 
-  it('clearManual returns to the pure automatic default', () => {
+  it('clearManual forces the grid view, even while a share is still active', () => {
     const track = { attach: vi.fn(), detach: vi.fn() } as never;
     const participants = [
       participant({ identity: 'u1', cameraEnabled: true }),
@@ -160,7 +160,10 @@ describe('useWatchTargets', () => {
     act(() => result.current.addWatch({ type: 'camera', identity: 'u1' }));
     act(() => result.current.clearManual());
 
-    expect(result.current.watchTargets).toEqual([{ type: 'share', identity: 'u2' }]);
-    expect(result.current.isManual).toBe(false);
+    // Not a snap-back to the auto-focused share (u2's screen) — the point of the grid button
+    // is to escape the focused view entirely, so it must clear the automatic default too, the
+    // same way removeWatch already does for the last watched target above.
+    expect(result.current.watchTargets).toEqual([]);
+    expect(result.current.isManual).toBe(true);
   });
 });
