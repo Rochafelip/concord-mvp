@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Avatar } from '../../components/Avatar';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { ContextMenu } from '../../components/ContextMenu';
 import { disconnectVoiceParticipant } from '../calls/api';
 import { useVoicePresence } from '../calls/hooks';
 import { ScreenShareHoverPreview } from '../calls/ScreenShareHoverPreview';
@@ -47,10 +48,8 @@ export function ChannelSidebar({ onNavigate }: ChannelSidebarProps) {
   const [createType, setCreateType] = useState<Exclude<ChannelType, 'ONBOARDING'> | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
-  const [voiceContextUser, setVoiceContextUser] = useState<{ channelId: string; userId: string; displayName: string } | null>(null);
   const [hoveredPreview, setHoveredPreview] = useState<{ channelId: string; identity: string; displayName: string } | null>(null);
   const [channelPendingDeletion, setChannelPendingDeletion] = useState<Channel | null>(null);
-  const voiceContextMenuRef = useRef<HTMLDivElement>(null);
   const hoverPreviewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const deleteChannelMutation = useDeleteChannel(serverId);
 
@@ -90,33 +89,6 @@ export function ChannelSidebar({ onNavigate }: ChannelSidebarProps) {
       onSettled: () => setChannelPendingDeletion(null),
     });
   }
-
-  function handleVoiceParticipantContextMenu(event: MouseEvent<HTMLDivElement>, channelId: string, userId: string, displayName: string) {
-    if (!canDisconnect || userId === currentUserId) return;
-    event.preventDefault();
-    setVoiceContextUser({ channelId, userId, displayName });
-  }
-
-  useEffect(() => {
-    if (!voiceContextUser) return;
-
-    function handlePointerDown(event: PointerEvent) {
-      if (!voiceContextMenuRef.current?.contains(event.target as Node)) {
-        setVoiceContextUser(null);
-      }
-    }
-
-    function handleKeyDown(event: globalThis.KeyboardEvent) {
-      if (event.key === 'Escape') setVoiceContextUser(null);
-    }
-
-    document.addEventListener('pointerdown', handlePointerDown);
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [voiceContextUser]);
 
   function handleChannelClick() {
     onNavigate?.();
@@ -292,31 +264,25 @@ export function ChannelSidebar({ onNavigate }: ChannelSidebarProps) {
                           }
                           onMouseLeave={canPreview ? handlePreviewHoverEnd : undefined}
                         >
-                          <div
-                            className="flex min-w-0 flex-1 items-center gap-1.5"
-                            onContextMenu={(event) => handleVoiceParticipantContextMenu(event, channel.id, participant.userId, participant.displayName)}
+                          <ContextMenu
+                            disabled={!canDisconnect || participant.userId === currentUserId}
+                            items={[
+                              {
+                                label: 'Disconnect from voice',
+                                variant: 'danger',
+                                onSelect: () => void disconnectVoiceParticipant(channel.id, participant.userId),
+                              },
+                            ]}
                           >
-                          <Avatar
-                            displayName={participant.displayName}
-                            avatarUrl={participant.avatarUrl}
-                            className={`h-5 w-5 flex-shrink-0 text-caption ${participant.speaking ? 'ring-2 ring-success' : ''}`}
-                          />
-                          <span className="truncate text-caption text-muted">{participant.displayName}</span>
-                          </div>
-                          {canDisconnect && participant.userId !== currentUserId && voiceContextUser?.userId === participant.userId && voiceContextUser.channelId === channel.id && (
-                            <div ref={voiceContextMenuRef} className="absolute right-0 top-full z-20 min-w-44 rounded border border-border bg-surface p-1 shadow-lg">
-                              <button
-                                type="button"
-                                className="w-full rounded px-2 py-1.5 text-left text-caption text-danger hover:bg-danger/10"
-                                onClick={() => {
-                                  void disconnectVoiceParticipant(channel.id, participant.userId);
-                                  setVoiceContextUser(null);
-                                }}
-                              >
-                                Disconnect from voice
-                              </button>
+                            <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                              <Avatar
+                                displayName={participant.displayName}
+                                avatarUrl={participant.avatarUrl}
+                                className={`h-5 w-5 flex-shrink-0 text-caption ${participant.speaking ? 'ring-2 ring-success' : ''}`}
+                              />
+                              <span className="truncate text-caption text-muted">{participant.displayName}</span>
                             </div>
-                          )}
+                          </ContextMenu>
                           <span className="ml-auto flex flex-shrink-0 items-center gap-1 text-muted">
                             {participant.deafened ? (
                               <HeadphoneOff aria-label="Deafened" size={14} />

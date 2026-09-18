@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { voiceClient } from '../../services/voiceClient';
 import { useVoiceStore } from '../../stores/voiceStore';
 import type { VoiceParticipant } from '../../types/voice';
+import { disconnectVoiceParticipant } from './api';
 import { ScreenShareTile } from './ScreenShareTile';
 
 vi.mock('../../services/voiceClient', () => ({
@@ -14,6 +15,10 @@ vi.mock('../../services/voiceClient', () => ({
     toggleMute: vi.fn(),
     disconnect: vi.fn(),
   },
+}));
+
+vi.mock('./api', () => ({
+  disconnectVoiceParticipant: vi.fn(),
 }));
 
 beforeEach(() => {
@@ -510,6 +515,55 @@ describe('ScreenShareTile', () => {
       const { container } = render(<ScreenShareTile participant={sharingParticipant()} className="h-full max-h-full max-w-full" />);
 
       expect(container.firstChild).toHaveClass('w-full', 'h-full', 'max-h-full', 'max-w-full');
+    });
+  });
+
+  describe('context menu', () => {
+    it('disconnects the participant from voice when the menu item is clicked', async () => {
+      const user = userEvent.setup();
+      const { container } = render(
+        <ScreenShareTile participant={sharingParticipant({ identity: 'bob' })} canDisconnect channelId="chan-1" />,
+      );
+
+      fireEvent.contextMenu(container.firstChild as Element);
+      await user.click(await screen.findByText('Disconnect from voice'));
+
+      expect(disconnectVoiceParticipant).toHaveBeenCalledWith('chan-1', 'bob');
+    });
+
+    it('does not offer to disconnect the local participant', () => {
+      const { container } = render(
+        <ScreenShareTile participant={sharingParticipant({ isLocal: true })} canDisconnect channelId="chan-1" />,
+      );
+
+      fireEvent.contextMenu(container.firstChild as Element);
+
+      expect(screen.queryByText('Disconnect from voice')).not.toBeInTheDocument();
+    });
+
+    it('does not offer to disconnect without the canDisconnect permission', () => {
+      const { container } = render(<ScreenShareTile participant={sharingParticipant()} channelId="chan-1" />);
+
+      fireEvent.contextMenu(container.firstChild as Element);
+
+      expect(screen.queryByText('Disconnect from voice')).not.toBeInTheDocument();
+    });
+
+    it('does not offer to disconnect without a channelId', () => {
+      const { container } = render(<ScreenShareTile participant={sharingParticipant()} canDisconnect />);
+
+      fireEvent.contextMenu(container.firstChild as Element);
+
+      expect(screen.queryByText('Disconnect from voice')).not.toBeInTheDocument();
+    });
+
+    it('stays in fullscreen when entering it disables the menu, since the tile is also the Fullscreen API target and an unmount here would exit it', async () => {
+      const user = userEvent.setup();
+      render(<ScreenShareTile participant={sharingParticipant({ name: 'Felipe' })} canDisconnect channelId="chan-1" />);
+
+      await user.click(screen.getByRole('button', { name: 'Enter fullscreen' }));
+
+      expect(screen.getByRole('button', { name: 'Exit fullscreen' })).toBeInTheDocument();
     });
   });
 });
