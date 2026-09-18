@@ -5,6 +5,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { toVoicePresenceEntry } from '../features/calls/api';
 import { useAuthStore } from '../features/auth/authStore';
 import { getWsTicket } from '../features/auth/api';
+import { notify, playChime } from '../services/desktopNotifications';
 import { websocketClient } from '../services/websocketClient';
 import { getVoiceToken } from '../features/calls/api';
 import { voiceClient } from '../services/voiceClient';
@@ -27,6 +28,10 @@ import type {
   UserProfileUpdatePayload,
   ChannelReadPayload,
 } from '../types/websocket';
+
+function truncate(text: string, maxLength: number): string {
+  return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
+}
 
 /**
  * Mounted ONCE in AppShell (which only renders once authenticated, per ProtectedRoute — the
@@ -103,10 +108,27 @@ export function useRealtimeSync(): void {
           const isOnboarding = channel?.name?.toLowerCase() === 'onboarding';
           const { messageNotifications, onboardingNotifications } =
             useNotificationStore.getState().preferences;
-          if ((!isOnboarding && messageNotifications) || (isOnboarding && onboardingNotifications)) {
+          const notificationsEnabled =
+            (!isOnboarding && messageNotifications) || (isOnboarding && onboardingNotifications);
+          if (notificationsEnabled) {
             const serverId = channel?.serverId;
             if (serverId && serverId !== currentServerIdRef.current) {
               markServerUnread(serverId);
+            }
+
+            // Discord-style: a desktop (Chrome) notification only fires when the window itself
+            // is backgrounded, regardless of which channel the user has open — being on a
+            // different channel while the window has focus is covered by the unread badges above.
+            if (serverId && (document.hidden || !document.hasFocus())) {
+              const serverName = queryClient
+                .getQueryData<Server[]>(['servers'])
+                ?.find((server) => server.id === serverId)?.name;
+              playChime();
+              notify({
+                title: message.author.displayName,
+                body: truncate(`#${channel?.name} · ${serverName}\n${message.content}`, 120),
+                onClick: () => navigate(`/app/servers/${serverId}/channels/${message.channelId}`),
+              });
             }
           }
 
