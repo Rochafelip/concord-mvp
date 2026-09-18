@@ -102,9 +102,11 @@ Each application must remain independently buildable.
 * Deleting a server and transferring ownership stay owner-only and are not
   delegable by permission
 
-Moderation (kick, ban, timeout, mute, move), the audit log, and the role
-management UI are **not** implemented yet — their permission bits exist but
-nothing enforces them. Do not treat them as available.
+Moderation (kick, ban, timeout, mute, move) and the audit log are **not**
+implemented yet — their permission bits exist but nothing enforces them. Do
+not treat them as available. Role management (create/edit/delete/reorder
+roles, assign to members) has a UI, in `ServerSettingsPanel`'s Roles tab;
+per-channel permission overrides do not yet.
 
 ### Voice
 
