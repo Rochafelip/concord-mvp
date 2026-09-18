@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { Tooltip } from '../../components/Tooltip';
 import { voiceClient } from '../../services/voiceClient';
 import { useChannel } from '../channels/hooks';
 import { hasPermission } from '../../types/permission';
@@ -64,60 +65,64 @@ export function VoiceConnectionBar() {
 
       {localParticipant && (
         <div className="flex flex-shrink-0 items-center gap-1.5">
-          <button
-            type="button"
-            aria-label={localParticipant.micEnabled ? 'Mute' : 'Unmute'}
-            title={localParticipant.micEnabled ? 'Mute' : 'Unmute'}
-            onClick={() => voiceClient.toggleMute()}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-sidebar text-ink hover:bg-border"
-          >
-            {localParticipant.micEnabled ? (
-              <Mic size={18} aria-hidden="true" />
-            ) : (
-              <MicOff size={18} aria-hidden="true" />
-            )}
-          </button>
-          <button
-            type="button"
-            aria-label={isDeafened ? 'Undeafen' : 'Deafen'}
-            title={isDeafened ? 'Undeafen' : 'Deafen'}
-            onClick={() => voiceClient.toggleDeafen()}
-            className={`flex h-10 w-10 items-center justify-center rounded-full bg-sidebar hover:bg-border ${
-              isDeafened ? 'text-danger' : 'text-ink'
-            }`}
-          >
-            {isDeafened ? (
-              <HeadphoneOff data-testid="deafen-icon-off" size={18} aria-hidden="true" />
-            ) : (
-              <Headphones data-testid="deafen-icon-on" size={18} aria-hidden="true" />
-            )}
-          </button>
-          {canShareScreen && (
+          <Tooltip content={localParticipant.micEnabled ? 'Mute' : 'Unmute'}>
             <button
               type="button"
-              aria-label={localParticipant.screenShareEnabled ? 'Stop sharing' : 'Share screen'}
-              title={localParticipant.screenShareEnabled ? 'Stop sharing' : 'Share screen'}
-              onClick={() =>
-                localParticipant.screenShareEnabled ? voiceClient.toggleScreenShare() : setQualityModalOpen(true)
-              }
+              aria-label={localParticipant.micEnabled ? 'Mute' : 'Unmute'}
+              onClick={() => voiceClient.toggleMute()}
               className="flex h-10 w-10 items-center justify-center rounded-full bg-sidebar text-ink hover:bg-border"
             >
-              {localParticipant.screenShareEnabled ? (
-                <MonitorX size={18} aria-hidden="true" />
+              {localParticipant.micEnabled ? (
+                <Mic size={18} aria-hidden="true" />
               ) : (
-                <MonitorUp size={18} aria-hidden="true" />
+                <MicOff size={18} aria-hidden="true" />
               )}
             </button>
+          </Tooltip>
+          <Tooltip content={isDeafened ? 'Undeafen' : 'Deafen'}>
+            <button
+              type="button"
+              aria-label={isDeafened ? 'Undeafen' : 'Deafen'}
+              onClick={() => voiceClient.toggleDeafen()}
+              className={`flex h-10 w-10 items-center justify-center rounded-full bg-sidebar hover:bg-border ${
+                isDeafened ? 'text-danger' : 'text-ink'
+              }`}
+            >
+              {isDeafened ? (
+                <HeadphoneOff data-testid="deafen-icon-off" size={18} aria-hidden="true" />
+              ) : (
+                <Headphones data-testid="deafen-icon-on" size={18} aria-hidden="true" />
+              )}
+            </button>
+          </Tooltip>
+          {canShareScreen && (
+            <Tooltip content={localParticipant.screenShareEnabled ? 'Stop sharing' : 'Share screen'}>
+              <button
+                type="button"
+                aria-label={localParticipant.screenShareEnabled ? 'Stop sharing' : 'Share screen'}
+                onClick={() =>
+                  localParticipant.screenShareEnabled ? voiceClient.toggleScreenShare() : setQualityModalOpen(true)
+                }
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-sidebar text-ink hover:bg-border"
+              >
+                {localParticipant.screenShareEnabled ? (
+                  <MonitorX size={18} aria-hidden="true" />
+                ) : (
+                  <MonitorUp size={18} aria-hidden="true" />
+                )}
+              </button>
+            </Tooltip>
           )}
-          <button
-            type="button"
-            aria-label="Leave call"
-            title="Leave call"
-            onClick={handleLeave}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-danger/90 text-white hover:bg-danger"
-          >
-            <PhoneOff size={18} aria-hidden="true" />
-          </button>
+          <Tooltip content="Leave call">
+            <button
+              type="button"
+              aria-label="Leave call"
+              onClick={handleLeave}
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-danger/90 text-white hover:bg-danger"
+            >
+              <PhoneOff size={18} aria-hidden="true" />
+            </button>
+          </Tooltip>
         </div>
       )}
       <ScreenShareQualityModal

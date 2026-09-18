@@ -1,11 +1,50 @@
-import { useState } from 'react';
+import { closestCenter, DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
+import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { GripVertical } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
 import { Button } from '../../components/Button';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { ErrorBanner } from '../../components/ErrorBanner';
 import { ApiError } from '../../services/apiClient';
 import type { Permission, Role } from '../../types/permission';
+import { computeReorderedPositions } from './reorderRoles';
 import { RoleEditor } from './RoleEditor';
 import { useDeleteRole, useMemberRoles, useRoles, useUpdateRolePositions } from './hooks';
+
+interface SortableRoleRowProps {
+  role: Role;
+  /** The color dot + name, unchanged from the previous non-sortable row. */
+  label: ReactNode;
+  /** Edit/Delete role buttons, unchanged from the previous non-sortable row. */
+  actions: ReactNode;
+}
+
+function SortableRoleRow({ role, label, actions }: SortableRoleRowProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: role.id });
+
+  return (
+    <li
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={`flex items-center justify-between gap-2 rounded px-2 py-1 ${isDragging ? 'opacity-50' : ''}`}
+    >
+      <span className="flex items-center gap-2 text-body text-ink">
+        <button
+          type="button"
+          aria-label={`Reorder ${role.name}`}
+          {...attributes}
+          {...listeners}
+          className="cursor-grab text-muted hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+        >
+          <GripVertical size={16} aria-hidden="true" />
+        </button>
+        {label}
+      </span>
+      <span className="flex items-center gap-1">{actions}</span>
+    </li>
+  );
+}
 
 interface RolesTabProps {
   serverId: string;
@@ -27,6 +66,10 @@ export function RolesTab({ serverId, currentUserId, isOwner, currentUserPermissi
 
   const [editing, setEditing] = useState<{ role: Role | null } | null>(null);
   const [deleting, setDeleting] = useState<Role | null>(null);
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
 
   const ranked = (roles ?? []).filter((role) => !role.isEveryone);
   const everyoneRole = (roles ?? []).find((role) => role.isEveryone) ?? null;
@@ -63,14 +106,16 @@ export function RolesTab({ serverId, currentUserId, isOwner, currentUserPermissi
     );
   }
 
-  function move(index: number, direction: -1 | 1) {
-    const target = ranked[index + direction];
-    if (target == null) return;
-    const role = ranked[index];
-    updatePositionsMutation.mutate([
-      { roleId: role.id, position: target.position },
-      { roleId: target.id, position: role.position },
-    ]);
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (over == null || active.id === over.id) return;
+
+    const oldIndex = ranked.findIndex((role) => role.id === active.id);
+    const newIndex = ranked.findIndex((role) => role.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const updates = computeReorderedPositions(ranked, oldIndex, newIndex);
+    if (updates.length > 0) updatePositionsMutation.mutate(updates);
   }
 
   function confirmDelete() {
@@ -93,44 +138,36 @@ export function RolesTab({ serverId, currentUserId, isOwner, currentUserPermissi
       </div>
 
       <ul className="space-y-1">
-        {ranked.map((role, index) => (
-          <li key={role.id} className="flex items-center justify-between gap-2 rounded px-2 py-1">
-            <span className="flex items-center gap-2 text-body text-ink">
-              <span
-                aria-hidden="true"
-                className="h-3 w-3 rounded-full"
-                style={{ backgroundColor: role.color ?? '#99A1AF' }}
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={ranked.map((role) => role.id)} strategy={verticalListSortingStrategy}>
+            {ranked.map((role) => (
+              <SortableRoleRow
+                key={role.id}
+                role={role}
+                label={
+                  <>
+                    <span
+                      aria-hidden="true"
+                      className="h-3 w-3 rounded-full"
+                      style={{ backgroundColor: role.color ?? '#99A1AF' }}
+                    />
+                    {role.name}
+                  </>
+                }
+                actions={
+                  <>
+                    <Button variant="secondary" onClick={() => setEditing({ role })}>
+                      Edit
+                    </Button>
+                    <Button variant="danger" onClick={() => setDeleting(role)}>
+                      Delete role
+                    </Button>
+                  </>
+                }
               />
-              {role.name}
-            </span>
-            <span className="flex items-center gap-1">
-              <button
-                type="button"
-                aria-label="Move up"
-                disabled={index === 0}
-                onClick={() => move(index, -1)}
-                className="text-muted hover:text-ink disabled:opacity-30"
-              >
-                ▲
-              </button>
-              <button
-                type="button"
-                aria-label="Move down"
-                disabled={index === ranked.length - 1}
-                onClick={() => move(index, 1)}
-                className="text-muted hover:text-ink disabled:opacity-30"
-              >
-                ▼
-              </button>
-              <Button variant="secondary" onClick={() => setEditing({ role })}>
-                Edit
-              </Button>
-              <Button variant="danger" onClick={() => setDeleting(role)}>
-                Delete role
-              </Button>
-            </span>
-          </li>
-        ))}
+            ))}
+          </SortableContext>
+        </DndContext>
 
         {everyoneRole != null && (
           <li className="flex items-center justify-between gap-2 border-t border-border px-2 pt-2 text-muted">
