@@ -31,8 +31,8 @@ const server: Server = {
   createdAt: '2026-01-01',
   updatedAt: '2026-01-01',
   // The sidebar's create/delete controls now hang off MANAGE_CHANNELS rather than ownership,
-  // and the voice context menu off DISCONNECT_MEMBERS.
-  permissions: ['MANAGE_CHANNELS', 'DISCONNECT_MEMBERS', 'VIEW_CHANNEL'],
+  // the voice context menu off DISCONNECT_MEMBERS, and the invite button off MANAGE_INVITES.
+  permissions: ['MANAGE_CHANNELS', 'DISCONNECT_MEMBERS', 'VIEW_CHANNEL', 'MANAGE_INVITES'],
 };
 
 const channels: Channel[] = [
@@ -157,6 +157,32 @@ describe('ChannelSidebar', () => {
 
     await screen.findByText('Alpha');
     expect(screen.queryByRole('button', { name: /Delete (text|voice) channel/ })).not.toBeInTheDocument();
+  });
+
+  it('opens the invite people modal for a member with MANAGE_INVITES', async () => {
+    useAuthStore.setState({
+      isAuthenticated: true,
+      user: { id: 'owner-1', username: 'o', displayName: 'O', email: 'o@x.com', avatarUrl: null },
+    });
+    const user = userEvent.setup();
+    renderSidebar();
+
+    await screen.findByText('Alpha');
+    await user.click(screen.getByRole('button', { name: 'Invite people' }));
+
+    expect(await screen.findByRole('heading', { name: 'Invite people' })).toBeInTheDocument();
+  });
+
+  it('hides the invite people button from a member without MANAGE_INVITES', async () => {
+    useAuthStore.setState({
+      isAuthenticated: true,
+      user: { id: 'member-1', username: 'm', displayName: 'M', email: 'm@x.com', avatarUrl: null },
+    });
+    vi.mocked(serversApi.getServer).mockResolvedValue({ ...server, permissions: ['VIEW_CHANNEL'] });
+    renderSidebar();
+
+    await screen.findByText('Alpha');
+    expect(screen.queryByRole('button', { name: 'Invite people' })).not.toBeInTheDocument();
   });
 
   it('deletes the channel only after the confirmation dialog is accepted', async () => {

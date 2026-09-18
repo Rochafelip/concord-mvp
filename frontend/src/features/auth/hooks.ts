@@ -4,16 +4,19 @@ import { getMe, login, register } from './api';
 import { useAuthStore } from './authStore';
 
 /**
- * Only routes inside the authenticated area are accepted as a post-login target.
+ * Only routes inside the authenticated area, plus the public invite landing page, are accepted
+ * as a post-login/post-register target.
  *
  * A `from` can arrive from a forged URL, so an absolute one ('https://evil.com') or a
  * protocol-relative one ('//evil.com', which browsers treat as absolute) must never be followed.
- * The '/app/' prefix is checked with its trailing slash, since a bare startsWith('/app') would
- * also accept '/appearances-are-deceiving'.
+ * Each prefix is checked with its trailing slash, since a bare startsWith('/app') would also
+ * accept '/appearances-are-deceiving' (and startsWith('/invite') would accept '/invited-not-real').
  */
 function safeRedirectTarget(from: unknown): string {
   if (typeof from !== 'string') return '/app';
-  return from === '/app' || from.startsWith('/app/') || from.startsWith('/app?') ? from : '/app';
+  if (from === '/app' || from.startsWith('/app/') || from.startsWith('/app?')) return from;
+  if (from.startsWith('/invite/')) return from;
+  return '/app';
 }
 
 export function useLogin() {
@@ -35,12 +38,15 @@ export function useLogin() {
 export function useRegister() {
   const storeLogin = useAuthStore((state) => state.login);
   const navigate = useNavigate();
+  const location = useLocation();
 
   return useMutation({
     mutationFn: register,
     onSuccess: (result) => {
       storeLogin(result);
-      navigate('/app');
+      navigate(safeRedirectTarget((location.state as { from?: unknown } | null)?.from), {
+        replace: true,
+      });
     },
   });
 }
