@@ -5,6 +5,7 @@ import { ErrorBanner } from '../../components/ErrorBanner';
 import { PasswordInput } from '../../components/PasswordInput';
 import { TextInput } from '../../components/TextInput';
 import { ApiError } from '../../services/apiClient';
+import { requestPermission } from '../../services/desktopNotifications';
 import { useAuthStore } from '../auth/authStore';
 import { useNotificationStore } from '../../stores/notificationStore';
 import { PasswordRequirements } from '../auth/PasswordRequirements';
@@ -120,9 +121,10 @@ export function SettingsPage() {
             <input
               type="checkbox"
               checked={notificationPreferences.messageNotifications}
-              onChange={(event) =>
-                setNotificationPreferences({ messageNotifications: event.target.checked })
-              }
+              onChange={(event) => {
+                setNotificationPreferences({ messageNotifications: event.target.checked });
+                if (event.target.checked) requestPermission();
+              }}
               className="mt-1"
             />
             <span>
