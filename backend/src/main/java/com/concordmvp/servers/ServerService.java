@@ -17,6 +17,7 @@ import com.concordmvp.permissions.RoleService;
 import com.concordmvp.realtime.RealtimeEventPublisher;
 import com.concordmvp.realtime.WsEvent;
 import com.concordmvp.realtime.WsEventType;
+import com.concordmvp.servers.dto.InvitePreview;
 import com.concordmvp.servers.dto.ServerDeletedPayload;
 import com.concordmvp.servers.dto.ServerMemberEventPayload;
 import com.concordmvp.servers.dto.ServerOwnerChangePayload;
@@ -313,6 +314,15 @@ public class ServerService {
                     return serverInviteRepository.save(invite);
                 })
                 .orElseGet(() -> createInvite(serverId));
+    }
+
+    /** Public preview for the invite landing page — no auth, no permission check. */
+    public InvitePreview getInvitePreview(String code) {
+        ServerInvite invite = serverInviteRepository.findByCode(code)
+                .orElseThrow(() -> new ResourceNotFoundException("Invalid invite code"));
+        Server server = requireServer(invite.getServerId());
+        int memberCount = serverMemberRepository.findByServerId(server.getId()).size();
+        return new InvitePreview(server.getId(), server.getName(), memberCount);
     }
 
     private ServerInvite createInvite(UUID serverId) {

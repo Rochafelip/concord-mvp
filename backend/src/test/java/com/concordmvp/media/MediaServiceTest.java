@@ -249,6 +249,105 @@ class MediaServiceTest {
         assertThat(publishSources(claims)).containsExactly("camera");
     }
 
+    // --- preview token: hover preview joins hidden and read-only, never publishes ---
+
+    @Test
+    void issuePreviewToken_channelNotFound_throwsResourceNotFound() {
+        UUID channelId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        when(channelService.getChannel(channelId, requesterId))
+                .thenThrow(new ResourceNotFoundException("Channel not found: " + channelId));
+
+        assertThatThrownBy(() -> mediaService.issuePreviewToken(channelId, requesterId))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void issuePreviewToken_channelIsTextType_throwsBadRequest() {
+        UUID serverId = UUID.randomUUID();
+        UUID channelId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        when(channelService.getChannel(channelId, requesterId))
+                .thenReturn(channel(channelId, serverId, ChannelType.TEXT));
+
+        assertThatThrownBy(() -> mediaService.issuePreviewToken(channelId, requesterId))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void issuePreviewToken_withoutConnect_throwsForbidden() {
+        UUID serverId = UUID.randomUUID();
+        UUID channelId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        Channel voice = channel(channelId, serverId, ChannelType.VOICE);
+        when(channelService.getChannel(channelId, requesterId)).thenReturn(voice);
+        doThrow(new ForbiddenException("denied")).when(permissionService)
+                .requireChannel(voice, requesterId, Permission.CONNECT);
+
+        assertThatThrownBy(() -> mediaService.issuePreviewToken(channelId, requesterId))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void issuePreviewToken_userNotFound_throwsResourceNotFound() {
+        UUID serverId = UUID.randomUUID();
+        UUID channelId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        when(channelService.getChannel(channelId, requesterId))
+                .thenReturn(channel(channelId, serverId, ChannelType.VOICE));
+        when(userRepository.findById(requesterId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> mediaService.issuePreviewToken(channelId, requesterId))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void issuePreviewToken_grantsHiddenSubscribeOnlyTokenWithNoPublishSources() {
+        UUID serverId = UUID.randomUUID();
+        UUID channelId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        when(channelService.getChannel(channelId, requesterId))
+                .thenReturn(channel(channelId, serverId, ChannelType.VOICE));
+        when(userRepository.findById(requesterId)).thenReturn(Optional.of(user(requesterId, "Felipe R")));
+
+        VoiceTokenResponse response = mediaService.issuePreviewToken(channelId, requesterId);
+
+        String expectedRoomName = "voice-channel-" + channelId;
+        assertThat(response.roomName()).isEqualTo(expectedRoomName);
+        assertThat(response.url()).isEqualTo(PUBLIC_URL);
+
+        Claims claims = parse(response.token());
+        assertThat(claims.getSubject()).isEqualTo(requesterId.toString());
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> video = claims.get("video", Map.class);
+        assertThat(video.get("room")).isEqualTo(expectedRoomName);
+        assertThat(video.get("roomJoin")).isEqualTo(true);
+        assertThat(video.get("canPublish")).isEqualTo(false);
+        assertThat(video.get("canSubscribe")).isEqualTo(true);
+        assertThat(video.get("hidden")).isEqualTo(true);
+        assertThat(publishSources(claims)).isEmpty();
+    }
+
+    @Test
+    void issuePreviewToken_grantsAreIndependentOfTheRequestersActualVoicePermissions() {
+        // Even a member with full mic/camera/screen-share permissions gets a publish-nothing,
+        // hidden preview token — this endpoint is view-only by construction, not by omission.
+        UUID serverId = UUID.randomUUID();
+        UUID channelId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        when(channelService.getChannel(channelId, requesterId))
+                .thenReturn(channel(channelId, serverId, ChannelType.VOICE));
+        when(userRepository.findById(requesterId)).thenReturn(Optional.of(user(requesterId, "Felipe R")));
+
+        Claims claims = parse(mediaService.issuePreviewToken(channelId, requesterId).token());
+
+        assertThat(publishSources(claims)).isEmpty();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> video = claims.get("video", Map.class);
+        assertThat(video.get("canPublish")).isEqualTo(false);
+    }
+
     @Test
     void issueVoiceToken_listenerOnly_canJoinAndSubscribeButNotPublishAnything() {
         UUID channelId = UUID.randomUUID();

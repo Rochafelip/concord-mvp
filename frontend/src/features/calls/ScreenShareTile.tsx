@@ -1,4 +1,4 @@
-import { Maximize2, Mic, MicOff, Minimize2, MonitorUp, PhoneOff } from 'lucide-react';
+import { Maximize2, Mic, MicOff, Minimize2, MonitorUp, PhoneOff, X } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import { voiceClient } from '../../services/voiceClient';
 import { disconnectVoiceParticipant } from './api';
@@ -155,11 +155,20 @@ export function ScreenShareTile({ participant, className = '', onWatchClick, can
 
   const clickToRemove = !participant.isLocal && !isFullscreen && onWatchClick;
 
+  // The <audio> element for this share's sound lives in voiceClient, independent of whether this
+  // tile is mounted (see the class doc comment above) — unmounting it alone doesn't stop the
+  // sound. Stopping watching reads as "close this" to viewers, so it silences the audio too,
+  // rather than leaving it playing invisibly once the video is gone.
+  function stopWatching() {
+    if (participant.screenShareHasAudio) voiceClient.setScreenShareVolume(participant.identity, 0);
+    onWatchClick?.();
+  }
+
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (!clickToRemove) return;
     if (event.key !== 'Enter' && event.key !== ' ') return;
     event.preventDefault();
-    onWatchClick?.();
+    stopWatching();
   }
 
   return (
@@ -168,13 +177,14 @@ export function ScreenShareTile({ participant, className = '', onWatchClick, can
       role={clickToRemove ? 'button' : undefined}
       tabIndex={clickToRemove ? 0 : undefined}
       aria-label={clickToRemove ? `Stop watching ${participant.name}'s screen` : undefined}
-      onClick={clickToRemove ? onWatchClick : undefined}
+      title={clickToRemove ? `Stop watching ${participant.name}'s screen` : undefined}
+      onClick={clickToRemove ? stopWatching : undefined}
       onKeyDown={handleKeyDown}
       onContextMenu={handleContextMenu}
       className={
         isFullscreen
           ? 'fixed inset-0 z-50 flex items-center justify-center bg-gray-900'
-          : `group/participant-tile relative flex w-full items-center justify-center overflow-hidden rounded bg-gray-900 ${className}`
+          : `group/participant-tile relative flex w-full items-center justify-center overflow-hidden rounded bg-gray-900 ${clickToRemove ? 'cursor-pointer' : ''} ${className}`
       }
     >
       <video ref={videoRef} muted autoPlay playsInline className="h-full w-full object-contain" />
@@ -190,9 +200,9 @@ export function ScreenShareTile({ participant, className = '', onWatchClick, can
             type="button"
             aria-label="Enter fullscreen"
             onClick={handleEnterFullscreen}
-            className="absolute left-1 top-1 opacity-0 transition-opacity focus-visible:opacity-100 group-hover/camera-grid:opacity-100"
+            className="absolute left-1 top-1 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity hover:bg-black/80 focus-visible:opacity-100 group-hover/camera-grid:opacity-100"
           >
-            <Maximize2 size={16} className="text-white" aria-hidden="true" />
+            <Maximize2 size={16} aria-hidden="true" />
           </button>
           {!participant.isLocal && participant.screenShareHasAudio && participant.screenShareAudioEnabled && (
             <div
@@ -206,6 +216,19 @@ export function ScreenShareTile({ participant, className = '', onWatchClick, can
                 onVolumeChange={(volume) => voiceClient.setScreenShareVolume(participant.identity, volume)}
               />
             </div>
+          )}
+          {clickToRemove && (
+            // Stays faintly visible at rest (not just on hover) since touch devices have no
+            // hover state to reveal it — this is the only cue that the tile is tappable to stop
+            // watching. Decorative only: pointer-events-none so it never competes with the
+            // tile's own onClick above.
+            <span
+              aria-hidden="true"
+              data-testid="watch-affordance"
+              className="pointer-events-none absolute bottom-1 right-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/50 text-white opacity-40 transition-opacity group-hover/participant-tile:opacity-100"
+            >
+              <X size={14} aria-hidden="true" />
+            </span>
           )}
         </>
       )}

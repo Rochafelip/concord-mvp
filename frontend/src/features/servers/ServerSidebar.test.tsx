@@ -59,22 +59,10 @@ describe('ServerSidebar', () => {
     expect(await screen.findByRole('heading', { name: 'Create a server' })).toBeInTheDocument();
   });
 
-  it('opens the join server modal', async () => {
-    const user = userEvent.setup();
+  it('has no manual join-by-code entry point — joining only happens via invite links', async () => {
     renderSidebar();
+    await screen.findByRole('link', { name: 'Alpha' });
 
-    await user.click(screen.getByRole('button', { name: 'Join server' }));
-
-    expect(await screen.findByRole('heading', { name: 'Join a server' })).toBeInTheDocument();
-  });
-
-  it('places the compact join-server invite button above the server list', async () => {
-    renderSidebar();
-
-    const joinButton = screen.getByRole('button', { name: 'Join server' });
-    const firstServer = await screen.findByRole('link', { name: 'Alpha' });
-
-    expect(joinButton).toHaveAttribute('title', 'Join a server');
-    expect(joinButton.compareDocumentPosition(firstServer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Join server' })).not.toBeInTheDocument();
   });
 });

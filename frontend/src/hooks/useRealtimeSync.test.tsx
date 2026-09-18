@@ -11,6 +11,7 @@ import { useVoiceStore } from '../stores/voiceStore';
 import { voiceClient } from '../services/voiceClient';
 import { getWsTicket } from '../features/auth/api';
 import { getVoiceToken } from '../features/calls/api';
+import { notify, playChime } from '../services/desktopNotifications';
 import { useRealtimeSync } from './useRealtimeSync';
 
 const { handlers, mockConnect, mockDisconnect } = vi.hoisted(() => ({
@@ -56,10 +57,23 @@ vi.mock('../features/auth/api', () => ({
   getWsTicket: vi.fn(() => Promise.resolve({ ticket: 'ticket-abc' })),
 }));
 
+vi.mock('../services/desktopNotifications', () => ({
+  notify: vi.fn(),
+  playChime: vi.fn(),
+  requestPermission: vi.fn(),
+}));
+
 function emit(type: string, payload: unknown) {
   act(() => {
     handlers.get(type)?.forEach((handler) => handler(payload));
   });
+}
+
+// Simulates the tab being backgrounded (Discord-style desktop notification trigger): both
+// document.hidden and document.hasFocus() flip together, the way a real browser would.
+function setBackgrounded(hidden: boolean) {
+  Object.defineProperty(document, 'hidden', { value: hidden, configurable: true });
+  vi.spyOn(document, 'hasFocus').mockReturnValue(!hidden);
 }
 
 function TestHarness() {
@@ -79,6 +93,8 @@ function renderHarness(queryClient: QueryClient, initialPath: string) {
               path="servers/:serverId/channels/:channelId"
               element={<div data-testid="channel-view">channel view</div>}
             />
+            <Route path="friends" element={<div data-testid="friends-view">friends view</div>} />
+            <Route path="dm/:friendUserId" element={<div data-testid="dm-view">dm view</div>} />
           </Route>
         </Routes>
       </MemoryRouter>
@@ -96,12 +112,20 @@ describe('useRealtimeSync', () => {
     vi.mocked(voiceClient.beginConnect).mockClear();
     vi.mocked(getVoiceToken).mockClear();
     vi.mocked(getWsTicket).mockClear();
+    vi.mocked(notify).mockClear();
+    vi.mocked(playChime).mockClear();
+    setBackgrounded(false);
     useVoiceStore.setState({ status: 'disconnected', channelId: null, participants: [], error: null, isDeafened: false });
     useAuthStore.setState({
       isAuthenticated: true,
       user: { id: 'u1', username: 'a', displayName: 'A', email: 'a@x.com', avatarUrl: null },
     });
-    useNotificationStore.setState({ message: null, unreadServerIds: [] });
+    useNotificationStore.setState({
+      message: null,
+      unreadServerIds: [],
+      unreadFriendIds: [],
+      preferences: { messageNotifications: true, onboardingNotifications: true },
+    });
   });
 
   afterEach(() => {
@@ -186,6 +210,118 @@ describe('useRealtimeSync', () => {
 
     expect(useNotificationStore.getState().unreadServerIds).toEqual(['s1']);
     expect(useNotificationStore.getState().message).toBeNull();
+  });
+
+  it('MESSAGE_CREATE shows a desktop notification and plays a chime when the window is backgrounded', () => {
+    const queryClient = newQueryClient();
+    queryClient.setQueryData<Channel[]>(['servers', 's1', 'channels'], [{
+      id: 'c1',
+      serverId: 's1',
+      name: 'geral',
+      type: 'TEXT',
+      createdAt: '2026-01-01',
+      updatedAt: '2026-01-01',
+    }]);
+    queryClient.setQueryData<Server[]>(['servers'], [
+      { id: 's1', name: 'Meu Servidor', ownerId: 'u1', createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+    ]);
+    setBackgrounded(true);
+    renderHarness(queryClient, '/app');
+
+    emit('MESSAGE_CREATE', {
+      id: 'm2',
+      channelId: 'c1',
+      content: 'Olá!',
+      createdAt: '2026-01-01T00:00:01Z',
+      author: { id: 'u2', username: 'b', displayName: 'Bruna', avatarUrl: null },
+    });
+
+    expect(playChime).toHaveBeenCalled();
+    expect(notify).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Bruna', body: expect.stringContaining('Olá!') }),
+    );
+    expect(vi.mocked(notify).mock.calls[0][0].body).toContain('geral');
+    expect(vi.mocked(notify).mock.calls[0][0].body).toContain('Meu Servidor');
+  });
+
+  it('MESSAGE_CREATE does not show a desktop notification when the window has focus', () => {
+    const queryClient = newQueryClient();
+    queryClient.setQueryData<Channel[]>(['servers', 's1', 'channels'], [{
+      id: 'c1',
+      serverId: 's1',
+      name: 'geral',
+      type: 'TEXT',
+      createdAt: '2026-01-01',
+      updatedAt: '2026-01-01',
+    }]);
+    setBackgrounded(false);
+    renderHarness(queryClient, '/app');
+
+    emit('MESSAGE_CREATE', {
+      id: 'm2',
+      channelId: 'c1',
+      content: 'Olá!',
+      createdAt: '2026-01-01T00:00:01Z',
+      author: { id: 'u2', username: 'b', displayName: 'Bruna', avatarUrl: null },
+    });
+
+    expect(notify).not.toHaveBeenCalled();
+    expect(playChime).not.toHaveBeenCalled();
+  });
+
+  it('MESSAGE_CREATE does not show a desktop notification when message notifications are disabled', () => {
+    const queryClient = newQueryClient();
+    queryClient.setQueryData<Channel[]>(['servers', 's1', 'channels'], [{
+      id: 'c1',
+      serverId: 's1',
+      name: 'geral',
+      type: 'TEXT',
+      createdAt: '2026-01-01',
+      updatedAt: '2026-01-01',
+    }]);
+    useNotificationStore.setState({
+      preferences: { ...useNotificationStore.getState().preferences, messageNotifications: false },
+    });
+    setBackgrounded(true);
+    renderHarness(queryClient, '/app');
+
+    emit('MESSAGE_CREATE', {
+      id: 'm2',
+      channelId: 'c1',
+      content: 'Olá!',
+      createdAt: '2026-01-01T00:00:01Z',
+      author: { id: 'u2', username: 'b', displayName: 'Bruna', avatarUrl: null },
+    });
+
+    expect(notify).not.toHaveBeenCalled();
+    expect(playChime).not.toHaveBeenCalled();
+  });
+
+  it('MESSAGE_CREATE navigates to the message channel when the desktop notification is clicked', () => {
+    const queryClient = newQueryClient();
+    queryClient.setQueryData<Channel[]>(['servers', 's1', 'channels'], [{
+      id: 'c1',
+      serverId: 's1',
+      name: 'geral',
+      type: 'TEXT',
+      createdAt: '2026-01-01',
+      updatedAt: '2026-01-01',
+    }]);
+    setBackgrounded(true);
+    renderHarness(queryClient, '/app');
+
+    emit('MESSAGE_CREATE', {
+      id: 'm2',
+      channelId: 'c1',
+      content: 'Olá!',
+      createdAt: '2026-01-01T00:00:01Z',
+      author: { id: 'u2', username: 'b', displayName: 'Bruna', avatarUrl: null },
+    });
+
+    const onClick = vi.mocked(notify).mock.calls[0][0].onClick;
+    act(() => onClick());
+
+    expect(screen.getByTestId('channel-view')).toBeInTheDocument();
   });
 
   it('MESSAGE_CREATE identifies onboarding notifications and does not notify the sender', () => {
@@ -567,5 +703,95 @@ describe('useRealtimeSync', () => {
         deafened: false,
       },
     ]);
+  });
+
+  it('DM_MESSAGE_CREATE appends to the cached conversation when a cache entry already exists', () => {
+    const queryClient = newQueryClient();
+    queryClient.setQueryData(['dm', 'u2', 'messages'], {
+      pages: [[{ id: 'm1', author: { id: 'u2' }, recipientId: 'u1', content: 'hi', createdAt: '2026-01-01T00:00:00Z' }]],
+      pageParams: [undefined],
+    });
+    renderHarness(queryClient, '/app');
+
+    const incoming = {
+      id: 'm2',
+      author: { id: 'u2', username: 'b', displayName: 'B', avatarUrl: null },
+      recipientId: 'u1',
+      content: 'hello',
+      createdAt: '2026-01-01T00:00:01Z',
+    };
+    emit('DM_MESSAGE_CREATE', incoming);
+
+    const cached = queryClient.getQueryData<{ pages: unknown[][] }>(['dm', 'u2', 'messages']);
+    expect(cached?.pages[0]).toEqual([
+      { id: 'm1', author: { id: 'u2' }, recipientId: 'u1', content: 'hi', createdAt: '2026-01-01T00:00:00Z' },
+      incoming,
+    ]);
+  });
+
+  it('DM_MESSAGE_CREATE from someone else marks that friend unread when not viewing that conversation', () => {
+    const queryClient = newQueryClient();
+    renderHarness(queryClient, '/app');
+
+    emit('DM_MESSAGE_CREATE', {
+      id: 'm1',
+      author: { id: 'u2', username: 'b', displayName: 'B', avatarUrl: null },
+      recipientId: 'u1',
+      content: 'oi',
+      createdAt: '2026-01-01T00:00:00Z',
+    });
+
+    expect(useNotificationStore.getState().unreadFriendIds).toEqual(['u2']);
+  });
+
+  it('DM_MESSAGE_CREATE from the conversation currently open does not mark it unread', () => {
+    const queryClient = newQueryClient();
+    renderHarness(queryClient, '/app/dm/u2');
+
+    emit('DM_MESSAGE_CREATE', {
+      id: 'm1',
+      author: { id: 'u2', username: 'b', displayName: 'B', avatarUrl: null },
+      recipientId: 'u1',
+      content: 'oi',
+      createdAt: '2026-01-01T00:00:00Z',
+    });
+
+    expect(useNotificationStore.getState().unreadFriendIds).toEqual([]);
+  });
+
+  it('DM_MESSAGE_CREATE echoed back to its own sender does not mark anything unread', () => {
+    const queryClient = newQueryClient();
+    renderHarness(queryClient, '/app');
+
+    emit('DM_MESSAGE_CREATE', {
+      id: 'm1',
+      author: { id: 'u1', username: 'a', displayName: 'A', avatarUrl: null },
+      recipientId: 'u2',
+      content: 'oi',
+      createdAt: '2026-01-01T00:00:00Z',
+    });
+
+    expect(useNotificationStore.getState().unreadFriendIds).toEqual([]);
+  });
+
+  it('FRIEND_UPDATE invalidates the friends queries and marks the other user unread', async () => {
+    const queryClient = newQueryClient();
+    queryClient.setQueryData(['friends'], []);
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    renderHarness(queryClient, '/app');
+
+    emit('FRIEND_UPDATE', { userId: 'u2', otherUserId: 'u1' });
+
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['friends'] });
+    expect(useNotificationStore.getState().unreadFriendIds).toEqual(['u2']);
+  });
+
+  it('FRIEND_UPDATE does not mark anything unread while already viewing the friends page', () => {
+    const queryClient = newQueryClient();
+    renderHarness(queryClient, '/app/friends');
+
+    emit('FRIEND_UPDATE', { userId: 'u2', otherUserId: 'u1' });
+
+    expect(useNotificationStore.getState().unreadFriendIds).toEqual([]);
   });
 });

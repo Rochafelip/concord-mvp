@@ -254,6 +254,44 @@ describe('ParticipantTile', () => {
       expect(onWatchClick).toHaveBeenCalledTimes(1);
     });
 
+    it('shows a pointer cursor and a tooltip when the whole tile is clickable', () => {
+      render(
+        <ParticipantTile
+          participant={participant({ name: 'Felipe', isLocal: false, identity: 'bob' })}
+          onWatchClick={vi.fn()}
+        />,
+      );
+
+      const tile = screen.getByRole('button', { name: "Focus on Felipe's camera" });
+      expect(tile).toHaveClass('cursor-pointer');
+      expect(tile).toHaveAttribute('title', "Focus on Felipe's camera");
+    });
+
+    it('does not show the pointer cursor when the tile is not clickable', () => {
+      const { container } = render(<ParticipantTile participant={participant({ name: 'Felipe' })} />);
+
+      expect(container.firstChild).not.toHaveClass('cursor-pointer');
+    });
+
+    it('shows an always-visible affordance badge, not just a hover cursor, since touch has no hover', () => {
+      render(
+        <ParticipantTile
+          participant={participant({ name: 'Felipe', isLocal: false, identity: 'bob' })}
+          onWatchClick={vi.fn()}
+        />,
+      );
+
+      const badge = screen.getByTestId('watch-affordance');
+      expect(badge).not.toHaveClass('opacity-0');
+      expect(badge).toHaveClass('pointer-events-none');
+    });
+
+    it('does not show the affordance badge when the tile is not clickable', () => {
+      render(<ParticipantTile participant={participant({ name: 'Felipe' })} />);
+
+      expect(screen.queryByTestId('watch-affordance')).not.toBeInTheDocument();
+    });
+
     it('activates on Enter and Space from the keyboard', async () => {
       const user = userEvent.setup();
       const onWatchClick = vi.fn();

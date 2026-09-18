@@ -22,5 +22,7 @@ public enum WsEventType {
     VOICE_KICK,
     USER_PROFILE_UPDATE,
     PERMISSIONS_UPDATE,
+    FRIEND_UPDATE,
+    DM_MESSAGE_CREATE,
     ERROR
 }

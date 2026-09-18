@@ -3,6 +3,8 @@ package com.concordmvp.realtime;
 import com.concordmvp.common.exception.BadRequestException;
 import com.concordmvp.common.exception.ForbiddenException;
 import com.concordmvp.common.exception.ResourceNotFoundException;
+import com.concordmvp.dm.DmMessageService;
+import com.concordmvp.dm.dto.SendDmMessageRequest;
 import com.concordmvp.media.VoicePresenceService;
 import com.concordmvp.media.dto.VoicePresenceUpdateRequest;
 import com.concordmvp.messages.MessageService;
@@ -43,13 +45,16 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     private final WebSocketSessionRegistry sessionRegistry;
     private final ObjectMapper objectMapper;
     private final MessageService messageService;
+    private final DmMessageService dmMessageService;
     private final VoicePresenceService voicePresenceService;
 
     public ChatWebSocketHandler(WebSocketSessionRegistry sessionRegistry, ObjectMapper objectMapper,
-                                 MessageService messageService, VoicePresenceService voicePresenceService) {
+                                 MessageService messageService, DmMessageService dmMessageService,
+                                 VoicePresenceService voicePresenceService) {
         this.sessionRegistry = sessionRegistry;
         this.objectMapper = objectMapper;
         this.messageService = messageService;
+        this.dmMessageService = dmMessageService;
         this.voicePresenceService = voicePresenceService;
     }
 
@@ -77,6 +82,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
             switch (type == null ? "" : type) {
                 case "MESSAGE_CREATE" -> handleMessageCreate(session, root.get("payload"));
+                case "DM_MESSAGE_CREATE" -> handleDmMessageCreate(session, root.get("payload"));
                 case "VOICE_PRESENCE_UPDATE" -> handleVoicePresenceUpdate(session, root.get("payload"));
                 case "VOICE_PRESENCE_LEAVE" -> voicePresenceService.removePresence(userId(session));
                 default -> sendError(session, "Unsupported message type: " + type);
@@ -98,6 +104,21 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             sendError(session, e.getMessage());
         } catch (Exception e) {
             log.warn("Failed to handle MESSAGE_CREATE from session {}", session.getId(), e);
+            sendError(session, "Failed to send message");
+        }
+    }
+
+    private void handleDmMessageCreate(WebSocketSession session, JsonNode payloadNode) {
+        try {
+            SendDmMessageRequest request = objectMapper.treeToValue(payloadNode, SendDmMessageRequest.class);
+            UUID userId = userId(session);
+            dmMessageService.sendMessage(userId, request.recipientId(), request.content());
+            // No ack: DmMessageService.sendMessage already broadcasts DM_MESSAGE_CREATE to both
+            // participants, including the sender.
+        } catch (ResourceNotFoundException | ForbiddenException | BadRequestException e) {
+            sendError(session, e.getMessage());
+        } catch (Exception e) {
+            log.warn("Failed to handle DM_MESSAGE_CREATE from session {}", session.getId(), e);
             sendError(session, "Failed to send message");
         }
     }
