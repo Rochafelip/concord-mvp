@@ -82,20 +82,8 @@ public class MediaService {
     }
 
     public VoiceTokenResponse issueVoiceToken(UUID channelId, UUID requesterId) {
-        Channel channel = channelService.getChannel(channelId, requesterId);
-
-        if (channel.getType() != ChannelType.VOICE) {
-            throw new BadRequestException("Channel is not a voice channel: " + channelId);
-        }
-
-        permissionService.requireChannel(channel, requesterId, Permission.CONNECT);
-
-        User requester = userRepository.findById(requesterId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + requesterId));
-        if (!requester.isEmailVerified()) {
-            throw new com.concordmvp.common.exception.ForbiddenException(
-                    "Verifique seu e-mail antes de entrar no chat de voz.");
-        }
+        Channel channel = validateVoiceChannel(channelId, requesterId);
+        User requester = requireVerifiedUser(requesterId);
 
         String roomName = "voice-channel-" + channel.getId();
         // Membership was already enforced by getChannel above; this lookup is for the per-server
@@ -107,14 +95,54 @@ public class MediaService {
         String displayName = membership.getDisplayName() == null
                 ? requester.getDisplayName() : membership.getDisplayName();
         long permissions = permissionService.channelPermissions(channel, requesterId);
-        String token = buildLiveKitToken(requester, displayName, roomName, permissions);
+        String token = buildLiveKitToken(requester, displayName, roomName, publishSourcesFor(permissions), false);
 
         return new VoiceTokenResponse(token, livekitPublicUrl, roomName);
     }
 
-    private String buildLiveKitToken(User requester, String displayName, String roomName, long permissions) {
+    /**
+     * Issues a token for the sidebar's screen-share hover preview: joins the same LiveKit room as
+     * the real call, but read-only and {@code hidden} — LiveKit excludes a hidden
+     * participant from every other participant's roster, so a hovering viewer never appears in
+     * anyone's participant list, never triggers a join sound, and is never counted as "in the
+     * call." Publish sources are always empty regardless of the requester's actual voice
+     * permissions: this endpoint is view-only by construction, not by omission of a grant that
+     * happens to be absent.
+     */
+    public VoiceTokenResponse issuePreviewToken(UUID channelId, UUID requesterId) {
+        Channel channel = validateVoiceChannel(channelId, requesterId);
+        User requester = requireVerifiedUser(requesterId);
+
+        String roomName = "voice-channel-" + channel.getId();
+        String token = buildLiveKitToken(requester, requester.getDisplayName(), roomName, List.of(), true);
+
+        return new VoiceTokenResponse(token, livekitPublicUrl, roomName);
+    }
+
+    private Channel validateVoiceChannel(UUID channelId, UUID requesterId) {
+        Channel channel = channelService.getChannel(channelId, requesterId);
+
+        if (channel.getType() != ChannelType.VOICE) {
+            throw new BadRequestException("Channel is not a voice channel: " + channelId);
+        }
+
+        permissionService.requireChannel(channel, requesterId, Permission.CONNECT);
+        return channel;
+    }
+
+    private User requireVerifiedUser(UUID requesterId) {
+        User requester = userRepository.findById(requesterId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + requesterId));
+        if (!requester.isEmailVerified()) {
+            throw new com.concordmvp.common.exception.ForbiddenException(
+                    "Verifique seu e-mail antes de entrar no chat de voz.");
+        }
+        return requester;
+    }
+
+    private String buildLiveKitToken(User requester, String displayName, String roomName,
+                                      List<String> publishSources, boolean hidden) {
         Instant now = Instant.now();
-        List<String> publishSources = publishSourcesFor(permissions);
 
         // LinkedHashMap rather than Map.of: the source order must be stable for the claim to be
         // reproducible, and Map.of neither preserves order nor takes a variable number of pairs.
@@ -124,6 +152,7 @@ public class MediaService {
         videoGrant.put("canPublish", !publishSources.isEmpty());
         videoGrant.put("canPublishSources", publishSources);
         videoGrant.put("canSubscribe", true);
+        videoGrant.put("hidden", hidden);
 
         return Jwts.builder()
                 .issuer(livekitApiKey)
