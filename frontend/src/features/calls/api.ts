@@ -6,6 +6,11 @@ export function getVoiceToken(channelId: string): Promise<VoiceTokenResponse> {
   return apiClient.post<VoiceTokenResponse>(`channels/${channelId}/voice/token`);
 }
 
+/** Read-only, hidden-participant token for the sidebar's screen-share hover preview. */
+export function getVoicePreviewToken(channelId: string): Promise<VoiceTokenResponse> {
+  return apiClient.post<VoiceTokenResponse>(`channels/${channelId}/voice/preview-token`);
+}
+
 /**
  * Flattens the wire shape's nested `user` object — shared by the REST snapshot below and
  * useRealtimeSync's VOICE_PRESENCE_UPDATE handler, so there's exactly one place that does this

@@ -23,6 +23,10 @@ function sameTarget(a: FocusTarget, b: FocusTarget): boolean {
  * (an explicit empty array) means "the user cleared every watch" — these two must stay
  * distinguishable, or removing the last auto-watched share would instantly reappear next render
  * since there'd be no way to tell "never touched" from "cleared to nothing."
+ *
+ * clearManual (the focused view's "show everyone" button) also lands on the explicit-empty state
+ * rather than null: an active screen share auto-focuses itself regardless of manual picks, so
+ * resetting to null would immediately re-select it and the button would look like it did nothing.
  */
 export function useWatchTargets(participants: VoiceParticipant[]): UseWatchTargetsResult {
   const [manualWatch, setManualWatch] = useState<FocusTarget[] | null>(null);
@@ -61,6 +65,6 @@ export function useWatchTargets(participants: VoiceParticipant[]): UseWatchTarge
     isManual,
     addWatch,
     removeWatch,
-    clearManual: () => setManualWatch(null),
+    clearManual: () => setManualWatch([]),
   };
 }

@@ -5,10 +5,11 @@ import type { ServerMember } from '../../types/server';
 import * as api from './api';
 import { hasPermission, type Permission } from '../../types/permission';
 
-export function useServers() {
+export function useServers(enabled = true) {
   return useQuery({
     queryKey: ['servers'],
     queryFn: api.listServers,
+    enabled,
   });
 }
 
@@ -79,6 +80,16 @@ export function useInvite(serverId: string | undefined) {
     queryKey: ['servers', serverId, 'invite'],
     queryFn: () => api.getInvite(serverId!),
     enabled: serverId != null,
+  });
+}
+
+/** Public preview for the invite landing page — no auth required, unlike {@link useInvite}. */
+export function useInvitePreview(code: string | undefined) {
+  return useQuery({
+    queryKey: ['invites', code],
+    queryFn: () => api.getInvitePreview(code!),
+    enabled: code != null,
+    retry: false,
   });
 }
 

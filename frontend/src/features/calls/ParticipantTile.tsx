@@ -1,4 +1,5 @@
 import { ConnectionQuality } from 'livekit-client';
+import { Focus } from 'lucide-react';
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import { Avatar } from '../../components/Avatar';
 import { Spinner } from '../../components/Spinner';
@@ -126,10 +127,11 @@ export function ParticipantTile({
     <div
       className={`group/participant-tile relative flex min-h-0 min-w-0 items-center justify-center overflow-hidden rounded ${className} ${
         showVideo ? 'bg-gray-800' : 'bg-gray-800'
-      } ${participant.speaking ? 'ring-2 ring-brand/50' : ''}`}
+      } ${participant.speaking ? 'ring-2 ring-brand/50' : ''} ${onWatchClick ? 'cursor-pointer' : ''}`}
       role={onWatchClick ? 'button' : undefined}
       tabIndex={onWatchClick ? 0 : undefined}
       aria-label={onWatchClick ? `Focus on ${participant.name}'s camera` : undefined}
+      title={onWatchClick ? `Focus on ${participant.name}'s camera` : undefined}
       onClick={onWatchClick}
       onKeyDown={handleKeyDown}
       onContextMenu={handleContextMenu}
@@ -174,6 +176,18 @@ export function ParticipantTile({
             onVolumeChange={(volume) => voiceClient.setParticipantVolume(participant.identity, volume)}
           />
         </div>
+      )}
+      {onWatchClick && (
+        // Stays faintly visible at rest (not just on hover) since touch devices have no hover
+        // state to reveal it — this is the only cue that the tile is tappable. Decorative only:
+        // pointer-events-none so it never competes with the tile's own onClick above.
+        <span
+          aria-hidden="true"
+          data-testid="watch-affordance"
+          className="pointer-events-none absolute bottom-1 right-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/50 text-white opacity-40 transition-opacity group-hover/participant-tile:opacity-100"
+        >
+          <Focus size={14} aria-hidden="true" />
+        </span>
       )}
       {contextMenuOpen && canDisconnect && !participant.isLocal && channelId && (
         <div ref={contextMenuRef} className="absolute right-2 top-2 z-20 min-w-44 rounded border border-border bg-surface p-1 shadow-lg" onClick={stopPropagation}>

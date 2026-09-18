@@ -10,6 +10,7 @@ import { ResetPasswordPage } from '../features/auth/ResetPasswordPage';
 import { VerifyEmailPage } from '../features/auth/VerifyEmailPage';
 import { useAuthStore } from '../features/auth/authStore';
 import { HomePage } from '../features/home/HomePage';
+import { InvitePreviewPage } from '../features/servers/InvitePreviewPage';
 import { SettingsPage } from '../features/settings/SettingsPage';
 import { ProtectedRoute } from './ProtectedRoute';
 
@@ -27,6 +28,7 @@ export function AppRouter() {
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/verify-email" element={<VerifyEmailPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/invite/:code" element={<InvitePreviewPage />} />
 
       <Route
         path="/app"
