@@ -9,6 +9,8 @@ import { RegisterPage } from '../features/auth/RegisterPage';
 import { ResetPasswordPage } from '../features/auth/ResetPasswordPage';
 import { VerifyEmailPage } from '../features/auth/VerifyEmailPage';
 import { useAuthStore } from '../features/auth/authStore';
+import { DmConversationView } from '../features/dm/DmConversationView';
+import { FriendsPage } from '../features/friends/FriendsPage';
 import { HomePage } from '../features/home/HomePage';
 import { InvitePreviewPage } from '../features/servers/InvitePreviewPage';
 import { SettingsPage } from '../features/settings/SettingsPage';
@@ -40,6 +42,8 @@ export function AppRouter() {
       >
         <Route index element={<HomePage />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route path="friends" element={<FriendsPage />} />
+        <Route path="dm/:friendUserId" element={<DmConversationView />} />
         <Route path="servers/:serverId" element={<ServerLayout />}>
           <Route index element={<ServerIndexRoute />} />
           <Route path="channels/:channelId" element={<ChannelRoute />} />

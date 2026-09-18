@@ -46,4 +46,9 @@ public class WebSocketSessionRegistry {
         Set<WebSocketSession> sessions = sessionsByUserId.get(userId);
         return sessions == null ? Collections.emptySet() : sessions;
     }
+
+    /** Whether the user has at least one live WebSocket session right now. */
+    public boolean isOnline(UUID userId) {
+        return !getSessions(userId).isEmpty();
+    }
 }

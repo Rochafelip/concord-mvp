@@ -23,6 +23,8 @@ export type WsEventType =
   | 'VOICE_KICK'
   | 'USER_PROFILE_UPDATE'
   | 'PERMISSIONS_UPDATE'
+  | 'FRIEND_UPDATE'
+  | 'DM_MESSAGE_CREATE'
   | 'ERROR';
 
 /** Generic envelope for a WebSocket frame in both directions: {"type": "...", "payload": {...}}. */
@@ -107,3 +109,13 @@ export interface ChannelReadPayload {
 }
 
 export type VoiceKickPayload = string;
+
+/**
+ * Generic "something about this friendship changed, refetch" signal — same shape as
+ * PermissionsUpdatePayload's reasoning. Covers a request being created, accepted, cancelled,
+ * declined, or a friendship being removed.
+ */
+export interface FriendUpdatePayload {
+  userId: string;
+  otherUserId: string;
+}

@@ -1,6 +1,7 @@
 package com.concordmvp.realtime;
 
 import com.concordmvp.common.exception.ForbiddenException;
+import com.concordmvp.dm.DmMessageService;
 import com.concordmvp.media.VoicePresenceService;
 import com.concordmvp.messages.MessageService;
 import com.concordmvp.messages.dto.AttachmentRequest;
@@ -44,6 +45,9 @@ class ChatWebSocketHandlerTest {
     private MessageService messageService;
 
     @Mock
+    private DmMessageService dmMessageService;
+
+    @Mock
     private VoicePresenceService voicePresenceService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -52,7 +56,8 @@ class ChatWebSocketHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new ChatWebSocketHandler(sessionRegistry, objectMapper, messageService, voicePresenceService);
+        handler = new ChatWebSocketHandler(sessionRegistry, objectMapper, messageService, dmMessageService,
+                voicePresenceService);
     }
 
     @Test
@@ -185,6 +190,38 @@ class ChatWebSocketHandlerTest {
         JsonNode payload = objectMapper.valueToTree(event.payload());
         assertThat(payload.get("message").asText()).isEqualTo("Not a member of this server");
         verifyNoMoreInteractions(sessionRegistry);
+    }
+
+    @Test
+    void handleTextMessage_dmMessageCreate_valid_callsDmMessageService_andSendsNothingToSender() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID recipientId = UUID.randomUUID();
+        WebSocketSession session = sessionWithUserId(userId);
+
+        handler.handleMessage(session, new TextMessage(
+                "{\"type\":\"DM_MESSAGE_CREATE\",\"payload\":{\"recipientId\":\"" + recipientId
+                        + "\",\"content\":\"hi\"}}"));
+
+        verify(dmMessageService).sendMessage(eq(userId), eq(recipientId), eq("hi"));
+        verify(session, never()).sendMessage(any());
+    }
+
+    @Test
+    void handleTextMessage_dmMessageCreate_serviceThrows_sendsErrorFrameToSendingSessionOnly() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID recipientId = UUID.randomUUID();
+        WebSocketSession session = sessionWithUserId(userId);
+        when(dmMessageService.sendMessage(eq(userId), eq(recipientId), eq("hi")))
+                .thenThrow(new ForbiddenException("Você só pode enviar mensagens para amigos"));
+
+        handler.handleMessage(session, new TextMessage(
+                "{\"type\":\"DM_MESSAGE_CREATE\",\"payload\":{\"recipientId\":\"" + recipientId
+                        + "\",\"content\":\"hi\"}}"));
+
+        WsEvent event = capturedEvent(session);
+        assertThat(event.type()).isEqualTo(WsEventType.ERROR);
+        JsonNode payload = objectMapper.valueToTree(event.payload());
+        assertThat(payload.get("message").asText()).isEqualTo("Você só pode enviar mensagens para amigos");
     }
 
     @Test
