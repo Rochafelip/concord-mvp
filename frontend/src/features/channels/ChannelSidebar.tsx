@@ -1,5 +1,6 @@
+import { useAutoAnimate } from '@formkit/auto-animate/react';
 import { HeadphoneOff, MicOff, MonitorUp, Plus, Settings, Trash2, UserPlus, Video, Volume2 } from 'lucide-react';
-import { useEffect, useRef, useState, type MouseEvent } from 'react';
+import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Avatar } from '../../components/Avatar';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
@@ -24,6 +25,16 @@ function channelLinkClassName(isSelected: boolean) {
   return `flex items-center gap-1.5 rounded px-2 py-1 text-body ${
     isSelected ? 'bg-brand/10 text-brand' : 'text-muted hover:bg-border/40'
   }`;
+}
+
+/** One instance per voice channel row, so each gets its own auto-animate ref. */
+function VoiceParticipantList({ children }: { children: ReactNode }) {
+  const [listRef] = useAutoAnimate();
+  return (
+    <ul ref={listRef} className="ml-5 mt-0.5 space-y-0.5">
+      {children}
+    </ul>
+  );
 }
 
 /**
@@ -239,7 +250,7 @@ export function ChannelSidebar({ onNavigate }: ChannelSidebarProps) {
                     )}
                   </div>
                   {participants.length > 0 && (
-                    <ul className="ml-5 mt-0.5 space-y-0.5">
+                    <VoiceParticipantList>
                       {participants.map((participant) => {
                         // Only offer a hover preview when there's actually something to preview,
                         // it's not the viewer's own share, and the viewer isn't already connected
@@ -302,7 +313,7 @@ export function ChannelSidebar({ onNavigate }: ChannelSidebarProps) {
                         </li>
                         );
                       })}
-                    </ul>
+                    </VoiceParticipantList>
                   )}
                 </li>
               );

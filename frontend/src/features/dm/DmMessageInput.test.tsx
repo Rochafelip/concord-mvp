@@ -54,4 +54,22 @@ describe('DmMessageInput', () => {
     expect(screen.getByRole('button', { name: /enviar/i })).toBeDisabled();
     expect(screen.getByText(/sem conexão/i)).toBeInTheDocument();
   });
+
+  it(
+    'appends a picked emoji to the message text',
+    async () => {
+      const user = userEvent.setup();
+      render(<DmMessageInput recipientId="u2" />);
+
+      const input = screen.getByLabelText(/mensagem/i);
+      await user.type(input, 'oi');
+      await user.click(screen.getByRole('button', { name: 'Add emoji' }));
+      await user.click(await screen.findByRole('button', { name: 'grinning face' }));
+
+      expect(input).toHaveValue('oi😀');
+    },
+    // See the same timeout note in EmojiPickerButton.test.tsx — rendering the full emoji grid is
+    // slow under a contended full-suite run.
+    20000,
+  );
 });
