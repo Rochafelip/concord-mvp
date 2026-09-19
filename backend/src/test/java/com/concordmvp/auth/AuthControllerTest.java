@@ -5,6 +5,7 @@ import com.concordmvp.auth.dto.LoginRequest;
 import com.concordmvp.auth.dto.RegisterRequest;
 import com.concordmvp.auth.verification.EmailVerificationService;
 import com.concordmvp.auth.reset.PasswordResetService;
+import com.concordmvp.common.exception.UnauthorizedException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -15,11 +16,15 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 
 @ExtendWith(MockitoExtension.class)
@@ -36,6 +41,9 @@ class AuthControllerTest {
     @Mock
     private PasswordResetService passwordResetService;
 
+    @Mock
+    private JwtDenylist jwtDenylist;
+
     private AuthController authController;
 
     @BeforeEach
@@ -45,7 +53,8 @@ class AuthControllerTest {
                 jwtService,
                 new SessionCookieFactory(jwtService),
                 emailVerificationService,
-                passwordResetService
+                passwordResetService,
+                jwtDenylist
         );
     }
 
@@ -93,12 +102,39 @@ class AuthControllerTest {
     }
 
     @Test
-    void logout_clearsSessionCookie() {
-        ResponseEntity<Void> result = authController.logout();
+    void logout_withNoCookie_clearsSessionCookie_andDoesNotTouchTheDenylist() {
+        ResponseEntity<Void> result = authController.logout(null);
 
         assertThat(result.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
         String cookie = result.getHeaders().getFirst(HttpHeaders.SET_COOKIE);
         assertThat(cookie).contains("concord_session=");
         assertThat(cookie).contains("Max-Age=0");
+        verifyNoInteractions(jwtDenylist);
+    }
+
+    @Test
+    void logout_withAValidCookie_revokesItsJti_andClearsTheCookie() {
+        UUID jti = UUID.randomUUID();
+        Instant expiresAt = Instant.now().plus(Duration.ofDays(10));
+        when(jwtService.parseJti("current-token")).thenReturn(jti);
+        when(jwtService.parseExpiration("current-token")).thenReturn(expiresAt);
+
+        ResponseEntity<Void> result = authController.logout("current-token");
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        verify(jwtDenylist).revoke(jti, expiresAt);
+        String cookie = result.getHeaders().getFirst(HttpHeaders.SET_COOKIE);
+        assertThat(cookie).contains("Max-Age=0");
+    }
+
+    @Test
+    void logout_withAnAlreadyInvalidCookie_stillClearsTheCookie_withoutBlowingUp() {
+        when(jwtService.parseJti("garbage"))
+                .thenThrow(new UnauthorizedException("Sessão inválida ou expirada"));
+
+        ResponseEntity<Void> result = authController.logout("garbage");
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        verify(jwtDenylist, never()).revoke(any(), any());
     }
 }

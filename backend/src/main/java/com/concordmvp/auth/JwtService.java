@@ -39,6 +39,7 @@ public class JwtService {
         Instant expiry = now.plus(tokenTtl());
         return Jwts.builder()
                 .subject(userId.toString())
+                .id(UUID.randomUUID().toString())
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(expiry))
                 .signWith(signingKey)
@@ -48,6 +49,27 @@ public class JwtService {
     public UUID parseUserId(String token) {
         try {
             return UUID.fromString(parseClaims(token).getSubject());
+        } catch (JwtException | IllegalArgumentException e) {
+            throw new UnauthorizedException("Sessão inválida ou expirada");
+        }
+    }
+
+    /** The {@code jti} claim — how a specific token is identified in {@link JwtDenylist}. */
+    public UUID parseJti(String token) {
+        try {
+            return UUID.fromString(parseClaims(token).getId());
+        } catch (JwtException | IllegalArgumentException e) {
+            throw new UnauthorizedException("Sessão inválida ou expirada");
+        }
+    }
+
+    public Instant parseExpiration(String token) {
+        try {
+            Date expiration = parseClaims(token).getExpiration();
+            if (expiration == null) {
+                throw new UnauthorizedException("Sessão inválida ou expirada");
+            }
+            return expiration.toInstant();
         } catch (JwtException | IllegalArgumentException e) {
             throw new UnauthorizedException("Sessão inválida ou expirada");
         }
