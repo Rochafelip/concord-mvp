@@ -35,11 +35,14 @@ class JwtAuthFilterTest {
     @Mock
     private FilterChain filterChain;
 
+    @Mock
+    private JwtDenylist jwtDenylist;
+
     private JwtAuthFilter filter;
 
     @BeforeEach
     void setUp() {
-        filter = new JwtAuthFilter(jwtService, userRepository);
+        filter = new JwtAuthFilter(jwtService, userRepository, jwtDenylist);
     }
 
     @AfterEach
@@ -82,6 +85,24 @@ class JwtAuthFilterTest {
 
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.setCookies(new Cookie(JwtService.COOKIE_NAME, "bad-token"));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, filterChain);
+
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        verify(filterChain).doFilter(request, response);
+    }
+
+    @Test
+    void leavesRequestUnauthenticated_whenTokenIsRevoked() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID jti = UUID.randomUUID();
+        when(jwtService.parseUserId("revoked-token")).thenReturn(userId);
+        when(jwtService.parseJti("revoked-token")).thenReturn(jti);
+        when(jwtDenylist.isRevoked(jti)).thenReturn(true);
+
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setCookies(new Cookie(JwtService.COOKIE_NAME, "revoked-token"));
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         filter.doFilter(request, response, filterChain);

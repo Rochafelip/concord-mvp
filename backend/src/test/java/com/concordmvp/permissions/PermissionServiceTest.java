@@ -325,6 +325,66 @@ class PermissionServiceTest {
         assertThat(result).hasSize(2);
     }
 
+    // ---------- visibleMemberIds ----------
+
+    @Test
+    void visibleMemberIdsExcludesAMemberDeniedViewChannelByAUserOverride() {
+        Channel channel = channel(channelId);
+        overridesOn(channelId,
+                ChannelPermissionOverride.forUser(channelId, memberId, 0L, bits(Permission.VIEW_CHANNEL)));
+
+        Set<UUID> result = permissionService.visibleMemberIds(channel, Set.of(memberId, ownerId));
+
+        assertThat(result).containsExactly(ownerId);
+    }
+
+    @Test
+    void visibleMemberIdsKeepsAMemberWithTheDefaultViewChannelPermission() {
+        Channel channel = channel(channelId);
+
+        Set<UUID> result = permissionService.visibleMemberIds(channel, Set.of(memberId));
+
+        assertThat(result).containsExactly(memberId);
+    }
+
+    @Test
+    void visibleMemberIdsExcludesANonMemberEvenIfPassedAsACandidate() {
+        Channel channel = channel(channelId);
+
+        Set<UUID> result = permissionService.visibleMemberIds(channel, Set.of(strangerId));
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void visibleMemberIdsAlwaysIncludesTheOwnerRegardlessOfOverrides() {
+        Channel channel = channel(channelId);
+        overridesOn(channelId,
+                ChannelPermissionOverride.forRole(channelId, everyone.getId(), 0L, Permission.ALL));
+
+        Set<UUID> result = permissionService.visibleMemberIds(channel, Set.of(ownerId));
+
+        assertThat(result).containsExactly(ownerId);
+    }
+
+    @Test
+    void visibleMemberIdsQueriesOverridesOnceRegardlessOfCandidateCount() {
+        Channel channel = channel(channelId);
+
+        permissionService.visibleMemberIds(channel, Set.of(memberId, ownerId, strangerId));
+
+        verify(overrideRepository, times(1)).findByChannelId(channelId);
+    }
+
+    @Test
+    void visibleMemberIdsShortCircuitsOnEmptyCandidatesWithoutQueryingOverrides() {
+        Channel channel = channel(channelId);
+
+        assertThat(permissionService.visibleMemberIds(channel, Set.of())).isEmpty();
+
+        verify(overrideRepository, never()).findByChannelId(any());
+    }
+
     // ---------- require* ----------
 
     @Test

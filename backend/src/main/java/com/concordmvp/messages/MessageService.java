@@ -118,7 +118,7 @@ public class MessageService {
             throw new BadRequestException("Message content is too long");
         }
 
-        return persistAndBroadcast(channelId, channel.getServerId(), authorId, trimmed, normalized);
+        return persistAndBroadcast(channel, authorId, trimmed, normalized);
     }
 
     /**
@@ -163,11 +163,19 @@ public class MessageService {
      */
     @Transactional
     public Message postSystemMessage(UUID channelId, UUID serverId, String content) {
-        return persistAndBroadcast(channelId, serverId, SYSTEM_USER_ID, content, List.of());
+        // Not fetched from the repository: the caller (server creation / join) already knows both
+        // ids, and this is only ever used to resolve VIEW_CHANNEL for the broadcast below, not
+        // persisted.
+        Channel channel = new Channel();
+        channel.setId(channelId);
+        channel.setServerId(serverId);
+        return persistAndBroadcast(channel, SYSTEM_USER_ID, content, List.of());
     }
 
-    private Message persistAndBroadcast(UUID channelId, UUID serverId, UUID authorId, String content,
+    private Message persistAndBroadcast(Channel channel, UUID authorId, String content,
                                          List<AttachmentRequest> attachments) {
+        UUID channelId = channel.getId();
+        UUID serverId = channel.getServerId();
         Message message = new Message();
         message.setChannelId(channelId);
         message.setAuthorId(authorId);
@@ -183,7 +191,10 @@ public class MessageService {
                     saved.getId(), attachment.url(), attachment.fileName(), attachment.fileSize(), i)));
         }
 
-        Set<UUID> recipients = currentMemberIds(serverId);
+        // Only members who can actually see this channel (base permissions + channel overrides)
+        // may receive the broadcast below — currentMemberIds(serverId) alone would leak private
+        // channel content to the whole server.
+        Set<UUID> recipients = permissionService.visibleMemberIds(channel, currentMemberIds(serverId));
 
         // Increment unread count for all channel members except the author
         if (!authorId.equals(SYSTEM_USER_ID)) {
@@ -269,7 +280,8 @@ public class MessageService {
         // CASCADE, and the cleanup service needs them to find the files on disk.
         attachmentCleanupService.deleteForMessages(List.of(message.getId()));
         messageRepository.delete(message);
-        realtimeEventPublisher.broadcast(currentMemberIds(channel.getServerId()),
+        Set<UUID> recipients = permissionService.visibleMemberIds(channel, currentMemberIds(channel.getServerId()));
+        realtimeEventPublisher.broadcast(recipients,
                 new WsEvent(WsEventType.MESSAGE_DELETE,
                         new MessageDeletedPayload(message.getId(), message.getChannelId())));
     }

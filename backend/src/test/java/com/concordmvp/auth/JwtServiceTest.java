@@ -37,6 +37,40 @@ class JwtServiceTest {
     }
 
     @Test
+    void generateToken_assignsAUniqueJtiToEachToken() {
+        UUID userId = UUID.randomUUID();
+
+        String first = jwtService.generateToken(userId);
+        String second = jwtService.generateToken(userId);
+
+        assertThat(jwtService.parseJti(first)).isNotEqualTo(jwtService.parseJti(second));
+    }
+
+    @Test
+    void parseJti_throwsUnauthorized_whenTokenIsMalformed() {
+        assertThatThrownBy(() -> jwtService.parseJti("not-a-valid-jwt"))
+                .isInstanceOf(UnauthorizedException.class);
+    }
+
+    @Test
+    void parseExpiration_returnsWhenTheTokenStopsBeingValid() {
+        UUID userId = UUID.randomUUID();
+        Instant before = Instant.now();
+
+        String token = jwtService.generateToken(userId);
+
+        Instant expiration = jwtService.parseExpiration(token);
+        assertThat(expiration).isAfter(before.plus(java.time.Duration.ofDays(29)));
+        assertThat(expiration).isBefore(before.plus(java.time.Duration.ofDays(31)));
+    }
+
+    @Test
+    void parseExpiration_throwsUnauthorized_whenTokenIsMalformed() {
+        assertThatThrownBy(() -> jwtService.parseExpiration("not-a-valid-jwt"))
+                .isInstanceOf(UnauthorizedException.class);
+    }
+
+    @Test
     void parseUserId_throwsUnauthorized_whenTokenIsTampered() {
         UUID userId = UUID.randomUUID();
         String token = jwtService.generateToken(userId);
