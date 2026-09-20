@@ -25,6 +25,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -117,6 +118,18 @@ class AuthServiceTest {
     }
 
     @Test
+    void login_unknownEmail_stillRunsAPasswordComparison_toAvoidATimingSideChannel() {
+        // Otherwise an unknown-email response returns faster than a wrong-password one (no bcrypt
+        // work done), letting an attacker enumerate registered emails by timing alone.
+        LoginRequest request = new LoginRequest("unknown@example.com", "password123");
+        when(userRepository.findByEmail("unknown@example.com")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.login(request)).isInstanceOf(UnauthorizedException.class);
+
+        verify(passwordEncoder).matches(eq("password123"), anyString());
+    }
+
+    @Test
     void login_wrongPasswordAndUnknownEmail_produceTheSameExceptionMessage() {
         // Ensures the login endpoint never leaks whether an email is registered.
         LoginRequest wrongPasswordRequest = new LoginRequest("alice@example.com", "wrong-password");
@@ -134,6 +147,55 @@ class AuthServiceTest {
         String messageForUnknownEmail = catchExceptionMessage(() -> authService.login(unknownEmailRequest));
 
         assertThat(messageForWrongPassword).isEqualTo(messageForUnknownEmail);
+    }
+
+    @Test
+    void login_tooManyAttemptsInAShortWindow_throwsUnauthorized_withTheSameGenericMessage() {
+        // Same message as wrong credentials, so a rate-limited response can't be told apart from
+        // an ordinary failed login.
+        LoginRequest request = new LoginRequest("alice@example.com", "wrong-password");
+        User user = new User();
+        user.setId(UUID.randomUUID());
+        user.setEmail("alice@example.com");
+        user.setPasswordHash("hashed-password");
+        when(userRepository.findByEmail("alice@example.com")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("wrong-password", "hashed-password")).thenReturn(false);
+
+        for (int i = 0; i < 5; i++) {
+            assertThatThrownBy(() -> authService.login(request)).isInstanceOf(UnauthorizedException.class);
+        }
+
+        assertThatThrownBy(() -> authService.login(request))
+                .isInstanceOf(UnauthorizedException.class)
+                .hasMessage(unknownEmailExceptionMessage());
+        // Rate-limited, not a real credential check this time.
+        verify(userRepository, times(5)).findByEmail("alice@example.com");
+    }
+
+    @Test
+    void login_rateLimitIsPerEmail_anotherEmailIsUnaffected() {
+        LoginRequest floodedRequest = new LoginRequest("alice@example.com", "wrong-password");
+        User alice = new User();
+        alice.setId(UUID.randomUUID());
+        alice.setEmail("alice@example.com");
+        alice.setPasswordHash("hashed-password");
+        when(userRepository.findByEmail("alice@example.com")).thenReturn(Optional.of(alice));
+        when(passwordEncoder.matches("wrong-password", "hashed-password")).thenReturn(false);
+        for (int i = 0; i < 6; i++) {
+            assertThatThrownBy(() -> authService.login(floodedRequest)).isInstanceOf(UnauthorizedException.class);
+        }
+
+        LoginRequest bobRequest = new LoginRequest("bob@example.com", "password123");
+        User bob = new User();
+        bob.setId(UUID.randomUUID());
+        bob.setEmail("bob@example.com");
+        bob.setPasswordHash("hashed-password");
+        when(userRepository.findByEmail("bob@example.com")).thenReturn(Optional.of(bob));
+        when(passwordEncoder.matches("password123", "hashed-password")).thenReturn(true);
+
+        AuthResponse response = authService.login(bobRequest);
+
+        assertThat(response.userId()).isEqualTo(bob.getId());
     }
 
     private String unknownEmailExceptionMessage() {

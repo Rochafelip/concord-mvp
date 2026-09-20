@@ -7,6 +7,7 @@ import com.concordmvp.common.exception.ResourceNotFoundException;
 import com.concordmvp.common.exception.UnauthorizedException;
 import com.concordmvp.common.exception.PayloadTooLargeException;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -72,6 +73,18 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ConflictException.class)
     public ResponseEntity<ApiError> handleConflict(ConflictException ex, HttpServletRequest request) {
         return build(HttpStatus.CONFLICT, ex.getMessage(), request);
+    }
+
+    /**
+     * A unique/foreign-key constraint rejected the write — almost always two concurrent requests
+     * racing past an application-level check (e.g. duplicate email on register, duplicate
+     * friend request). That is a business conflict the client can act on, not a server failure,
+     * so it must not fall through to {@link #handleGeneric}'s 500.
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiError> handleDataIntegrityViolation(
+            DataIntegrityViolationException ex, HttpServletRequest request) {
+        return build(HttpStatus.CONFLICT, "A ação conflita com um registro já existente", request);
     }
 
     @ExceptionHandler(ForbiddenException.class)

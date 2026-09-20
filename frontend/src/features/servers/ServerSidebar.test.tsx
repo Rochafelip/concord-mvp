@@ -4,14 +4,21 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Server } from '../../types/server';
+import type { Friend } from '../../types/friend';
 import * as api from './api';
+import * as friendsApi from '../friends/api';
 import { ServerSidebar } from './ServerSidebar';
 
 vi.mock('./api');
+vi.mock('../friends/api');
 
 const servers: Server[] = [
   { id: 's1', name: 'Alpha', ownerId: 'u1', createdAt: '2026-01-01', updatedAt: '2026-01-01' },
   { id: 's2', name: 'Beta', ownerId: 'u2', createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+];
+
+const friends: Friend[] = [
+  { friendshipId: 'f1', user: { id: 'u3', username: 'lety', displayName: 'Lety', avatarUrl: null }, online: true, since: '2026-01-01' },
 ];
 
 function renderSidebar(initialPath = '/app') {
@@ -22,6 +29,7 @@ function renderSidebar(initialPath = '/app') {
         <Routes>
           <Route path="/app" element={<ServerSidebar />} />
           <Route path="/app/servers/:serverId" element={<ServerSidebar />} />
+          <Route path="/app/dm/:friendUserId" element={<ServerSidebar />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -31,6 +39,7 @@ function renderSidebar(initialPath = '/app') {
 describe('ServerSidebar', () => {
   beforeEach(() => {
     vi.mocked(api.listServers).mockResolvedValue(servers);
+    vi.mocked(friendsApi.listFriends).mockResolvedValue(friends);
   });
 
   it("renders every server the user belongs to", async () => {
@@ -64,5 +73,19 @@ describe('ServerSidebar', () => {
     await screen.findByRole('link', { name: 'Alpha' });
 
     expect(screen.queryByRole('button', { name: 'Join server' })).not.toBeInTheDocument();
+  });
+
+  it('renders one rail entry per friend, linking to their DM conversation', async () => {
+    renderSidebar();
+
+    const friendLink = await screen.findByRole('link', { name: 'Lety' });
+    expect(friendLink).toHaveAttribute('href', '/app/dm/u3');
+  });
+
+  it('highlights the currently open DM, derived from the URL', async () => {
+    renderSidebar('/app/dm/u3');
+
+    const selected = await screen.findByRole('link', { name: 'Lety' });
+    expect(selected).toHaveAttribute('aria-current', 'page');
   });
 });
