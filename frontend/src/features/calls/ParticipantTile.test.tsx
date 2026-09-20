@@ -44,10 +44,12 @@ describe('ParticipantTile', () => {
   // The tile remounts whenever the call layout changes — most visibly when a screen share
   // starts and ParticipantList swaps the grid for FocusedCallView — so the slider has to come
   // back up showing the level this listener already picked, not 100% over quieter audio.
-  it("opens its volume slider at the level already chosen for that participant", () => {
+  it("opens its volume slider at the level already chosen for that participant", async () => {
     vi.mocked(voiceClient.getParticipantVolume).mockReturnValue(0.3);
+    const user = userEvent.setup();
 
     render(<ParticipantTile participant={participant({ identity: 'bob', name: 'Bob' })} />);
+    await user.click(screen.getByRole('button', { name: 'Volume for Bob' }));
 
     expect(voiceClient.getParticipantVolume).toHaveBeenCalledWith('bob');
     expect(screen.getByRole('slider', { name: 'Volume for Bob' })).toHaveValue('30');
@@ -201,18 +203,20 @@ describe('ParticipantTile', () => {
     it('renders a volume control for a remote participant', () => {
       render(<ParticipantTile participant={participant({ isLocal: false, identity: 'bob' })} />);
 
-      expect(screen.getByRole('slider', { name: 'Volume for Felipe' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Volume for Felipe' })).toBeInTheDocument();
     });
 
     it('does not render a volume control for the local participant', () => {
       render(<ParticipantTile participant={participant({ isLocal: true })} />);
 
-      expect(screen.queryByRole('slider')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^Volume for/ })).not.toBeInTheDocument();
     });
 
-    it('forwards volume changes to voiceClient.setParticipantVolume for that identity', () => {
+    it('forwards volume changes to voiceClient.setParticipantVolume for that identity', async () => {
+      const user = userEvent.setup();
       render(<ParticipantTile participant={participant({ isLocal: false, identity: 'bob' })} />);
 
+      await user.click(screen.getByRole('button', { name: 'Volume for Felipe' }));
       fireEvent.change(screen.getByRole('slider', { name: 'Volume for Felipe' }), { target: { value: '30' } });
 
       expect(voiceClient.setParticipantVolume).toHaveBeenCalledWith('bob', 0.3);
@@ -221,18 +225,16 @@ describe('ParticipantTile', () => {
     it('hides the volume control when showVolumeControl is false, even for a remote participant', () => {
       render(<ParticipantTile participant={participant({ isLocal: false, identity: 'bob' })} showVolumeControl={false} />);
 
-      expect(screen.queryByRole('slider')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^Volume for/ })).not.toBeInTheDocument();
     });
 
     it('reveals the volume icon when its participant tile is hovered', () => {
       render(<ParticipantTile participant={participant({ isLocal: false, identity: 'bob' })} />);
 
-      const control = screen.getByRole('slider', { name: 'Volume for Felipe' }).parentElement;
-      expect(control).toHaveClass('group/volume-control');
-      expect(control?.parentElement).toHaveClass('group-hover/participant-tile:opacity-100');
-      expect(screen.getByRole('slider', { name: 'Volume for Felipe' })).toHaveClass(
-        'group-hover/volume-control:opacity-100',
-      );
+      const trigger = screen.getByRole('button', { name: 'Volume for Felipe' });
+      const wrapper = trigger.parentElement?.parentElement;
+      expect(wrapper).toHaveClass('opacity-0');
+      expect(wrapper).toHaveClass('group-hover/participant-tile:opacity-100');
     });
   });
 
@@ -314,8 +316,9 @@ describe('ParticipantTile', () => {
       expect(onWatchClick).toHaveBeenCalledTimes(2);
     });
 
-    it('does not trigger onWatchClick when the volume slider is used', () => {
+    it('does not trigger onWatchClick when the volume slider is used', async () => {
       const onWatchClick = vi.fn();
+      const user = userEvent.setup();
       render(
         <ParticipantTile
           participant={participant({ name: 'Felipe', isLocal: false, identity: 'bob' })}
@@ -323,6 +326,7 @@ describe('ParticipantTile', () => {
         />,
       );
 
+      await user.click(screen.getByRole('button', { name: 'Volume for Felipe' }));
       fireEvent.click(screen.getByRole('slider', { name: 'Volume for Felipe' }));
 
       expect(onWatchClick).not.toHaveBeenCalled();
