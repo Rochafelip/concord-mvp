@@ -312,6 +312,68 @@ describe('ChannelSidebar', () => {
     });
   });
 
+  describe('voice channel participant context menu', () => {
+    function presence(overrides: Partial<VoicePresenceEntry> = {}): VoicePresenceEntry {
+      return {
+        channelId: 'c2',
+        userId: 'u2',
+        displayName: 'Ana',
+        avatarUrl: null,
+        muted: false,
+        cameraOn: false,
+        screenSharing: false,
+        speaking: false,
+        deafened: false,
+        ...overrides,
+      };
+    }
+
+    it('disconnects the participant from voice when the menu item is clicked (has DISCONNECT_MEMBERS, not self)', async () => {
+      useAuthStore.setState({
+        isAuthenticated: true,
+        user: { id: 'member-1', username: 'm', displayName: 'M', email: 'm@x.com', avatarUrl: null },
+      });
+      vi.mocked(callsApi.getVoicePresence).mockResolvedValue([presence()]);
+      const user = userEvent.setup();
+      renderSidebar();
+
+      fireEvent.contextMenu(await screen.findByText('Ana'));
+      await user.click(await screen.findByText('Disconnect from voice'));
+
+      expect(callsApi.disconnectVoiceParticipant).toHaveBeenCalledWith('c2', 'u2');
+    });
+
+    it('does not offer to disconnect yourself', async () => {
+      useAuthStore.setState({
+        isAuthenticated: true,
+        user: { id: 'u2', username: 'ana', displayName: 'Ana', email: 'ana@x.com', avatarUrl: null },
+      });
+      vi.mocked(callsApi.getVoicePresence).mockResolvedValue([presence()]);
+      renderSidebar();
+
+      fireEvent.contextMenu(await screen.findByText('Ana'));
+
+      expect(screen.queryByText('Disconnect from voice')).not.toBeInTheDocument();
+    });
+
+    it('does not offer to disconnect without the DISCONNECT_MEMBERS permission', async () => {
+      vi.mocked(serversApi.getServer).mockResolvedValue({
+        ...server,
+        permissions: (server.permissions ?? []).filter((permission) => permission !== 'DISCONNECT_MEMBERS'),
+      });
+      useAuthStore.setState({
+        isAuthenticated: true,
+        user: { id: 'member-1', username: 'm', displayName: 'M', email: 'm@x.com', avatarUrl: null },
+      });
+      vi.mocked(callsApi.getVoicePresence).mockResolvedValue([presence()]);
+      renderSidebar();
+
+      fireEvent.contextMenu(await screen.findByText('Ana'));
+
+      expect(screen.queryByText('Disconnect from voice')).not.toBeInTheDocument();
+    });
+  });
+
   describe('screen-share hover preview', () => {
     function presence(overrides: Partial<VoicePresenceEntry> = {}): VoicePresenceEntry {
       return {

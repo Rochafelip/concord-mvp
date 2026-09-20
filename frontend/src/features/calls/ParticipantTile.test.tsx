@@ -4,6 +4,7 @@ import { ConnectionQuality } from 'livekit-client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { voiceClient } from '../../services/voiceClient';
 import type { VoiceParticipant } from '../../types/voice';
+import { disconnectVoiceParticipant } from './api';
 import { ParticipantTile } from './ParticipantTile';
 
 vi.mock('../../services/voiceClient', () => ({
@@ -11,6 +12,10 @@ vi.mock('../../services/voiceClient', () => ({
     setParticipantVolume: vi.fn(),
     getParticipantVolume: vi.fn().mockReturnValue(1),
   },
+}));
+
+vi.mock('./api', () => ({
+  disconnectVoiceParticipant: vi.fn(),
 }));
 
 function participant(overrides: Partial<VoiceParticipant> = {}): VoiceParticipant {
@@ -382,6 +387,44 @@ describe('ParticipantTile', () => {
       const { container } = render(<ParticipantTile participant={participant()} />);
 
       expect(container.firstChild).toHaveClass('min-h-0', 'min-w-0');
+    });
+  });
+
+  describe('context menu', () => {
+    it('disconnects the participant from voice when the menu item is clicked', async () => {
+      const user = userEvent.setup();
+      render(
+        <ParticipantTile participant={participant({ identity: 'bob' })} canDisconnect channelId="chan-1" />,
+      );
+
+      fireEvent.contextMenu(screen.getByLabelText('Felipe'));
+      await user.click(await screen.findByText('Disconnect from voice'));
+
+      expect(disconnectVoiceParticipant).toHaveBeenCalledWith('chan-1', 'bob');
+    });
+
+    it('does not offer to disconnect the local participant', () => {
+      render(<ParticipantTile participant={participant({ isLocal: true })} canDisconnect channelId="chan-1" />);
+
+      fireEvent.contextMenu(screen.getByLabelText('Felipe'));
+
+      expect(screen.queryByText('Disconnect from voice')).not.toBeInTheDocument();
+    });
+
+    it('does not offer to disconnect without the canDisconnect permission', () => {
+      render(<ParticipantTile participant={participant()} channelId="chan-1" />);
+
+      fireEvent.contextMenu(screen.getByLabelText('Felipe'));
+
+      expect(screen.queryByText('Disconnect from voice')).not.toBeInTheDocument();
+    });
+
+    it('does not offer to disconnect without a channelId', () => {
+      render(<ParticipantTile participant={participant()} canDisconnect />);
+
+      fireEvent.contextMenu(screen.getByLabelText('Felipe'));
+
+      expect(screen.queryByText('Disconnect from voice')).not.toBeInTheDocument();
     });
   });
 });
