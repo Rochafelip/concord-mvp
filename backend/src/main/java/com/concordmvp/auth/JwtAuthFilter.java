@@ -31,10 +31,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
     private final UserRepository userRepository;
+    private final JwtDenylist jwtDenylist;
 
-    public JwtAuthFilter(JwtService jwtService, UserRepository userRepository) {
+    public JwtAuthFilter(JwtService jwtService, UserRepository userRepository, JwtDenylist jwtDenylist) {
         this.jwtService = jwtService;
         this.userRepository = userRepository;
+        this.jwtDenylist = jwtDenylist;
     }
 
     @Override
@@ -48,6 +50,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         if (cookie != null) {
             try {
                 UUID userId = jwtService.parseUserId(cookie.getValue());
+                if (jwtDenylist.isRevoked(jwtService.parseJti(cookie.getValue()))) {
+                    throw new UnauthorizedException("Sessão inválida ou expirada");
+                }
                 User user = userRepository.findById(userId).orElseThrow(
                         () -> new UnauthorizedException("Sessão inválida ou expirada"));
                 if (user.getPasswordChangedAt() != null

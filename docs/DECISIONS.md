@@ -36,15 +36,26 @@ refresh endpoint) is real implementation effort and mainly pays off when
 you need short-lived access tokens for a large, semi-trusted user base.
 
 **Decision**: Use a single JWT access token with a long expiry (e.g. 30
-days). No refresh token, no refresh endpoint, no server-side revocation
-list. Logout simply discards the token client-side; the token remains
-technically valid until it expires.
+days). No refresh token, no refresh endpoint.
 
-**Consequences**: Simpler auth implementation (no token rotation/blacklist
-logic). Trade-off: a stolen token stays valid until expiry with no way to
-revoke it early. Acceptable for a small, trusted group of friends.
+**Consequences**: Simpler auth implementation (no token rotation logic).
+Acceptable for a small, trusted group of friends.
 
 Supersedes: AGENTS.md "Authentication" scope item "Refresh tokens".
+
+**Update (2026-09-19, security audit)**: The original version of this
+decision also ruled out a server-side revocation list, so logout only
+discarded the token client-side and a stolen token stayed valid until its
+30-day expiry with no way to revoke it early. The audit flagged that gap
+as Alta severity — long enough for real damage from one leaked cookie —
+and it was cheap enough to close without the rest of a refresh-token flow.
+Logout now revokes the token's `jti` in an in-memory denylist
+(`JwtDenylist`, same in-memory approach as D3, not a new service), checked
+by `JwtAuthFilter` on every request. Still no refresh token, no rotation,
+no endpoint beyond logout — the trade-off this decision was about is
+otherwise unchanged. The remaining gap: a backend restart clears the
+denylist, so a token revoked just before a restart becomes valid again
+until it naturally expires. Acceptable for a single self-hosted instance.
 
 ---
 
