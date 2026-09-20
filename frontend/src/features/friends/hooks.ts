@@ -1,5 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from '../../services/toast';
 import * as api from './api';
+
+const FRIEND_MUTATION_ERROR_MESSAGE = 'Não foi possível completar a ação. Tente novamente.';
+
+function notifyError() {
+  toast.error(FRIEND_MUTATION_ERROR_MESSAGE);
+}
 
 const FRIENDS_KEY = ['friends'];
 const PENDING_KEY = ['friends', 'requests'];
@@ -31,6 +38,7 @@ export function useSendFriendRequest() {
   return useMutation({
     mutationFn: (addresseeId: string) => api.sendFriendRequest(addresseeId),
     onSuccess: invalidate,
+    onError: notifyError,
   });
 }
 
@@ -39,6 +47,7 @@ export function useAcceptFriendRequest() {
   return useMutation({
     mutationFn: (friendshipId: string) => api.acceptFriendRequest(friendshipId),
     onSuccess: invalidate,
+    onError: notifyError,
   });
 }
 
@@ -47,6 +56,7 @@ export function useCancelOrDeclineFriendRequest() {
   return useMutation({
     mutationFn: (friendshipId: string) => api.cancelOrDeclineFriendRequest(friendshipId),
     onSuccess: invalidate,
+    onError: notifyError,
   });
 }
 
@@ -55,5 +65,6 @@ export function useRemoveFriend() {
   return useMutation({
     mutationFn: (friendshipId: string) => api.removeFriend(friendshipId),
     onSuccess: invalidate,
+    onError: notifyError,
   });
 }

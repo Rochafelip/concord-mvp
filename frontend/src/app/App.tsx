@@ -1,9 +1,17 @@
 import { useEffect } from 'react';
+import { Toaster } from 'sonner';
 import { Spinner } from '../components/Spinner';
 import { useMe } from '../features/auth/hooks';
 import { useAuthStore } from '../features/auth/authStore';
 import { AppRouter } from '../routes/AppRouter';
 import { ApiError } from '../services/apiClient';
+
+/** Matches the app's own tokens instead of Sonner's default look. */
+const TOAST_CLASSNAMES = {
+  toast: 'rounded border border-border bg-surface text-ink shadow-lg',
+  success: 'text-success',
+  error: 'text-danger',
+};
 
 export function App() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
@@ -40,9 +48,15 @@ export function App() {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <Spinner />
+        <Toaster position="bottom-right" toastOptions={{ classNames: TOAST_CLASSNAMES }} />
       </div>
     );
   }
 
-  return <AppRouter />;
+  return (
+    <>
+      <AppRouter />
+      <Toaster position="bottom-right" toastOptions={{ classNames: TOAST_CLASSNAMES }} />
+    </>
+  );
 }

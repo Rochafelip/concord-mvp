@@ -22,6 +22,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 import com.concordmvp.messages.ChannelReadStateService;
 
 import java.time.Instant;
@@ -46,6 +48,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class MessageServiceTest {
 
     @Mock
@@ -82,6 +85,9 @@ class MessageServiceTest {
         messageService = new MessageService(messageRepository, messageAttachmentRepository, channelService,
                 serverMemberRepository, userRepository, realtimeEventPublisher, attachmentCleanupService,
                 permissionService, null);
+        // By default, visibility matches plain server membership — individual tests narrow this
+        // down to prove a broadcast is filtered when it should be.
+        when(permissionService.visibleMemberIds(any(), any())).thenAnswer(invocation -> invocation.getArgument(1));
     }
 
     private Channel channel(UUID id, UUID serverId) {
@@ -247,6 +253,30 @@ class MessageServiceTest {
         assertThat(payload.author().id()).isEqualTo(authorId);
         assertThat(payload.author().username()).isEqualTo("alice");
         assertThat(payload.author().displayName()).isEqualTo("Alice");
+    }
+
+    @Test
+    void sendMessage_memberWithoutViewChannel_doesNotReceiveTheBroadcast() {
+        UUID channelId = UUID.randomUUID();
+        UUID serverId = UUID.randomUUID();
+        UUID authorId = UUID.randomUUID();
+        UUID hiddenMemberId = UUID.randomUUID();
+        Channel target = channel(channelId, serverId);
+        User author = user(authorId, "alice", "Alice");
+
+        when(channelService.getChannel(channelId, authorId)).thenReturn(target);
+        when(serverMemberRepository.findByServerId(serverId))
+                .thenReturn(List.of(member(serverId, authorId), member(serverId, hiddenMemberId)));
+        when(userRepository.findById(authorId)).thenReturn(Optional.of(author));
+        // hiddenMemberId has no VIEW_CHANNEL on this channel (e.g. a channel override), so the
+        // permission service excludes it from who may see the broadcast.
+        when(permissionService.visibleMemberIds(eq(target), eq(Set.of(authorId, hiddenMemberId))))
+                .thenReturn(Set.of(authorId));
+        stubMessageSaveAssignsId();
+
+        messageService.sendMessage(channelId, "hello", null, authorId);
+
+        verify(realtimeEventPublisher).broadcast(eq(Set.of(authorId)), any(WsEvent.class));
     }
 
     @Test
@@ -793,6 +823,26 @@ class MessageServiceTest {
 
         verify(permissionService).requireChannel(target, moderatorId, Permission.MANAGE_MESSAGES);
         verify(messageRepository).delete(message);
+    }
+
+    @Test
+    void deleteMessage_memberWithoutViewChannel_doesNotReceiveTheBroadcast() {
+        UUID channelId = UUID.randomUUID();
+        UUID serverId = UUID.randomUUID();
+        UUID authorId = UUID.randomUUID();
+        UUID hiddenMemberId = UUID.randomUUID();
+        Message message = new Message();
+        message.setId(UUID.randomUUID());
+        message.setChannelId(channelId);
+        message.setAuthorId(authorId);
+        Channel target = channel(channelId, serverId);
+        when(messageRepository.findById(message.getId())).thenReturn(Optional.of(message));
+        when(channelService.getChannel(channelId, authorId)).thenReturn(target);
+        when(permissionService.visibleMemberIds(eq(target), any())).thenReturn(Set.of(authorId));
+
+        messageService.deleteMessage(message.getId(), authorId);
+
+        verify(realtimeEventPublisher).broadcast(eq(Set.of(authorId)), any(WsEvent.class));
     }
 
     @Test

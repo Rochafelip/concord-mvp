@@ -182,10 +182,13 @@ describe('MessageList', () => {
     render(<MessageList channelId="c1" />);
     await user.click(screen.getByRole('img'));
 
-    expect(screen.getAllByRole('img')).toHaveLength(2);
+    // Not asserted by counting every img role: the modal now marks the rest of the page
+    // aria-hidden while open (Radix Dialog's a11y behavior), which drops the thumbnail out of
+    // the accessibility tree — the lightbox image is the one that must appear.
+    expect(screen.getByRole('img', { name: 'Full-size attachment' })).toBeInTheDocument();
 
     await user.keyboard('{Escape}');
-    expect(screen.getAllByRole('img')).toHaveLength(1);
+    expect(screen.queryByRole('img', { name: 'Full-size attachment' })).not.toBeInTheDocument();
   });
 
   it('renders a PDF preview and download link (not an <img>)', () => {

@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Button } from '../../components/Button';
+import { EmojiPickerButton } from '../../components/EmojiPickerButton';
 import { TextInput } from '../../components/TextInput';
 import { useWsConnectionStore } from '../../stores/wsConnectionStore';
 import { sendDmMessage } from './hooks';
@@ -40,6 +41,7 @@ export function DmMessageInput({ recipientId }: { recipientId: string }) {
             placeholder={isConnected ? 'Mensagem…' : 'Reconectando…'}
             value={content}
             onChange={(event) => setContent(event.target.value)}
+            trailing={<EmojiPickerButton onSelect={(emoji) => setContent((current) => current + emoji)} />}
           />
         </div>
         <Button type="submit" disabled={!canSend}>

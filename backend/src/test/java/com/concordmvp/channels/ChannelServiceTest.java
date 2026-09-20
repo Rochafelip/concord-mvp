@@ -23,6 +23,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 
 import java.util.List;
 import java.util.Optional;
@@ -40,6 +42,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class ChannelServiceTest {
 
     @Mock
@@ -72,6 +75,9 @@ class ChannelServiceTest {
     void setUp() {
         channelService = new ChannelService(channelRepository, serverRepository, serverMemberRepository,
                 messageRepository, attachmentCleanupService, realtimeEventPublisher, permissionService, null);
+        // By default, visibility matches plain server membership — individual tests narrow this
+        // down to prove a broadcast is filtered when it should be.
+        when(permissionService.visibleMemberIds(any(), any())).thenAnswer(invocation -> invocation.getArgument(1));
     }
 
     private Server server(UUID id, UUID ownerId) {
@@ -183,6 +189,25 @@ class ChannelServiceTest {
         assertThat(payload.serverId()).isEqualTo(serverId);
         assertThat(payload.name()).isEqualTo("general");
         assertThat(payload.type()).isEqualTo(ChannelType.TEXT);
+    }
+
+    @Test
+    void createChannel_memberWithoutViewChannel_doesNotReceiveTheBroadcast() {
+        UUID serverId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        UUID hiddenMemberId = UUID.randomUUID();
+        when(serverRepository.findById(serverId)).thenReturn(Optional.of(server(serverId, ownerId)));
+        when(serverMemberRepository.findByServerId(serverId))
+                .thenReturn(List.of(member(serverId, ownerId), member(serverId, hiddenMemberId)));
+        // hiddenMemberId has no VIEW_CHANNEL on the new channel (e.g. a role-wide override), so
+        // the permission service excludes it from who may see the broadcast.
+        when(permissionService.visibleMemberIds(any(Channel.class), eq(Set.of(ownerId, hiddenMemberId))))
+                .thenReturn(Set.of(ownerId));
+        stubChannelSaveAssignsId();
+
+        channelService.createChannel(serverId, "restrito", ChannelType.TEXT, ownerId);
+
+        verify(realtimeEventPublisher).broadcast(eq(Set.of(ownerId)), any(WsEvent.class));
     }
 
     // --- listChannels ---
@@ -365,5 +390,25 @@ class ChannelServiceTest {
         ChannelDeletedPayload payload = (ChannelDeletedPayload) eventCaptor.getValue().payload();
         assertThat(payload.channelId()).isEqualTo(channelId);
         assertThat(payload.serverId()).isEqualTo(serverId);
+    }
+
+    @Test
+    void deleteChannel_memberWithoutViewChannel_doesNotReceiveTheBroadcast() {
+        UUID serverId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        UUID hiddenMemberId = UUID.randomUUID();
+        UUID channelId = UUID.randomUUID();
+        Channel existing = channel(channelId, serverId);
+        when(channelRepository.findById(channelId)).thenReturn(Optional.of(existing));
+        when(serverRepository.findById(serverId)).thenReturn(Optional.of(server(serverId, ownerId)));
+        when(serverMemberRepository.findByServerId(serverId))
+                .thenReturn(List.of(member(serverId, ownerId), member(serverId, hiddenMemberId)));
+        when(messageRepository.findByChannelIdIn(List.of(channelId))).thenReturn(List.of());
+        when(permissionService.visibleMemberIds(eq(existing), eq(Set.of(ownerId, hiddenMemberId))))
+                .thenReturn(Set.of(ownerId));
+
+        channelService.deleteChannel(channelId, ownerId);
+
+        verify(realtimeEventPublisher).broadcast(eq(Set.of(ownerId)), any(WsEvent.class));
     }
 }
