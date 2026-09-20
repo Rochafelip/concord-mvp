@@ -1,6 +1,10 @@
-import { useEffect, useRef, useState, type ChangeEvent, type ClipboardEvent, type DragEvent, type FormEvent } from 'react';
-import { Paperclip, X } from 'lucide-react';
+import { closestCenter, DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
+import { arrayMove, horizontalListSortingStrategy, SortableContext, sortableKeyboardCoordinates, useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { useEffect, useRef, useState, type ChangeEvent, type ClipboardEvent, type DragEvent, type FormEvent, type ReactNode } from 'react';
+import { GripVertical, Paperclip, X } from 'lucide-react';
 import { Button } from '../../components/Button';
+import { EmojiPickerButton } from '../../components/EmojiPickerButton';
 import { TextInput } from '../../components/TextInput';
 import { useWsConnectionStore } from '../../stores/wsConnectionStore';
 import { uploadAttachment } from './api';
@@ -50,6 +54,29 @@ function namePastedFile(file: File): File {
   return new File([file], `pasted-image-${Date.now()}.${extension}`, { type: file.type });
 }
 
+function SortableAttachmentItem({ attachment, children }: { attachment: PendingAttachment; children: ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: attachment.id });
+
+  return (
+    <li
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={`relative flex-shrink-0 rounded border bg-sidebar p-1 ${isDragging ? 'opacity-50' : ''}`}
+    >
+      <button
+        type="button"
+        aria-label={`Reorder ${attachment.file.name}`}
+        {...attributes}
+        {...listeners}
+        className="absolute left-1 top-1 flex h-5 w-5 cursor-grab items-center justify-center rounded-full bg-black/50 text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+      >
+        <GripVertical size={12} aria-hidden="true" />
+      </button>
+      {children}
+    </li>
+  );
+}
+
 export function MessageInput({ channelId, canAttachFiles = false }: MessageInputProps) {
   const [content, setContent] = useState('');
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
@@ -59,6 +86,10 @@ export function MessageInput({ channelId, canAttachFiles = false }: MessageInput
   const fileInputRef = useRef<HTMLInputElement>(null);
   const status = useWsConnectionStore((state) => state.status);
   const isConnected = status === 'connected';
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
 
   // Mirrors the current attachments so the cleanup below can revoke their object URLs without
   // listing `attachments` as a dependency — which would make it tear down and re-run on every
@@ -143,6 +174,17 @@ export function MessageInput({ channelId, canAttachFiles = false }: MessageInput
       return current.filter((attachment) => attachment.id !== id);
     });
     setUploadError(null);
+  }
+
+  function handleAttachmentDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (over == null || active.id === over.id) return;
+    setAttachments((current) => {
+      const oldIndex = current.findIndex((attachment) => attachment.id === active.id);
+      const newIndex = current.findIndex((attachment) => attachment.id === over.id);
+      if (oldIndex === -1 || newIndex === -1) return current;
+      return arrayMove(current, oldIndex, newIndex);
+    });
   }
 
   /**
@@ -268,40 +310,41 @@ export function MessageInput({ channelId, canAttachFiles = false }: MessageInput
       }`}
     >
       {attachments.length > 0 && (
-        <ul
-          aria-label="Pending attachments"
-          className="flex gap-2 overflow-x-auto pb-1"
-        >
-          {attachments.map((attachment) => (
-            <li
-              key={attachment.id}
-              className="relative flex-shrink-0 rounded border bg-sidebar p-1"
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleAttachmentDragEnd}>
+          <SortableContext items={attachments.map((attachment) => attachment.id)} strategy={horizontalListSortingStrategy}>
+            <ul
+              aria-label="Pending attachments"
+              className="flex gap-2 overflow-x-auto pb-1"
             >
-              {attachment.previewUrl ? (
-                <img
-                  src={attachment.previewUrl}
-                  alt={attachment.file.name}
-                  className="h-20 w-20 rounded object-cover"
-                />
-              ) : (
-                <div className="flex h-20 w-40 flex-col justify-center gap-0.5 px-2">
-                  <span className="truncate text-caption text-ink">{attachment.file.name}</span>
-                  <span className="text-caption text-muted">{formatFileSize(attachment.file.size)}</span>
-                </div>
-              )}
-              <button
-                type="button"
-                aria-label={`Remove ${attachment.file.name}`}
-                title="Remove attachment"
-                disabled={isUploading}
-                onClick={() => removeAttachment(attachment.id)}
-                className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/65 text-white hover:bg-danger disabled:cursor-wait disabled:opacity-60"
-              >
-                <X size={14} aria-hidden="true" />
-              </button>
-            </li>
-          ))}
-        </ul>
+              {attachments.map((attachment) => (
+                <SortableAttachmentItem key={attachment.id} attachment={attachment}>
+                  {attachment.previewUrl ? (
+                    <img
+                      src={attachment.previewUrl}
+                      alt={attachment.file.name}
+                      className="h-20 w-20 rounded object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-20 w-40 flex-col justify-center gap-0.5 px-2">
+                      <span className="truncate text-caption text-ink">{attachment.file.name}</span>
+                      <span className="text-caption text-muted">{formatFileSize(attachment.file.size)}</span>
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    aria-label={`Remove ${attachment.file.name}`}
+                    title="Remove attachment"
+                    disabled={isUploading}
+                    onClick={() => removeAttachment(attachment.id)}
+                    className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/65 text-white hover:bg-danger disabled:cursor-wait disabled:opacity-60"
+                  >
+                    <X size={14} aria-hidden="true" />
+                  </button>
+                </SortableAttachmentItem>
+              ))}
+            </ul>
+          </SortableContext>
+        </DndContext>
       )}
 
       <div className="flex items-end gap-1.5 sm:gap-2">
@@ -316,6 +359,7 @@ export function MessageInput({ channelId, canAttachFiles = false }: MessageInput
             value={content}
             onChange={(event) => setContent(event.target.value)}
             onPaste={handlePaste}
+            trailing={<EmojiPickerButton onSelect={(emoji) => setContent((current) => current + emoji)} />}
           />
         </div>
         {canAttachFiles && (

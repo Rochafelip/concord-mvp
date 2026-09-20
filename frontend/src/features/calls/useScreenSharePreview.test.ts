@@ -37,7 +37,7 @@ const { useScreenSharePreview } = await import('./useScreenSharePreview');
 const { getVoicePreviewToken } = await import('./api');
 
 function handlerFor(room: InstanceType<typeof MockRoom>, event: string) {
-  const call = room.on.mock.calls.find(([registeredEvent]: [string]) => registeredEvent === event);
+  const call = room.on.mock.calls.find((registeredCall) => registeredCall[0] === event);
   if (!call) throw new Error(`No handler registered for ${event}`);
   return call[1] as (...args: unknown[]) => void;
 }
