@@ -82,7 +82,7 @@ Confirmado via `gh api repos/.../branches/master/protection`. `CI_CD.md` documen
 - ~~`ServerService.getInvitePreview` carrega lista inteira de membros só para contar~~ — ✅ corrigido: usa `ServerMemberRepository.countByServerId` (`SELECT COUNT(*)`) em vez de carregar todas as linhas para chamar `.size()`. O endpoint continua público sem auth, por design (preview da tela de convite).
 - ~~Cascade delete inconsistente entre tabelas~~ — avaliado e **não é um achado a corrigir**: `docs/DATABASE.md` §26 proíbe deliberadamente `ON DELETE CASCADE` automático (só o `servers`→resto é cascade intencional, D11), então depender de `deleteServer` para a limpeza manual é a decisão funcionando como projetada, não um gap. Ver nota "Revisitada" em D11.
 - ~~Sem configuração explícita de HikariCP~~ — ✅ corrigido: `application.yml` ganhou `spring.datasource.hikari` (`maximum-pool-size: 10`, `minimum-idle: 2`, `connection-timeout`, `idle-timeout`, `max-lifetime`, e `leak-detection-threshold: 60000` — desligado por padrão no Hikari, agora ligado).
-- `ImageIO.read` sem limite de dimensão no upload de avatar (decompression bomb / DoS de memória)
+- ~~`ImageIO.read` sem limite de dimensão no upload de avatar~~ — ✅ corrigido: `AvatarStorageService.isDecodable` lê largura/altura via `ImageReader.getWidth`/`getHeight` (só o header, sem decodificar os pixels) e rejeita acima de 4096px, antes de qualquer `BufferedImage` ser criado. `AvatarStorageServiceTest` (novo, arquivo não tinha teste algum antes).
 - Nenhum backup do banco de dados (`docker-compose.yml`, confirmado como lacuna intencional em `DEPLOY.md`)
 - Containers sem `cap_drop`/`no-new-privileges`/`read_only`
 - `.env` de produção com permissão `644` em vez de `600`
