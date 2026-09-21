@@ -6,6 +6,19 @@ spring:
     url: ${DATABASE_URL}
     username: ${DATABASE_USERNAME}
     password: ${DATABASE_PASSWORD}
+    hikari:
+      # Explicit instead of relying on HikariCP's implicit defaults (security audit, Média
+      # finding) — single self-hosted instance, single friends-group scale (docs/DECISIONS.md
+      # D1), so a big pool has no upside. minimum-idle is lower than the pool max so it shrinks
+      # during the long idle stretches this traffic pattern actually has; leak-detection-threshold
+      # is off by default in Hikari and is turned on here since a held-open connection is exactly
+      # the kind of bug that's otherwise invisible until the pool runs out.
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      leak-detection-threshold: 60000
 
   jpa:
     hibernate:

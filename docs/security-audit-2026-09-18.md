@@ -81,7 +81,7 @@ Confirmado via `gh api repos/.../branches/master/protection`. `CI_CD.md` documen
 - ~~N+1 real em `FriendshipService.listFriends`/`listPending`~~ — ✅ corrigido: `listFriends` e `listPending` agora batcham os outros usuários com `UserRepository.findAllById` (helper `usersById`) em vez de um `findById` por amizade.
 - ~~`ServerService.getInvitePreview` carrega lista inteira de membros só para contar~~ — ✅ corrigido: usa `ServerMemberRepository.countByServerId` (`SELECT COUNT(*)`) em vez de carregar todas as linhas para chamar `.size()`. O endpoint continua público sem auth, por design (preview da tela de convite).
 - ~~Cascade delete inconsistente entre tabelas~~ — avaliado e **não é um achado a corrigir**: `docs/DATABASE.md` §26 proíbe deliberadamente `ON DELETE CASCADE` automático (só o `servers`→resto é cascade intencional, D11), então depender de `deleteServer` para a limpeza manual é a decisão funcionando como projetada, não um gap. Ver nota "Revisitada" em D11.
-- Sem configuração explícita de HikariCP (pool/timeout/leak detection)
+- ~~Sem configuração explícita de HikariCP~~ — ✅ corrigido: `application.yml` ganhou `spring.datasource.hikari` (`maximum-pool-size: 10`, `minimum-idle: 2`, `connection-timeout`, `idle-timeout`, `max-lifetime`, e `leak-detection-threshold: 60000` — desligado por padrão no Hikari, agora ligado).
 - `ImageIO.read` sem limite de dimensão no upload de avatar (decompression bomb / DoS de memória)
 - Nenhum backup do banco de dados (`docker-compose.yml`, confirmado como lacuna intencional em `DEPLOY.md`)
 - Containers sem `cap_drop`/`no-new-privileges`/`read_only`
