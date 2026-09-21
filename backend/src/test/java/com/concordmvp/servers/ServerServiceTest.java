@@ -9,6 +9,7 @@ import com.concordmvp.common.exception.ResourceNotFoundException;
 import com.concordmvp.messages.AttachmentCleanupService;
 import com.concordmvp.messages.MessageRepository;
 import com.concordmvp.messages.MessageService;
+import com.concordmvp.media.VoicePresenceService;
 import com.concordmvp.messages.ChannelReadStateService;
 import com.concordmvp.permissions.Permission;
 import com.concordmvp.permissions.PermissionService;
@@ -30,6 +31,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.util.List;
 import java.util.Optional;
@@ -39,7 +41,6 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
@@ -92,13 +93,20 @@ class ServerServiceTest {
     @Mock
     private RoleRepository roleRepository;
 
+    @Mock
+    private ApplicationEventPublisher applicationEventPublisher;
+
+    @Mock
+    private VoicePresenceService voicePresenceService;
+
     private ServerService serverService;
 
     @BeforeEach
     void setUp() {
         serverService = new ServerService(serverRepository, serverMemberRepository, serverInviteRepository,
                 channelRepository, messageRepository, attachmentCleanupService, messageService, userRepository,
-                realtimeEventPublisher, permissionService, roleService, roleRepository, null);
+                realtimeEventPublisher, permissionService, roleService, roleRepository, null, applicationEventPublisher,
+                voicePresenceService);
     }
 
     /** Mimics JPA assigning an id on save/persist for a {@link Server} that doesn't already have one. */
@@ -404,6 +412,7 @@ class ServerServiceTest {
 
         verify(serverMemberRepository, never()).delete(any());
         verifyNoInteractions(realtimeEventPublisher);
+        verifyNoInteractions(voicePresenceService);
     }
 
     @Test
@@ -416,6 +425,8 @@ class ServerServiceTest {
 
         assertThatThrownBy(() -> serverService.leaveServer(serverId, requesterId))
                 .isInstanceOf(ResourceNotFoundException.class);
+
+        verifyNoInteractions(voicePresenceService);
     }
 
     @Test
@@ -437,6 +448,22 @@ class ServerServiceTest {
         verify(realtimeEventPublisher).broadcast(eq(Set.of(ownerId)), eventCaptor.capture());
         assertThat(eventCaptor.getValue().type()).isEqualTo(WsEventType.SERVER_MEMBER_LEAVE);
         assertThat(eventCaptor.getValue().payload()).isEqualTo(new ServerMemberEventPayload(serverId, leavingUserId));
+    }
+
+    @Test
+    void leaveServer_disconnectsFromVoiceInThisServer() {
+        // Security audit A5: leaving must not leave the member's LiveKit connection dangling.
+        UUID serverId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        UUID leavingUserId = UUID.randomUUID();
+        ServerMember membership = member(serverId, leavingUserId);
+        when(serverRepository.findById(serverId)).thenReturn(Optional.of(server(serverId, ownerId)));
+        when(serverMemberRepository.findByServerIdAndUserId(serverId, leavingUserId)).thenReturn(Optional.of(membership));
+        when(serverMemberRepository.findByServerId(serverId)).thenReturn(List.of(member(serverId, ownerId)));
+
+        serverService.leaveServer(serverId, leavingUserId);
+
+        verify(voicePresenceService).disconnectFromServer(serverId, leavingUserId);
     }
 
     // --- transferOwnership ---
@@ -482,7 +509,11 @@ class ServerServiceTest {
     // --- deleteServer ---
 
     @Test
-    void deleteServer_broadcastsBeforeDeleting_andDeletesInOrder() {
+    void deleteServer_deletesEverythingAndOnlyThenPublishesTheDeleteEvent_neverBroadcastingDirectly() {
+        // Audit A9 (docs/security-audit-2026-09-18.md): the WS broadcast must not fire until the
+        // deleting transaction actually commits, otherwise a mid-delete failure rolls everything
+        // back while clients already believe the server is gone. deleteServer itself must never
+        // call realtimeEventPublisher directly — only the AFTER_COMMIT listener does that.
         UUID serverId = UUID.randomUUID();
         UUID ownerId = UUID.randomUUID();
         UUID otherMemberId = UUID.randomUUID();
@@ -507,22 +538,15 @@ class ServerServiceTest {
         when(serverInviteRepository.findByServerId(serverId)).thenReturn(Optional.of(invite));
         when(channelRepository.findByServerId(serverId)).thenReturn(List.of(channel1, channel2));
 
-        // Sanity: no deletion has happened by the time broadcast fires.
+        // Sanity: no event has been published by the time deletions happen.
         doAnswer(invocation -> {
-            verify(messageRepository, never()).deleteByChannelIdIn(any());
-            verify(channelRepository, never()).deleteByServerId(any());
-            verify(serverInviteRepository, never()).delete(any());
-            verify(serverMemberRepository, never()).deleteAll(anySet());
-            verify(serverMemberRepository, never()).delete(any());
-            verify(serverRepository, never()).delete(any());
+            verifyNoInteractions(applicationEventPublisher);
             return null;
-        }).when(realtimeEventPublisher).broadcast(anySet(), any(WsEvent.class));
+        }).when(serverRepository).delete(any());
 
         serverService.deleteServer(serverId, ownerId);
 
-        ArgumentCaptor<WsEvent> eventCaptor = ArgumentCaptor.forClass(WsEvent.class);
-        verify(realtimeEventPublisher).broadcast(eq(Set.of(ownerId, otherMemberId)), eventCaptor.capture());
-        assertThat(eventCaptor.getValue().type()).isEqualTo(WsEventType.SERVER_DELETE);
+        verifyNoInteractions(realtimeEventPublisher);
 
         verify(messageRepository).deleteByChannelIdIn(List.of(channelId1, channelId2));
 
@@ -533,6 +557,23 @@ class ServerServiceTest {
         inOrder.verify(serverInviteRepository).delete(invite);
         inOrder.verify(serverMemberRepository).deleteAll(any());
         inOrder.verify(serverRepository).delete(server);
+
+        ArgumentCaptor<ServerDeletedEvent> eventCaptor = ArgumentCaptor.forClass(ServerDeletedEvent.class);
+        verify(applicationEventPublisher).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().serverId()).isEqualTo(serverId);
+        assertThat(eventCaptor.getValue().recipientUserIds()).isEqualTo(Set.of(ownerId, otherMemberId));
+    }
+
+    @Test
+    void onServerDeleted_broadcastsTheDeleteEventToRecipients() {
+        UUID serverId = UUID.randomUUID();
+        UUID memberId = UUID.randomUUID();
+
+        serverService.onServerDeleted(new ServerDeletedEvent(serverId, Set.of(memberId)));
+
+        ArgumentCaptor<WsEvent> eventCaptor = ArgumentCaptor.forClass(WsEvent.class);
+        verify(realtimeEventPublisher).broadcast(eq(Set.of(memberId)), eventCaptor.capture());
+        assertThat(eventCaptor.getValue().type()).isEqualTo(WsEventType.SERVER_DELETE);
     }
 
     @Test

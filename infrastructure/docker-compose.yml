@@ -42,6 +42,9 @@ services:
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
       LIVEKIT_PUBLIC_URL: ${LIVEKIT_PUBLIC_URL}
+      # Internal Server API call (security audit A5) — reached directly by Docker service name,
+      # unlike LIVEKIT_PUBLIC_URL which browser clients reach through nginx.
+      LIVEKIT_SERVER_URL: http://livekit:7880
       APP_UPLOADS_DIR: /app/uploads
       MAIL_HOST: ${MAIL_HOST}
       MAIL_PORT: ${MAIL_PORT}
