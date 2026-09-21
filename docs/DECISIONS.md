@@ -508,3 +508,36 @@ anterior documentada em `AttachmentServingController` estabelece. Uma URL de ane
 permanece acessível a quem tiver o link, mesmo que a pessoa perca `VIEW_CHANNEL`
 do canal de origem. Fechar isso é uma decisão em aberto, registrada em
 `docs/OPEN_QUESTIONS.md`.
+
+## D21 — Registro mantém a mensagem "e-mail já cadastrado"; enumeration é mitigada por rate limit, não eliminada
+
+**Context**: A auditoria de segurança de 2026-09-18 apontou que `/register`
+responde 409 quando o e-mail já existe, permitindo enumerar contas registradas
+(`docs/security-audit-2026-09-18.md`, seção Média). O `login` e o
+`forgot-password` já evitam esse tipo de vazamento respondendo de forma
+genérica independente do e-mail existir. `/register`, porém, não pode replicar
+essa abordagem sem custo: ele faz auto-login na mesma resposta (seta o cookie
+de sessão e retorna o usuário recém-criado), e quando o e-mail já pertence a
+outra conta não há uma sessão real para devolver — responder de forma genérica
+"como se tivesse funcionado" exigiria trocar o fluxo por um de "verifique seu
+e-mail antes de logar", quebrando o auto-login atual.
+
+**Decision**: Manter a mensagem "Este e-mail já está cadastrado" (não é uma
+mudança de arquitetura) e, em vez disso, tornar a enumeração em massa inviável:
+`AuthService` ganhou dois `RateLimiter` para `/register`, um por e-mail
+normalizado (3/min, 10/hora — impede sondar repetidamente um único endereço) e
+um por IP do chamador (10/min, 30/hora — impede varrer muitos endereços a
+partir do mesmo atacante), resolvido via `ClientIp` (novo, em `common/`). A
+resolução de IP confia em `X-Real-IP`/`X-Forwarded-For` porque o backend não
+expõe porta própria no `docker-compose.yml` — nginx é o único que pode
+alcançá-lo diretamente, então esses headers não são forjáveis por um cliente
+externo.
+
+**Consequences**: Um atacante ainda descobre se um e-mail específico está
+cadastrado (como acontece no GitHub, Twitter etc. — trade-off aceito, não um
+bug), mas não consegue mais escanear uma lista grande de endereços rapidamente.
+Username já revelava conflito da mesma forma e não muda. Se o dono do projeto
+decidir eliminar o enumeration por completo no futuro, isso exige redesenhar o
+fluxo de registro (provavelmente para não fazer auto-login), o que é uma
+mudança de arquitetura e precisa de aprovação explícita — não é o escopo desta
+correção.

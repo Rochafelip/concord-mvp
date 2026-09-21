@@ -9,7 +9,7 @@ Resumo: **1 Crítica, 12 Alta, ~15 Média, ~25 Baixa/informativa**. A base está
 ## 🔴 CRÍTICA
 
 ### C1. Broadcasts WebSocket ignoram permissão VIEW_CHANNEL por canal — ✅ CORRIGIDO
-- **Status:** Corrigido em PR #33 (`fix/ws-channel-visibility-broadcast`, merged em `dev`). `PermissionService.visibleMemberIds(channel, candidateMemberIds)` agora filtra por `VIEW_CHANNEL` antes de qualquer broadcast, e é usado pelos 3 serviços afetados (`MessageService`, `ChannelService`, `ChannelReadStateService`). Cobertura de teste confirmada em `MessageServiceTest` (cenário com membro sem `VIEW_CHANNEL` por override de canal).
+- **Status:** Corrigido em PR #33 (`fix/ws-channel-visibility-broadcast`, merged em `dev`). `PermissionService.visibleMemberIds(channel, candidateMemberIds)` agora filtra por `VIEW_CHANNEL` antes de qualquer broadcast, e é usado pelos 3 serviços afetados (`MessageService`, `ChannelService`, `ChannelReadStateService`). Cobertura de teste confirmada em `MessageServiceTest` (cenário com membro sem `VIEW_CHANNEL` por override de canal). Isso também fechou o achado Média "CHANNEL_READ vaza metadados de leitura" listado abaixo — `ChannelReadStateServiceTest` tem cobertura dedicada (`markChannelAsRead_doesNotBroadcastToAMemberWithoutViewChannel` e correlatos).
 - **Arquivos:** `backend/src/main/java/com/concordmvp/messages/MessageService.java:186,211,272-274` (MESSAGE_CREATE/DELETE), `channels/ChannelService.java:99-101,125-127` (CHANNEL_CREATE/DELETE), `messages/ChannelReadStateService.java:136-154` (CHANNEL_READ)
 - **Descrição (achado original):** Todos os broadcasts em tempo real calculavam destinatários como "todos os membros do servidor" (`currentMemberIds(serverId)`), sem filtrar por quem tem `VIEW_CHANNEL` no canal específico. O REST (`getHistory`) respeitava essa restrição corretamente — só o WebSocket vazava.
 - **Impacto (achado original):** Qualquer membro do servidor recebia em tempo real o conteúdo de mensagens, criação/exclusão de canais e status de leitura de canais privados/restritos aos quais não tinha acesso — bypass total de autorização, mesmo que ele não conseguisse ler via REST.
@@ -75,8 +75,8 @@ Confirmado via `gh api repos/.../branches/master/protection`. `CI_CD.md` documen
 
 ## 🟡 MÉDIA (resumo — detalhe completo nos relatórios dos agentes)
 
-- Registro sem rate limiting + enumeração de e-mail via 409 (`AuthService.java:33-36`)
-- CHANNEL_READ vaza metadados de leitura para quem não tem VIEW_CHANNEL (mesma causa de C1)
+- ~~Registro sem rate limiting~~ — ✅ corrigido: `AuthService.register` agora usa dois `RateLimiter` (por e-mail e por IP, ver `docs/DECISIONS.md` D21). Enumeração de e-mail via 409 **continua existindo**, por decisão documentada em D21 (auto-login no registro impede a mesma abordagem genérica do login/forgot-password) — mitigada, não eliminada.
+- ~~CHANNEL_READ vaza metadados de leitura para quem não tem VIEW_CHANNEL~~ — ✅ já coberto pela correção do C1 (ver nota em C1 acima)
 - Race condition em `FriendshipService.acceptRequest` (sem `@Version`/update condicional) → notificação duplicada
 - N+1 real em `FriendshipService.listFriends`/`listPending` (query por amigo em vez de `findAllById` em lote)
 - `ServerService.getInvitePreview` carrega lista inteira de membros só para contar (endpoint público sem auth)

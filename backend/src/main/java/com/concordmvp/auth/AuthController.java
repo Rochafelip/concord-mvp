@@ -9,8 +9,10 @@ import com.concordmvp.auth.dto.ResetPasswordRequest;
 import com.concordmvp.auth.dto.VerifyResetPasswordRequest;
 import com.concordmvp.auth.reset.PasswordResetService;
 import com.concordmvp.auth.verification.EmailVerificationService;
+import com.concordmvp.common.ClientIp;
 import com.concordmvp.common.CurrentUser;
 import com.concordmvp.common.exception.UnauthorizedException;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -52,8 +54,9 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
-        AuthResponse response = authService.register(request);
+    public ResponseEntity<AuthResponse> register(
+            @Valid @RequestBody RegisterRequest request, HttpServletRequest httpRequest) {
+        AuthResponse response = authService.register(request, ClientIp.resolve(httpRequest));
         String token = jwtService.generateToken(response.userId());
         return ResponseEntity.status(HttpStatus.CREATED)
                 .header(HttpHeaders.SET_COOKIE, sessionCookie(token).toString())
