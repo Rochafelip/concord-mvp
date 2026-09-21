@@ -20,14 +20,18 @@ Resumo: **1 Crítica, 12 Alta, ~15 Média, ~25 Baixa/informativa**. A base está
 
 ## 🟠 ALTA
 
-### A1. Login sem rate limiting/lockout
-`auth/AuthController.java:55-62`, `auth/AuthService.java:51-61`. O `RateLimiter` já existe e é usado em reset/verificação de e-mail, mas não no login. Brute-force/credential stuffing sem limite. **Correção:** aplicar `RateLimiter` por IP+email com backoff. **Teste:** N logins inválidos seguidos → deve bloquear antes de esgotar tentativas.
+### A1. Login sem rate limiting/lockout — ✅ CORRIGIDO (parcial)
+- **Status:** Corrigido só por e-mail, não por IP. `AuthService.loginRateLimiter` (`RateLimiter`, mesmo já usado em reset/verificação de e-mail) bloqueia por e-mail normalizado antes de qualquer checagem de credencial, com a mesma mensagem genérica de credencial inválida (não distingue rate-limit de senha errada). A correção original pedia "por IP+email" — o componente IP nunca foi implementado aqui, só depois no `/register` (D21, achado Média). Reaproveitar o `ClientIp` já existente para adicionar a dimensão IP ao login é o trabalho que falta.
+- **Arquivos:** `auth/AuthService.java` (`loginRateLimiter`, `login`).
+- **Teste:** `AuthServiceTest.login_tooManyAttemptsInAShortWindow_throwsUnauthorized_withTheSameGenericMessage`, `login_rateLimitIsPerEmail_anotherEmailIsUnaffected`.
 
-### A2. Logout não revoga o JWT (token de 30 dias sem denylist)
-`auth/AuthController.java:68-73`, `auth/JwtService.java:21-46`. Logout só limpa o cookie; o JWT continua válido até expirar (30 dias) ou troca de senha. **Correção:** denylist de `jti` (mesmo em memória/Redis) ou refresh token de curta duração com rotação. **Teste:** logout, reapresentar o mesmo JWT, confirmar rejeição (após fix).
+### A2. Logout não revoga o JWT (token de 30 dias sem denylist) — ✅ CORRIGIDO
+- **Status:** Corrigido. `JwtDenylist` (em memória, mesmo padrão da D3) guarda o `jti` revogado; `AuthController.logout` insere o `jti` do token atual nela, e `JwtAuthFilter` rejeita qualquer requisição cujo `jti` esteja na denylist. Documentado em `docs/DECISIONS.md` D2 ("Update 2026-09-19, security audit"). Ainda sem refresh token/rotação — fora do escopo, D2 continua valendo para o resto da decisão. Gap residual aceito: reinício do backend limpa a denylist em memória.
+- **Arquivos:** `auth/JwtDenylist.java`, `auth/AuthController.java` (`logout`), `auth/JwtAuthFilter.java`.
+- **Teste:** `AuthControllerTest.logout_withAValidCookie_revokesItsJti_andClearsTheCookie`, `JwtAuthFilterTest` (cenário de token revogado → rejeitado).
 
-### A3. CHANNEL_CREATE/DELETE vazam existência de canais restritos via WS
-`channels/ChannelService.java:99-101,125-127`. Mesma causa raiz de C1 — contradiz o próprio design de `PermissionService.requireVisible` (retorna 404 para não revelar existência do canal). Ver correção em C1.
+### A3. CHANNEL_CREATE/DELETE vazam existência de canais restritos via WS — ✅ CORRIGIDO
+- **Status:** Corrigido junto com o C1 (mesmo PR #33, mesma causa raiz) — ver detalhes na entrada de C1 acima.
 
 ### A4. Download de anexos sem autenticação (segurança por obscuridade do UUID) — ✅ CORRIGIDO
 - **Status:** Corrigido. `/api/v1/uploads/**` saiu do `permitAll()` em `SecurityConfig` — agora exige o cookie de sessão como qualquer outra rota. `AttachmentServingController.serve` resolve a URL requisitada de volta ao `MessageAttachment` → `Message` → canal (`MessageService.requireAttachmentAccess`, novo) e aplica exatamente a mesma checagem usada para ler o histórico de mensagens: `ChannelService.getChannel` (404 se o canal não é visível) + `PermissionService.requireChannel(..., READ_MESSAGE_HISTORY)` (403 se visível mas sem permissão). Um usuário removido do servidor perde acesso imediatamente, já que deixa de ser membro visível do canal.
@@ -43,11 +47,15 @@ Resumo: **1 Crítica, 12 Alta, ~15 Média, ~25 Baixa/informativa**. A base está
 - **Teste:** `MediaServiceTest.removeParticipant_sendsRemoveParticipantRequestToLiveKitServerApi`, `_sendsAnAdminTokenScopedToTheRoom`, `_livekitUnreachableOrErrors_doesNotThrow` (via `MockRestServiceServer`, sem servidor real); `VoicePresenceServiceTest.disconnectFromServer_*` (3 cenários); `ServerServiceTest.leaveServer_disconnectsFromVoiceInThisServer`.
 - **Pendente (fora do escopo pedido, não implementado):** a auditoria também cita "é removido" — hoje não existe endpoint de expulsão de membro do servidor (moderação não implementada, ver AGENTS.md), então isso é só `leaveServer` mesmo. `deleteServer` (exclusão do servidor inteiro) não itera os membros conectados para desconectá-los do LiveKit — quem estiver em chamada continua até o TTL de 6h expirar. `VoicePresenceService.disconnectParticipant` (o "kick" de voz existente, via `DISCONNECT_MEMBERS`) também não chama `removeParticipant` — hoje só emite o evento WS `VOICE_KICK`, que um cliente adulterado poderia ignorar e permanecer conectado ao LiveKit.
 
-### A6. Exceções genéricas retornam 500 sem nenhum log
-`common/GlobalExceptionHandler.java:102-105`. `DataIntegrityViolationException` e qualquer outra exceção não mapeada viram 500 silencioso, sem `log.error`. Torna as race conditions abaixo (A7, e as de friendship) invisíveis em produção. **Correção:** logar com stacktrace completo antes de responder; handler dedicado para `DataIntegrityViolationException` → 409.
+### A6. Exceções genéricas retornam 500 sem nenhum log — ✅ CORRIGIDO
+- **Status:** Corrigido. `GlobalExceptionHandler.handleGeneric` loga com `log.error` (mensagem + stacktrace completo) antes de responder 500. `DataIntegrityViolationException` ganhou handler dedicado (`handleDataIntegrityViolation`), respondendo 409 em vez de cair no genérico — cobre tanto este achado quanto o A7 abaixo e as races de friendship do backlog Média.
+- **Arquivos:** `common/GlobalExceptionHandler.java` (`handleGeneric`, `handleDataIntegrityViolation`).
+- **Teste:** `GlobalExceptionHandlerTest.handlesDataIntegrityViolation_as409`. Sem teste dedicado de asserção de log para `handleGeneric` (o `log.error` existe no código, só não é verificado por teste).
 
-### A7. Race condition no registro de e-mail sem tratamento de constraint
-`auth/AuthService.java:33-49`. `existsByEmail` + `save` sem transação/lock; dois cadastros concorrentes com o mesmo e-mail geram uma `DataIntegrityViolationException` não tratada → 500 em vez de 409. **Correção:** capturar a violação e converter para `ConflictException`. **Teste:** duas threads registrando o mesmo e-mail simultaneamente → uma 201, outra 409 (nunca 500).
+### A7. Race condition no registro de e-mail sem tratamento de constraint — ✅ CORRIGIDO
+- **Status:** Corrigido — pelo handler genérico de `DataIntegrityViolationException` do A6 acima, não por um catch específico em `AuthService.register`. Dois cadastros concorrentes com o mesmo e-mail: o segundo bate na constraint única de `users.email`, vira `DataIntegrityViolationException`, e o handler global responde 409 em vez do 500 original.
+- **Arquivos:** `common/GlobalExceptionHandler.java` (mesmo handler do A6).
+- **Teste:** Nenhum teste de concorrência real (duas threads) reproduzindo especificamente este cenário — a cobertura existente (`GlobalExceptionHandlerTest.handlesDataIntegrityViolation_as409`) testa o handler genericamente, não o caminho de `AuthService.register` especificamente.
 
 ### A8. Sem constraint UNIQUE em `users.username` — ✅ CORRIGIDO
 - **Status:** Corrigido. `db/migration/V21__add_username_unique_constraint.sql` normaliza duplicatas existentes (renomeia todas menos a conta mais antiga por username, sufixando com parte do próprio id — seguro porque amizades/DMs referenciam usuários por id, não username) e adiciona `ALTER TABLE users ADD CONSTRAINT uq_users_username UNIQUE (username)`. `UserRepository.existsByUsername`/`existsByUsernameAndIdNot` são checados em `AuthService.register` e `UserService.updateProfile`, ambos lançando `ConflictException` (409) antes de tocar o banco.
