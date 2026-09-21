@@ -79,7 +79,7 @@ Confirmado via `gh api repos/.../branches/master/protection`. `CI_CD.md` documen
 - ~~CHANNEL_READ vaza metadados de leitura para quem não tem VIEW_CHANNEL~~ — ✅ já coberto pela correção do C1 (ver nota em C1 acima)
 - ~~Race condition em `FriendshipService.acceptRequest`~~ — ✅ corrigido: `FriendshipRepository.acceptIfPending` faz `UPDATE ... WHERE id=? AND status='PENDING'` condicional; `acceptRequest` só chama `notify()` quando essa atualização afeta 1 linha, então dois `accept` concorrentes nunca notificam duas vezes.
 - ~~N+1 real em `FriendshipService.listFriends`/`listPending`~~ — ✅ corrigido: `listFriends` e `listPending` agora batcham os outros usuários com `UserRepository.findAllById` (helper `usersById`) em vez de um `findById` por amizade.
-- `ServerService.getInvitePreview` carrega lista inteira de membros só para contar (endpoint público sem auth)
+- ~~`ServerService.getInvitePreview` carrega lista inteira de membros só para contar~~ — ✅ corrigido: usa `ServerMemberRepository.countByServerId` (`SELECT COUNT(*)`) em vez de carregar todas as linhas para chamar `.size()`. O endpoint continua público sem auth, por design (preview da tela de convite).
 - Cascade delete inconsistente entre tabelas (channels/messages/server_members sem `ON DELETE CASCADE`, dependendo 100% da lógica manual em `deleteServer`)
 - Sem configuração explícita de HikariCP (pool/timeout/leak detection)
 - `ImageIO.read` sem limite de dimensão no upload de avatar (decompression bomb / DoS de memória)

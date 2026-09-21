@@ -389,14 +389,14 @@ class ServerServiceTest {
 
         when(serverInviteRepository.findByCode("code123")).thenReturn(Optional.of(invite));
         when(serverRepository.findById(serverId)).thenReturn(Optional.of(server(serverId, ownerId)));
-        when(serverMemberRepository.findByServerId(serverId))
-                .thenReturn(List.of(member(serverId, ownerId), member(serverId, UUID.randomUUID())));
+        when(serverMemberRepository.countByServerId(serverId)).thenReturn(2L);
 
         InvitePreview preview = serverService.getInvitePreview("code123");
 
         assertThat(preview.serverId()).isEqualTo(serverId);
         assertThat(preview.serverName()).isEqualTo("Test Server");
         assertThat(preview.memberCount()).isEqualTo(2);
+        verify(serverMemberRepository, never()).findByServerId(any());
     }
 
     // --- leaveServer ---

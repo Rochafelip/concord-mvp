@@ -339,8 +339,8 @@ public class ServerService {
         ServerInvite invite = serverInviteRepository.findByCode(code)
                 .orElseThrow(() -> new ResourceNotFoundException("Invalid invite code"));
         Server server = requireServer(invite.getServerId());
-        int memberCount = serverMemberRepository.findByServerId(server.getId()).size();
-        return new InvitePreview(server.getId(), server.getName(), memberCount);
+        long memberCount = serverMemberRepository.countByServerId(server.getId());
+        return new InvitePreview(server.getId(), server.getName(), (int) memberCount);
     }
 
     private ServerInvite createInvite(UUID serverId) {
