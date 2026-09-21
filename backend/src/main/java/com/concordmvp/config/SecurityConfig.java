@@ -53,7 +53,6 @@ public class SecurityConfig {
                                 "/error",
                                 "/actuator/health",
                                 "/ws",
-                                "/api/v1/uploads/**",
                                 "/api/v1/invites/**"
                         ).permitAll()
                         .anyRequest().authenticated()

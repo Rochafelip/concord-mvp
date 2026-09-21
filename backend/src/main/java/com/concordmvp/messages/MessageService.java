@@ -225,6 +225,20 @@ public class MessageService {
     }
 
     /**
+     * Authorizes a GET on a previously uploaded attachment file (used by
+     * {@link AttachmentServingController}, security audit A4). Same access rule as reading the
+     * message it belongs to: the requester must be able to see that message's channel.
+     */
+    public void requireAttachmentAccess(String url, UUID requesterId) {
+        MessageAttachment attachment = messageAttachmentRepository.findByUrl(url)
+                .orElseThrow(() -> new ResourceNotFoundException("Attachment not found"));
+        Message message = messageRepository.findById(attachment.getMessageId())
+                .orElseThrow(() -> new ResourceNotFoundException("Attachment not found"));
+        Channel channel = channelService.getChannel(message.getChannelId(), requesterId);
+        permissionService.requireChannel(channel, requesterId, Permission.READ_MESSAGE_HISTORY);
+    }
+
+    /**
      * @param before   exclusive upper bound on {@code createdAt} for the compound cursor; {@code
      *                 null} for the first (most recent) page.
      * @param beforeId tiebreak for messages sharing {@code before}'s exact timestamp — required

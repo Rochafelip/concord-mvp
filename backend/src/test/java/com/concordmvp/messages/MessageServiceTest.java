@@ -866,4 +866,70 @@ class MessageServiceTest {
         verify(messageRepository, never()).delete(any());
         verifyNoInteractions(attachmentCleanupService);
     }
+
+    // --- requireAttachmentAccess ---
+
+    @Test
+    void requireAttachmentAccess_unknownUrl_throwsNotFound() {
+        UUID requesterId = UUID.randomUUID();
+        when(messageAttachmentRepository.findByUrl("/api/v1/uploads/missing.png")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> messageService.requireAttachmentAccess("/api/v1/uploads/missing.png", requesterId))
+                .isInstanceOf(com.concordmvp.common.exception.ResourceNotFoundException.class);
+
+        verifyNoInteractions(channelService);
+    }
+
+    @Test
+    void requireAttachmentAccess_nonMember_propagatesForbiddenFromChannelService() {
+        UUID channelId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        UUID messageId = UUID.randomUUID();
+        MessageAttachment attachment = new MessageAttachment(messageId, "/api/v1/uploads/a.png", "a.png", 10L, 0);
+        Message message = newMessage(channelId, UUID.randomUUID(), "", Instant.now(), messageId);
+        when(messageAttachmentRepository.findByUrl("/api/v1/uploads/a.png")).thenReturn(Optional.of(attachment));
+        when(messageRepository.findById(messageId)).thenReturn(Optional.of(message));
+        when(channelService.getChannel(channelId, requesterId))
+                .thenThrow(new ForbiddenException("Not a member of this server"));
+
+        assertThatThrownBy(() -> messageService.requireAttachmentAccess("/api/v1/uploads/a.png", requesterId))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void requireAttachmentAccess_withoutReadMessageHistory_throwsForbidden() {
+        UUID channelId = UUID.randomUUID();
+        UUID serverId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        UUID messageId = UUID.randomUUID();
+        MessageAttachment attachment = new MessageAttachment(messageId, "/api/v1/uploads/a.png", "a.png", 10L, 0);
+        Message message = newMessage(channelId, UUID.randomUUID(), "", Instant.now(), messageId);
+        Channel target = channel(channelId, serverId);
+        when(messageAttachmentRepository.findByUrl("/api/v1/uploads/a.png")).thenReturn(Optional.of(attachment));
+        when(messageRepository.findById(messageId)).thenReturn(Optional.of(message));
+        when(channelService.getChannel(channelId, requesterId)).thenReturn(target);
+        doThrow(new ForbiddenException("denied")).when(permissionService)
+                .requireChannel(target, requesterId, Permission.READ_MESSAGE_HISTORY);
+
+        assertThatThrownBy(() -> messageService.requireAttachmentAccess("/api/v1/uploads/a.png", requesterId))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void requireAttachmentAccess_memberWithPermission_doesNotThrow() {
+        UUID channelId = UUID.randomUUID();
+        UUID serverId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        UUID messageId = UUID.randomUUID();
+        MessageAttachment attachment = new MessageAttachment(messageId, "/api/v1/uploads/a.png", "a.png", 10L, 0);
+        Message message = newMessage(channelId, UUID.randomUUID(), "", Instant.now(), messageId);
+        Channel target = channel(channelId, serverId);
+        when(messageAttachmentRepository.findByUrl("/api/v1/uploads/a.png")).thenReturn(Optional.of(attachment));
+        when(messageRepository.findById(messageId)).thenReturn(Optional.of(message));
+        when(channelService.getChannel(channelId, requesterId)).thenReturn(target);
+
+        messageService.requireAttachmentAccess("/api/v1/uploads/a.png", requesterId);
+
+        verify(permissionService).requireChannel(target, requesterId, Permission.READ_MESSAGE_HISTORY);
+    }
 }
