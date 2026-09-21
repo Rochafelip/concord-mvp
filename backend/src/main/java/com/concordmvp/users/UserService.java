@@ -68,6 +68,9 @@ public class UserService {
 
     public User updateProfile(UUID userId, String username, String displayName) {
         User user = getCurrentUser(userId);
+        if (userRepository.existsByUsernameAndIdNot(username, userId)) {
+            throw new com.concordmvp.common.exception.ConflictException("Este nome de usuário já está em uso");
+        }
         user.setUsername(username);
         user.setDisplayName(displayName);
         User saved = userRepository.save(user);

@@ -52,6 +52,9 @@ public class AuthService {
         if (userRepository.existsByEmail(request.email())) {
             throw new ConflictException("Este e-mail já está cadastrado");
         }
+        if (userRepository.existsByUsername(request.username())) {
+            throw new ConflictException("Este nome de usuário já está em uso");
+        }
 
         User user = new User();
         user.setUsername(request.username());

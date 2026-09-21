@@ -1,6 +1,7 @@
 package com.concordmvp.users;
 
 import com.concordmvp.common.exception.BadRequestException;
+import com.concordmvp.common.exception.ConflictException;
 import com.concordmvp.common.exception.ResourceNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -73,6 +74,23 @@ class UserServiceTest {
 
         assertThat(result.getUsername()).isEqualTo("alice2");
         assertThat(result.getDisplayName()).isEqualTo("Alice Two");
+    }
+
+    @Test
+    void updateProfile_throwsConflict_whenUsernameTakenByAnotherUser() {
+        UUID userId = UUID.randomUUID();
+        User user = new User();
+        user.setId(userId);
+        user.setUsername("alice");
+        user.setDisplayName("Alice");
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(userRepository.existsByUsernameAndIdNot("bob", userId)).thenReturn(true);
+
+        assertThatThrownBy(() -> userService.updateProfile(userId, "bob", "Alice Two"))
+                .isInstanceOf(ConflictException.class);
+
+        verify(userRepository, never()).save(any());
     }
 
     @Test

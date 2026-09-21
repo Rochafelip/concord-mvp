@@ -54,6 +54,7 @@ class AuthServiceTest {
         UUID generatedId = UUID.randomUUID();
 
         when(userRepository.existsByEmail("alice@example.com")).thenReturn(false);
+        when(userRepository.existsByUsername("alice")).thenReturn(false);
         when(passwordEncoder.encode("password123")).thenReturn("hashed-password");
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> {
             User user = invocation.getArgument(0);
@@ -84,6 +85,20 @@ class AuthServiceTest {
     void register_throwsConflict_whenEmailAlreadyRegistered() {
         RegisterRequest request = new RegisterRequest("alice", "Alice", "alice@example.com", "password123");
         when(userRepository.existsByEmail("alice@example.com")).thenReturn(true);
+
+        assertThatThrownBy(() -> authService.register(request))
+                .isInstanceOf(ConflictException.class);
+
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void register_throwsConflict_whenUsernameAlreadyTaken() {
+        // username is used as a public identity (friend requests, DMs, member lists), so it needs
+        // the same uniqueness guarantee as email.
+        RegisterRequest request = new RegisterRequest("alice", "Alice", "alice@example.com", "password123");
+        when(userRepository.existsByEmail("alice@example.com")).thenReturn(false);
+        when(userRepository.existsByUsername("alice")).thenReturn(true);
 
         assertThatThrownBy(() -> authService.register(request))
                 .isInstanceOf(ConflictException.class);
