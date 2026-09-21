@@ -70,14 +70,20 @@ Resumo: **1 Crítica, 12 Alta, ~15 Média, ~25 Baixa/informativa**. A base está
 - **Teste:** `ServerServiceTest.deleteServer_deletesEverythingAndOnlyThenPublishesTheDeleteEvent_neverBroadcastingDirectly`, `ServerServiceTest.onServerDeleted_broadcastsTheDeleteEventToRecipients`.
 - **Pendente:** o mesmo padrão (`MessageService.persistAndBroadcast`) continua com o achado equivalente de severidade Baixa, fora do escopo desta correção — não foi tocado.
 
-### A10. PDF renderizado em iframe sem `sandbox`, classificação só por extensão da URL
-`frontend/src/features/chat/MessageList.tsx:28-30,295-302`. Se o backend algum dia falhar em validar o conteúdo real (hoje valida corretamente por magic bytes — ver A11 abaixo para o caso equivalente no backend), um HTML/JS disfarçado de `.pdf` executaria dentro do iframe na origem da aplicação. **Correção:** adicionar `sandbox` sem `allow-scripts`, defesa em profundidade mesmo com o backend correto.
+### A10. PDF renderizado em iframe sem `sandbox`, classificação só por extensão da URL — ✅ CORRIGIDO
+- **Status:** Corrigido. O `<iframe>` de preview de PDF em `MessageList.tsx` ganhou `sandbox="allow-same-origin"` — sem `allow-scripts`, então um HTML/JS disfarçado de `.pdf` não executa nele mesmo que o magic-byte check do backend algum dia falhe.
+- **Arquivos:** `frontend/src/features/chat/MessageList.tsx`.
+- **Descrição (achado original):** `frontend/src/features/chat/MessageList.tsx:28-30,295-302`. Se o backend algum dia falhar em validar o conteúdo real (hoje valida corretamente por magic bytes), um HTML/JS disfarçado de `.pdf` executaria dentro do iframe na origem da aplicação.
+- **Teste:** `MessageList.test.tsx` — `renders a PDF preview and download link (not an <img>)` agora também confere o atributo `sandbox`.
 
-### A11. Runner self-hosted do GitHub Actions em repositório público usado para deploy de produção
-`.github/workflows/cd-production.yml:16`, `rollback-production.yml:18`. Repositório é público; workflows de deploy rodam num runner self-hosted na própria máquina de produção. Mitigado hoje (só dispara em push a `master` protegida ou `workflow_dispatch` manual), mas desenho frágil. **Correção:** documentar que nenhum workflow com trigger `pull_request`/`pull_request_target` pode usar `self-hosted`; considerar `environment` protection rule.
+### A11. Runner self-hosted do GitHub Actions em repositório público usado para deploy de produção — ✅ CORRIGIDO
+- **Status:** Corrigido (documentação — o desenho de trigger já era seguro, só não estava formalizado como regra). `infrastructure/CI_CD.md` ganhou a seção "Self-hosted runner safety": nenhum workflow com trigger `pull_request`/`pull_request_target` pode usar `runs-on: [self-hosted]`; antes de adicionar um novo job self-hosted, confirmar que o trigger não é alcançável por PR e considerar uma `environment` protection rule se for menos restritivo que `push` em `master`.
+- **Arquivos:** `infrastructure/CI_CD.md`.
+- **Descrição (achado original):** `.github/workflows/cd-production.yml:16`, `rollback-production.yml:18`. Repositório é público; workflows de deploy rodam num runner self-hosted na própria máquina de produção. Mitigado desde sempre (só dispara em push a `master` protegida ou `workflow_dispatch` manual — `ci.yml`, que roda em PR, sempre usou `ubuntu-latest`), mas a regra nunca tinha sido escrita, então uma mudança futura podia violá-la sem ninguém notar.
 
-### A12. `enforce_admins: false` na proteção de branch (gap entre política documentada e configuração real)
-Confirmado via `gh api repos/.../branches/master/protection`. `CI_CD.md` documenta "no direct pushes", mas a config real permite ao admin dar push direto/merge sem CI verde em `master`/`dev`. **Correção:** ativar `enforce_admins` em ambas as branches.
+### A12. `enforce_admins: false` na proteção de branch (gap entre política documentada e configuração real) — ✅ CORRIGIDO
+- **Status:** Corrigido. `enforce_admins` ativado em `master` e `dev` via `gh api --method POST .../protection/enforce_admins`, confirmado por `gh api .../protection` retornando `enabled: true` nas duas. Nenhuma exceção de admin resta — push direto/merge sem PR + aprovação + CI verde não é mais possível em nenhuma das duas branches, nem para o dono do repositório.
+- **Descrição (achado original):** Confirmado via `gh api repos/.../branches/master/protection`. `CI_CD.md` documenta "no direct pushes", mas a config real permitia ao admin dar push direto/merge sem CI verde em `master`/`dev`.
 
 ---
 
