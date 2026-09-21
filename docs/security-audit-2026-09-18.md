@@ -78,7 +78,7 @@ Confirmado via `gh api repos/.../branches/master/protection`. `CI_CD.md` documen
 - ~~Registro sem rate limiting~~ — ✅ corrigido: `AuthService.register` agora usa dois `RateLimiter` (por e-mail e por IP, ver `docs/DECISIONS.md` D21). Enumeração de e-mail via 409 **continua existindo**, por decisão documentada em D21 (auto-login no registro impede a mesma abordagem genérica do login/forgot-password) — mitigada, não eliminada.
 - ~~CHANNEL_READ vaza metadados de leitura para quem não tem VIEW_CHANNEL~~ — ✅ já coberto pela correção do C1 (ver nota em C1 acima)
 - ~~Race condition em `FriendshipService.acceptRequest`~~ — ✅ corrigido: `FriendshipRepository.acceptIfPending` faz `UPDATE ... WHERE id=? AND status='PENDING'` condicional; `acceptRequest` só chama `notify()` quando essa atualização afeta 1 linha, então dois `accept` concorrentes nunca notificam duas vezes.
-- N+1 real em `FriendshipService.listFriends`/`listPending` (query por amigo em vez de `findAllById` em lote)
+- ~~N+1 real em `FriendshipService.listFriends`/`listPending`~~ — ✅ corrigido: `listFriends` e `listPending` agora batcham os outros usuários com `UserRepository.findAllById` (helper `usersById`) em vez de um `findById` por amizade.
 - `ServerService.getInvitePreview` carrega lista inteira de membros só para contar (endpoint público sem auth)
 - Cascade delete inconsistente entre tabelas (channels/messages/server_members sem `ON DELETE CASCADE`, dependendo 100% da lógica manual em `deleteServer`)
 - Sem configuração explícita de HikariCP (pool/timeout/leak detection)

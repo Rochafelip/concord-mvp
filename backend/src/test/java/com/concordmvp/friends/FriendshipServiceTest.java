@@ -30,8 +30,10 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyIterable;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -348,7 +350,7 @@ class FriendshipServiceTest {
         UUID friendId = UUID.randomUUID();
         Friendship accepted = friendship(UUID.randomUUID(), userId, friendId, FriendshipStatus.ACCEPTED);
         when(friendshipRepository.findAcceptedForUser(userId)).thenReturn(List.of(accepted));
-        when(userRepository.findById(friendId)).thenReturn(Optional.of(user(friendId, "bob")));
+        when(userRepository.findAllById(List.of(friendId))).thenReturn(List.of(user(friendId, "bob")));
         when(sessionRegistry.isOnline(friendId)).thenReturn(true);
 
         List<FriendResponse> result = friendshipService.listFriends(userId);
@@ -356,6 +358,24 @@ class FriendshipServiceTest {
         assertThat(result).hasSize(1);
         assertThat(result.get(0).user().id()).isEqualTo(friendId);
         assertThat(result.get(0).online()).isTrue();
+    }
+
+    @Test
+    void listFriends_batchesUserLookups_insteadOfOneQueryPerFriend() {
+        UUID userId = UUID.randomUUID();
+        UUID friendA = UUID.randomUUID();
+        UUID friendB = UUID.randomUUID();
+        Friendship acceptedA = friendship(UUID.randomUUID(), userId, friendA, FriendshipStatus.ACCEPTED);
+        Friendship acceptedB = friendship(UUID.randomUUID(), userId, friendB, FriendshipStatus.ACCEPTED);
+        when(friendshipRepository.findAcceptedForUser(userId)).thenReturn(List.of(acceptedA, acceptedB));
+        when(userRepository.findAllById(List.of(friendA, friendB)))
+                .thenReturn(List.of(user(friendA, "alice"), user(friendB, "bob")));
+
+        List<FriendResponse> result = friendshipService.listFriends(userId);
+
+        assertThat(result).hasSize(2);
+        verify(userRepository, never()).findById(any());
+        verify(userRepository, times(1)).findAllById(any());
     }
 
     @Test
@@ -368,7 +388,7 @@ class FriendshipServiceTest {
                 .thenReturn(List.of(incoming));
         when(friendshipRepository.findByStatusAndRequesterId(FriendshipStatus.PENDING, userId))
                 .thenReturn(List.of(outgoing));
-        when(userRepository.findById(otherId)).thenReturn(Optional.of(user(otherId, "bob")));
+        when(userRepository.findAllById(anyIterable())).thenReturn(List.of(user(otherId, "bob")));
 
         PendingFriendRequestsResponse result = friendshipService.listPending(userId);
 
@@ -376,5 +396,7 @@ class FriendshipServiceTest {
         assertThat(result.incoming().get(0).friendshipId()).isEqualTo(incoming.getId());
         assertThat(result.outgoing()).hasSize(1);
         assertThat(result.outgoing().get(0).friendshipId()).isEqualTo(outgoing.getId());
+        verify(userRepository, never()).findById(any());
+        verify(userRepository, times(1)).findAllById(any());
     }
 }
