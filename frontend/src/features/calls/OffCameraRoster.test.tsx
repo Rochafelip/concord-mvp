@@ -48,6 +48,7 @@ describe('OffCameraRoster', () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole('button', { name: 'Volume for Bob' }));
     fireEvent.change(screen.getByRole('slider', { name: 'Volume for Bob' }), { target: { value: '30' } });
 
     expect(voiceClient.setParticipantVolume).toHaveBeenCalledWith('bob', 0.3);
@@ -64,6 +65,8 @@ describe('OffCameraRoster', () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole('button', { name: 'Volume for Bob' }));
+
     expect(screen.getByRole('slider', { name: 'Volume for Bob' })).toHaveValue('30');
   });
 
@@ -76,7 +79,7 @@ describe('OffCameraRoster', () => {
       />,
     );
 
-    expect(screen.queryByRole('slider', { name: 'Volume for Eu' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Volume for Eu' })).not.toBeInTheDocument();
   });
 
   it('renders nothing when there are no off-camera participants', () => {
