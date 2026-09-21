@@ -80,7 +80,7 @@ Confirmado via `gh api repos/.../branches/master/protection`. `CI_CD.md` documen
 - ~~Race condition em `FriendshipService.acceptRequest`~~ — ✅ corrigido: `FriendshipRepository.acceptIfPending` faz `UPDATE ... WHERE id=? AND status='PENDING'` condicional; `acceptRequest` só chama `notify()` quando essa atualização afeta 1 linha, então dois `accept` concorrentes nunca notificam duas vezes.
 - ~~N+1 real em `FriendshipService.listFriends`/`listPending`~~ — ✅ corrigido: `listFriends` e `listPending` agora batcham os outros usuários com `UserRepository.findAllById` (helper `usersById`) em vez de um `findById` por amizade.
 - ~~`ServerService.getInvitePreview` carrega lista inteira de membros só para contar~~ — ✅ corrigido: usa `ServerMemberRepository.countByServerId` (`SELECT COUNT(*)`) em vez de carregar todas as linhas para chamar `.size()`. O endpoint continua público sem auth, por design (preview da tela de convite).
-- Cascade delete inconsistente entre tabelas (channels/messages/server_members sem `ON DELETE CASCADE`, dependendo 100% da lógica manual em `deleteServer`)
+- ~~Cascade delete inconsistente entre tabelas~~ — avaliado e **não é um achado a corrigir**: `docs/DATABASE.md` §26 proíbe deliberadamente `ON DELETE CASCADE` automático (só o `servers`→resto é cascade intencional, D11), então depender de `deleteServer` para a limpeza manual é a decisão funcionando como projetada, não um gap. Ver nota "Revisitada" em D11.
 - Sem configuração explícita de HikariCP (pool/timeout/leak detection)
 - `ImageIO.read` sem limite de dimensão no upload de avatar (decompression bomb / DoS de memória)
 - Nenhum backup do banco de dados (`docker-compose.yml`, confirmado como lacuna intencional em `DEPLOY.md`)

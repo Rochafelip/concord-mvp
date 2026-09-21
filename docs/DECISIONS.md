@@ -220,6 +220,19 @@ around. This is a deliberate, explicit cascade for the `servers` deletion
 path specifically — it does not change the general rule against automatic
 `ON DELETE CASCADE` for other relationships.
 
+**Revisitada (2026-09-21, auditoria de segurança)**: a auditoria apontou como
+achado Média que `channels.server_id`, `messages.channel_id` e
+`server_members.server_id` não têm `ON DELETE CASCADE`, deixando
+`ServerService.deleteServer` como a única coisa que garante que nada fica
+órfão — se uma tabela nova referenciando esses IDs for adicionada no futuro e
+`deleteServer` não for atualizado junto, a exclusão falha por violação de FK
+em vez de silenciosamente deixar lixo. Avaliado e mantido como está: essa
+falha (409, visível, bloqueia o delete até alguém notar e corrigir o código)
+é exatamente o comportamento que DATABASE.md §26 pede — mais seguro que a
+alternativa de um cascade automático no banco, que apagaria a tabela nova
+sem passar pela lógica revisável em `deleteServer`. Não é um achado a
+corrigir; é a decisão funcionando como projetada.
+
 ---
 
 ## D12 — No global online/offline presence system
