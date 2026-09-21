@@ -59,6 +59,21 @@ class WebSocketClient {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const url = `${protocol}//${window.location.host}/ws?token=${encodeURIComponent(ticket)}`;
 
+    // Guards against a second connect() firing while a socket from a previous call is still
+    // open/connecting (not exercised today — connect() is only ever called once, by
+    // useRealtimeSync's mount effect — but leaving it unguarded would leak that old socket and
+    // double-dispatch every incoming event to `subscribers` for as long as both stay open.
+    // Handlers are stripped before closing so this stale socket's close doesn't also schedule a
+    // second, redundant reconnect.
+    if (this.socket != null) {
+      const stale = this.socket;
+      stale.onopen = null;
+      stale.onclose = null;
+      stale.onmessage = null;
+      stale.onerror = null;
+      stale.close();
+    }
+
     const socket = new WebSocket(url);
     this.socket = socket;
 

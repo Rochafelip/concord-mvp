@@ -88,7 +88,7 @@ Confirmado via `gh api repos/.../branches/master/protection`. `CI_CD.md` documen
 - ~~`.env` de produção com permissão `644` em vez de `600`~~ — ✅ corrigido: `chmod 600` aplicado ao `.env` real neste host e adicionado ao passo 2 de `infrastructure/DEPLOY.md`, para que um deploy novo já nasça com a permissão certa.
 - ~~`unreadCount` sobrescrito para 0 em race entre `onMutate` otimista e `MESSAGE_CREATE` concorrente~~ — ✅ corrigido: `useMarkChannelAsRead` (frontend) tinha `onMutate` e `onSuccess` fazendo o mesmo reset para 0; o `onSuccess` era redundante e é quem causava a race (sobrescrevia um incremento concorrente do `MESSAGE_CREATE` que chegasse enquanto a mutation ainda estava em voo). Removido — só o `onMutate` otimista permanece. `hooks.test.tsx` (novo) reproduz a race.
 - ~~Checkbox de papel de membro não desabilita durante mutation pendente~~ — ✅ corrigido: `MemberRoleEditor` (frontend) desabilita todos os checkboxes de papel enquanto `useAssignRole`/`useUnassignRole` está pendente (as duas mutations são compartilhadas entre todos os checkboxes do membro, então o disable é do conjunto, não por papel individual).
-- `websocketClient.connect()` não fecha socket existente antes de abrir um novo (sem proteção estrutural, não acionado hoje)
+- ~~`websocketClient.connect()` não fecha socket existente antes de abrir um novo~~ — ✅ corrigido: `openSocket` agora fecha (e desliga os handlers de) qualquer socket anterior antes de criar um novo, evitando leak de conexão e double-dispatch de eventos para os `subscribers` caso `connect()` seja chamado de novo com uma conexão ainda aberta.
 
 ## 🟢 BAIXA / informativo
 
