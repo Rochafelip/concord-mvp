@@ -45,6 +45,12 @@ public class SecurityConfig {
                                 "/api/v1/auth/forgot-password",
                                 "/api/v1/auth/reset-password/verify",
                                 "/api/v1/auth/reset-password",
+                                // Spring Boot forwards here internally whenever a request handler throws —
+                                // that forward re-enters this filter chain as its own dispatch. Without this,
+                                // an unauthenticated caller who hits any error sees this filter's generic 401
+                                // instead of the real status/body BasicErrorController would have rendered,
+                                // masking the actual failure.
+                                "/error",
                                 "/actuator/health",
                                 "/ws",
                                 "/api/v1/uploads/**",
