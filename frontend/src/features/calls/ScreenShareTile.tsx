@@ -219,10 +219,8 @@ export function ScreenShareTile({ participant, className = '', onWatchClick, can
         )}
         {isFullscreen && (
           <div className="absolute right-2 top-2 flex items-center gap-1.5 rounded bg-black/60 px-2 py-1.5">
-            {/* Leads the bar (not sandwiched between the other buttons): its slider opens
-                leftward over open space instead of overlapping a neighboring button — see the bug
-                this fixed, where wedging it mid-row put the opened slider on top of the mute
-                button. */}
+            {/* Leads the bar (not sandwiched between the other buttons): its popover opens
+                downward from this position without overlapping a neighboring button. */}
             {!participant.isLocal && participant.screenShareHasAudio && participant.screenShareAudioEnabled && (
               <VolumeControl
                 label={`${participant.name}'s screen`}
