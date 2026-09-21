@@ -83,11 +83,17 @@ public class FriendshipService {
             throw new ForbiddenException("Somente quem recebeu o pedido pode aceitá-lo");
         }
 
+        // Conditional UPDATE instead of read-then-save: two requests racing past the PENDING
+        // check above could otherwise both save ACCEPTED and both call notify() below, sending a
+        // duplicate FRIEND_UPDATE. Only the request whose UPDATE actually flips a row gets to
+        // notify.
+        if (friendshipRepository.acceptIfPending(friendshipId) == 0) {
+            throw new ResourceNotFoundException("Friendship not found: " + friendshipId);
+        }
         friendship.setStatus(FriendshipStatus.ACCEPTED);
-        Friendship saved = friendshipRepository.save(friendship);
 
         notify(friendship.getRequesterId(), friendship.getAddresseeId());
-        return saved;
+        return friendship;
     }
 
     /** Cancels (by the requester) or declines (by the addressee) a still-pending request. */

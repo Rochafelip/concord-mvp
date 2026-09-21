@@ -224,12 +224,31 @@ class FriendshipServiceTest {
         UUID friendshipId = UUID.randomUUID();
         Friendship pending = friendship(friendshipId, requesterId, addresseeId, FriendshipStatus.PENDING);
         when(friendshipRepository.findById(friendshipId)).thenReturn(Optional.of(pending));
-        when(friendshipRepository.save(any(Friendship.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(friendshipRepository.acceptIfPending(friendshipId)).thenReturn(1);
 
         friendshipService.acceptRequest(friendshipId, addresseeId);
 
         assertThat(pending.getStatus()).isEqualTo(FriendshipStatus.ACCEPTED);
+        verify(friendshipRepository, never()).save(any());
         verify(realtimeEventPublisher).broadcast(eq(Set.of(requesterId, addresseeId)), any(WsEvent.class));
+    }
+
+    @Test
+    void acceptRequest_losesRaceToAConcurrentAccept_throwsResourceNotFound_andDoesNotNotify() {
+        // Both requests read the row as PENDING before either commits (e.g. a double-click or
+        // two open tabs); acceptIfPending's WHERE clause is what actually decides the winner —
+        // simulated here by the repository returning 0 rows affected for the loser.
+        UUID requesterId = UUID.randomUUID();
+        UUID addresseeId = UUID.randomUUID();
+        UUID friendshipId = UUID.randomUUID();
+        Friendship pending = friendship(friendshipId, requesterId, addresseeId, FriendshipStatus.PENDING);
+        when(friendshipRepository.findById(friendshipId)).thenReturn(Optional.of(pending));
+        when(friendshipRepository.acceptIfPending(friendshipId)).thenReturn(0);
+
+        assertThatThrownBy(() -> friendshipService.acceptRequest(friendshipId, addresseeId))
+                .isInstanceOf(ResourceNotFoundException.class);
+
+        verifyNoInteractions(realtimeEventPublisher);
     }
 
     // --- cancelOrDecline ---
