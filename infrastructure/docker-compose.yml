@@ -2,6 +2,12 @@ services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    # Security audit hardening (Média finding): the official image already drops to the
+    # `postgres` user itself and needs no Linux capability beyond what a normal process has.
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -22,6 +28,15 @@ services:
   backend-init:
     image: alpine:3.20
     restart: "no"
+    # CHOWN/FOWNER are the two capabilities `chown` itself needs — everything else this
+    # one-shot container could do is dropped.
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - FOWNER
+    security_opt:
+      - no-new-privileges:true
     command: >
       sh -c "mkdir -p /uploads &&
              chown -R 1000:1000 /uploads"
@@ -33,6 +48,13 @@ services:
       context: ../backend
       dockerfile: Dockerfile
     restart: unless-stopped
+
+    # Runs as a non-root user on an unprivileged port (Dockerfile's `USER app`) — no capability
+    # is needed beyond what's left after dropping all of them.
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
 
     environment:
       DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
@@ -82,6 +104,15 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
 
+    # Runtime image is nginx:alpine (see frontend/Dockerfile), which runs its master process as
+    # root to bind port 80 — NET_BIND_SERVICE is the one capability that needs to survive the drop.
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    security_opt:
+      - no-new-privileges:true
+
   # Self-hosted LiveKit SFU (docs/ARCHITECTURE.md §19, §23; docs/DECISIONS.md D16).
   # Signaling (port 7880) is reached by nginx over the internal network only,
   # same as backend:8080 — not published on the host.
@@ -94,6 +125,13 @@ services:
     image: livekit/livekit-server:v1.13.6
     restart: unless-stopped
     command: --config /etc/livekit.yaml
+
+    # Every port it binds (7881, 3478, 5349, the RTC UDP ranges) is unprivileged (>1024), so no
+    # capability is needed beyond what's left after dropping all of them.
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
 
     environment:
       # "key: secret" — see infrastructure/livekit/livekit.yaml's comment
@@ -114,6 +152,15 @@ services:
   nginx:
     image: nginx:alpine
     restart: unless-stopped
+
+    # nginx's master process runs as root to bind ports 80/443 — NET_BIND_SERVICE is the one
+    # capability that needs to survive the drop.
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    security_opt:
+      - no-new-privileges:true
 
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
@@ -141,6 +188,16 @@ services:
   duckdns:
     image: linuxserver/duckdns:latest
     restart: unless-stopped
+
+    # linuxserver.io images run their own s6-overlay init as root; no PUID/PGID or extra volume
+    # is set here for it to chown, so this container should need nothing beyond a normal
+    # process's capabilities — but that init has more moving parts than the other images here,
+    # so if it fails to start after this change, drop cap_drop/security_opt for this service
+    # first while narrowing down the missing capability.
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
 
     environment:
       SUBDOMAINS: ${DUCKDNS_SUBDOMAIN}
