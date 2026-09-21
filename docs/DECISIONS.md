@@ -265,6 +265,17 @@ column is added to `users` for the name shown in the UI, independent of
 (required, no uniqueness constraint — same as `username`). No `UNIQUE`
 constraint is added on `username`, unlike `email`, which stays unique.
 
+**Atualização (2026-09-19, achado A8 da auditoria de segurança)**: esta parte
+da decisão foi revertida. `username` passou a ser usado como identidade
+pública (amizades, DMs, listagem de membros) sem nunca ter tido garantia de
+unicidade em lugar nenhum — dois usuários podiam ter o mesmo username.
+`db/migration/V21__add_username_unique_constraint.sql` normaliza duplicatas
+existentes e adiciona `ALTER TABLE users ADD CONSTRAINT uq_users_username
+UNIQUE (username)`; `AuthService.register` e `UserService.updateProfile`
+validam a unicidade antes do `save`, convertendo violação em `ConflictException`
+(409). `display_name` continua sem constraint de unicidade, como decidido
+acima. Ver `docs/security-audit-2026-09-18.md`, achado A8.
+
 ---
 
 ## D15 — WebSocket events for server deletion and owner change
@@ -503,11 +514,8 @@ protegerem funcionalidades que não existem no Concord (`VIEW_SERVER`,
 `EDIT_OTHERS_MESSAGES`, `DELETE_MESSAGES` e `VIEW_VOICE_CHANNEL`). `MANAGE_SERVER`
 existe como bit mas não protege nada ainda: não há operação de edição de servidor.
 
-O endpoint de anexos (`/api/v1/uploads/**`) **continua público**, como a decisão
-anterior documentada em `AttachmentServingController` estabelece. Uma URL de anexo
-permanece acessível a quem tiver o link, mesmo que a pessoa perca `VIEW_CHANNEL`
-do canal de origem. Fechar isso é uma decisão em aberto, registrada em
-`docs/OPEN_QUESTIONS.md`.
+O endpoint de anexos (`/api/v1/uploads/**`) **não é mais público** — ver D22,
+que reverte a decisão original documentada abaixo.
 
 ## D21 — Registro mantém a mensagem "e-mail já cadastrado"; enumeration é mitigada por rate limit, não eliminada
 
@@ -541,3 +549,40 @@ decidir eliminar o enumeration por completo no futuro, isso exige redesenhar o
 fluxo de registro (provavelmente para não fazer auto-login), o que é uma
 mudança de arquitetura e precisa de aprovação explícita — não é o escopo desta
 correção.
+
+## D22 — Anexos exigem autenticação; reverte a decisão original de `/api/v1/uploads/**` público
+
+**Context**: Resolve `docs/OPEN_QUESTIONS.md` Q33. `AttachmentServingController`
+era deliberadamente não autenticado (`permitAll` em `SecurityConfig`), com o
+acesso dependendo só do nome de arquivo UUID ser imprevisível — o mesmo modelo
+de confiança de um link compartilhável. Essa era uma decisão consciente,
+tomada antes de cargos/permissões existirem (D20). Com `VIEW_CHANNEL` já
+reforçado em todo o resto (D20), esse era o único ponto onde uma URL de anexo
+continuava funcionando para qualquer pessoa que a tivesse — inclusive um
+membro que perdeu `VIEW_CHANNEL` do canal depois, ou alguém que nunca esteve
+no servidor. Achado A4 da auditoria de segurança de 2026-09-18.
+
+**Decision**: Implementada a Opção 2 das três avaliadas em Q33 — autenticação
+mais `VIEW_CHANNEL` no canal dono do anexo, não URLs assinadas/expiráveis.
+`/api/v1/uploads/**` saiu do `permitAll()`; agora exige o mesmo cookie de
+sessão que qualquer outra rota. `AttachmentServingController.serve` resolve a
+URL requisitada de volta a `MessageAttachment` → `Message` → canal
+(`MessageService.requireAttachmentAccess`, novo) e aplica a mesma checagem já
+usada para ler o histórico de mensagens: `ChannelService.getChannel` (404 se o
+canal não é visível) + `PermissionService.requireChannel(...,
+READ_MESSAGE_HISTORY)` (403 se visível mas sem permissão). A autenticação é
+por cookie, então `<img src>` continuou funcionando sem mudança no frontend —
+o preview do composer (paperclip, drag & drop, colar) usa
+`URL.createObjectURL` no navegador antes do envio, e o upload real só
+acontece no envio (AGENTS.md), então não havia janela em que o cliente
+precisasse buscar a URL do servidor antes de existir um `MessageAttachment`.
+
+**Consequences**: Um usuário removido do servidor perde acesso ao anexo
+imediatamente, já que deixa de ser membro visível do canal — fechando o gap
+que a D20 deixou em aberto para este endpoint. `AttachmentServingController`,
+`MessageService` (`requireAttachmentAccess`), `MessageAttachmentRepository`
+(`findByUrl`) e `SecurityConfig` mudaram. Teste:
+`MessageServiceTest.requireAttachmentAccess_unknownUrl_throwsNotFound`,
+`_nonMember_propagatesForbiddenFromChannelService`,
+`_withoutReadMessageHistory_throwsForbidden`,
+`_memberWithPermission_doesNotThrow`.
