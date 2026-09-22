@@ -13,7 +13,7 @@
 
     <groupId>com.concordmvp</groupId>
     <artifactId>concord-mvp-backend</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
+    <version>1.0.0</version>
     <name>concord-mvp-backend</name>
     <description>Backend API for concord-mvp, a Discord-inspired real-time chat MVP</description>
 
