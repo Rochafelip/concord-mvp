@@ -2,6 +2,12 @@ server:
   port: 8080
 
 spring:
+  jackson:
+    # Serializes Instant/Date fields (e.g. ApiError.timestamp) using Brazil's offset instead of
+    # UTC. Frontend timestamp display is unaffected -- it already renders in the browser's own
+    # local timezone via toLocaleTimeString()/toLocaleDateString(), which is offset-agnostic.
+    time-zone: America/Sao_Paulo
+
   datasource:
     url: ${DATABASE_URL}
     username: ${DATABASE_USERNAME}
