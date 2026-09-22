@@ -348,7 +348,7 @@ describe('voiceClient', () => {
     voiceClient.toggleScreenShare({ quality: 'hd', withAudio: false });
 
     expect(room.localParticipant.setScreenShareEnabled).toHaveBeenLastCalledWith(true, {
-      resolution: { width: 1280, height: 720 },
+      resolution: { width: 1280, height: 720, frameRate: 30 },
     });
     const lastCall = vi.mocked(room.localParticipant.setScreenShareEnabled).mock.calls.at(-1) as [
       boolean,
@@ -364,7 +364,7 @@ describe('voiceClient', () => {
     voiceClient.toggleScreenShare({ quality: 'fhd', withAudio: false });
 
     expect(room.localParticipant.setScreenShareEnabled).toHaveBeenLastCalledWith(true, {
-      resolution: { width: 1920, height: 1080 },
+      resolution: { width: 1920, height: 1080, frameRate: 30 },
     });
   });
 
@@ -380,7 +380,7 @@ describe('voiceClient', () => {
     expect(room.localParticipant.setScreenShareEnabled).toHaveBeenLastCalledWith(
       true,
       {
-        resolution: { width: 1280, height: 720 },
+        resolution: { width: 1280, height: 720, frameRate: 30 },
         audio: {
           autoGainControl: false,
           echoCancellation: false,

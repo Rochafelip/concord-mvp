@@ -1,8 +1,12 @@
 import type { ScreenShareQuality } from '../../types/voice';
 
-export const SCREEN_SHARE_QUALITY_PRESETS: Record<ScreenShareQuality, { width: number; height: number }> = {
-  hd: { width: 1280, height: 720 },
-  fhd: { width: 1920, height: 1080 },
+// frameRate is capped at 30 for every preset: uncapped capture let the browser pick a variable
+// rate (up to display refresh, sometimes spiking), which combined with no bitrate ceiling caused
+// viewers to see stutter. A steady 30fps is smoother for screen share content than a higher,
+// unstable rate.
+export const SCREEN_SHARE_QUALITY_PRESETS: Record<ScreenShareQuality, { width: number; height: number; frameRate: number }> = {
+  hd: { width: 1280, height: 720, frameRate: 30 },
+  fhd: { width: 1920, height: 1080, frameRate: 30 },
 };
 
 const STORAGE_KEY = 'concord:screenShareQuality';
