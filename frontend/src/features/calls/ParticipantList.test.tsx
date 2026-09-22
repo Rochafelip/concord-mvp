@@ -407,6 +407,7 @@ describe('ParticipantList', () => {
       });
       renderList();
 
+      fireEvent.click(screen.getByRole('button', { name: 'Volume for Bob' }));
       fireEvent.change(screen.getByRole('slider', { name: 'Volume for Bob' }), { target: { value: '30' } });
       expect(voiceClient.setParticipantVolume).toHaveBeenCalledWith('bob', 0.3);
 
@@ -421,6 +422,7 @@ describe('ParticipantList', () => {
       });
 
       expect(screen.getByTestId('watched-area')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Volume for Bob' }));
       expect(screen.getByRole('slider', { name: 'Volume for Bob' })).toHaveValue('30');
     });
 
@@ -433,6 +435,7 @@ describe('ParticipantList', () => {
       });
       renderList();
 
+      fireEvent.click(screen.getByRole('button', { name: 'Volume for Bob' }));
       fireEvent.change(screen.getByRole('slider', { name: 'Volume for Bob' }), { target: { value: '30' } });
       act(() => {
         useVoiceStore.setState({
@@ -452,6 +455,7 @@ describe('ParticipantList', () => {
         });
       });
 
+      fireEvent.click(screen.getByRole('button', { name: 'Volume for Bob' }));
       expect(screen.getByRole('slider', { name: 'Volume for Bob' })).toHaveValue('30');
       // Nothing re-sent a level on the way through: the audio was never actually reset.
       expect(vi.mocked(voiceClient.setParticipantVolume).mock.calls).toEqual([['bob', 0.3]]);
@@ -469,6 +473,7 @@ describe('ParticipantList', () => {
       });
       renderList();
 
+      fireEvent.click(screen.getByRole('button', { name: 'Volume for Bob' }));
       fireEvent.change(screen.getByRole('slider', { name: 'Volume for Bob' }), { target: { value: '30' } });
 
       act(() => {
@@ -481,6 +486,7 @@ describe('ParticipantList', () => {
       // Bob is reached by focusing his camera — the level is what must survive, not the widget.
       fireEvent.click(screen.getByRole('button', { name: "Focus on Bob's camera" }));
 
+      fireEvent.click(screen.getByRole('button', { name: 'Volume for Bob' }));
       expect(screen.getByRole('slider', { name: 'Volume for Bob' })).toHaveValue('30');
     });
   });

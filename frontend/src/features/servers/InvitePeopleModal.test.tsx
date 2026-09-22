@@ -48,6 +48,22 @@ describe('InvitePeopleModal', () => {
     expect(await screen.findByText('Copied!')).toBeInTheDocument();
   });
 
+  it('clears the pending "copied" reset timeout on unmount (security audit, Baixa finding)', async () => {
+    vi.mocked(api.getInvite).mockResolvedValue({ code: 'abc123' });
+    const user = userEvent.setup();
+    vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined);
+    const { unmount } = renderModal();
+    await screen.findByText(/\/invite\/abc123/);
+
+    await user.click(screen.getByRole('button', { name: 'Copy link' }));
+    await screen.findByText('Copied!');
+
+    const clearTimeoutSpy = vi.spyOn(window, 'clearTimeout');
+    unmount();
+
+    expect(clearTimeoutSpy).toHaveBeenCalled();
+  });
+
   it('regenerates the invite after confirming', async () => {
     vi.mocked(api.getInvite).mockResolvedValue({ code: 'abc123' });
     vi.mocked(api.regenerateInvite).mockResolvedValue({ code: 'xyz789' });

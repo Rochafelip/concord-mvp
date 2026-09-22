@@ -1,0 +1,137 @@
+# Auditoria de Segurança — Concord (2026-09-18)
+
+Auditoria somente-leitura, dividida em 6 domínios (auth/authz, messages/DM/realtime, media/uploads/LiveKit, banco de dados, frontend, Docker/CI/infra). Nenhum arquivo de código foi alterado nesta etapa. Achados ordenados por severidade global.
+
+Resumo: **1 Crítica, 12 Alta, ~15 Média, ~25 Baixa/informativa**. A base está, em geral, bem construída (JWT, hashing de tokens, IDOR em REST, magic-byte validation em uploads, cursor pagination, ausência de SQL injection/XSS clássico) — os achados abaixo são os desvios reais encontrados com evidência.
+
+---
+
+## 🔴 CRÍTICA
+
+### C1. Broadcasts WebSocket ignoram permissão VIEW_CHANNEL por canal — ✅ CORRIGIDO
+- **Status:** Corrigido em PR #33 (`fix/ws-channel-visibility-broadcast`, merged em `dev`). `PermissionService.visibleMemberIds(channel, candidateMemberIds)` agora filtra por `VIEW_CHANNEL` antes de qualquer broadcast, e é usado pelos 3 serviços afetados (`MessageService`, `ChannelService`, `ChannelReadStateService`). Cobertura de teste confirmada em `MessageServiceTest` (cenário com membro sem `VIEW_CHANNEL` por override de canal). Isso também fechou o achado Média "CHANNEL_READ vaza metadados de leitura" listado abaixo — `ChannelReadStateServiceTest` tem cobertura dedicada (`markChannelAsRead_doesNotBroadcastToAMemberWithoutViewChannel` e correlatos).
+- **Arquivos:** `backend/src/main/java/com/concordmvp/messages/MessageService.java:186,211,272-274` (MESSAGE_CREATE/DELETE), `channels/ChannelService.java:99-101,125-127` (CHANNEL_CREATE/DELETE), `messages/ChannelReadStateService.java:136-154` (CHANNEL_READ)
+- **Descrição (achado original):** Todos os broadcasts em tempo real calculavam destinatários como "todos os membros do servidor" (`currentMemberIds(serverId)`), sem filtrar por quem tem `VIEW_CHANNEL` no canal específico. O REST (`getHistory`) respeitava essa restrição corretamente — só o WebSocket vazava.
+- **Impacto (achado original):** Qualquer membro do servidor recebia em tempo real o conteúdo de mensagens, criação/exclusão de canais e status de leitura de canais privados/restritos aos quais não tinha acesso — bypass total de autorização, mesmo que ele não conseguisse ler via REST.
+- **Correção aplicada:** Helper único (`visibleMemberIds`) reutilizado pelos 3 serviços, calculando a interseção entre membros do servidor e quem tem VIEW_CHANNEL no canal, antes de qualquer `broadcast`.
+- **Teste:** Canal com override negando VIEW_CHANNEL para usuário B; A posta/apaga mensagem, cria/apaga canal, ou marca como lido; verificar que B não recebe o evento via WS.
+
+---
+
+## 🟠 ALTA
+
+### A1. Login sem rate limiting/lockout — ✅ CORRIGIDO
+- **Status:** Corrigido, agora por e-mail **e** por IP. `AuthService.loginRateLimiter` (por e-mail normalizado) já existia; ganhou um `loginIpRateLimiter` irmão (mesmos limites do `registerIpRateLimiter` do `/register`, via `ClientIp`), bloqueando antes de qualquer checagem de credencial e com a mesma mensagem genérica de credencial inválida nos dois casos — um rate-limit nunca se distingue de senha errada. Fecha o componente IP que faltava desde a correção original desse achado.
+- **Arquivos:** `auth/AuthService.java` (`loginIpRateLimiter`, `login`), `auth/AuthController.java` (`login`, resolve `ClientIp`).
+- **Teste:** `AuthServiceTest.login_tooManyAttemptsInAShortWindow_throwsUnauthorized_withTheSameGenericMessage`, `login_rateLimitIsPerEmail_anotherEmailIsUnaffected`, `login_tooManyAttemptsFromTheSameIpAcrossDifferentEmails_throwsUnauthorized`, `login_rateLimitIsPerIp_anotherIpIsUnaffected`.
+
+### A2. Logout não revoga o JWT (token de 30 dias sem denylist) — ✅ CORRIGIDO
+- **Status:** Corrigido. `JwtDenylist` (em memória, mesmo padrão da D3) guarda o `jti` revogado; `AuthController.logout` insere o `jti` do token atual nela, e `JwtAuthFilter` rejeita qualquer requisição cujo `jti` esteja na denylist. Documentado em `docs/DECISIONS.md` D2 ("Update 2026-09-19, security audit"). Ainda sem refresh token/rotação — fora do escopo, D2 continua valendo para o resto da decisão. Gap residual aceito: reinício do backend limpa a denylist em memória.
+- **Arquivos:** `auth/JwtDenylist.java`, `auth/AuthController.java` (`logout`), `auth/JwtAuthFilter.java`.
+- **Teste:** `AuthControllerTest.logout_withAValidCookie_revokesItsJti_andClearsTheCookie`, `JwtAuthFilterTest` (cenário de token revogado → rejeitado).
+
+### A3. CHANNEL_CREATE/DELETE vazam existência de canais restritos via WS — ✅ CORRIGIDO
+- **Status:** Corrigido junto com o C1 (mesmo PR #33, mesma causa raiz) — ver detalhes na entrada de C1 acima.
+
+### A4. Download de anexos sem autenticação (segurança por obscuridade do UUID) — ✅ CORRIGIDO
+- **Status:** Corrigido. `/api/v1/uploads/**` saiu do `permitAll()` em `SecurityConfig` — agora exige o cookie de sessão como qualquer outra rota. `AttachmentServingController.serve` resolve a URL requisitada de volta ao `MessageAttachment` → `Message` → canal (`MessageService.requireAttachmentAccess`, novo) e aplica exatamente a mesma checagem usada para ler o histórico de mensagens: `ChannelService.getChannel` (404 se o canal não é visível) + `PermissionService.requireChannel(..., READ_MESSAGE_HISTORY)` (403 se visível mas sem permissão). Um usuário removido do servidor perde acesso imediatamente, já que deixa de ser membro visível do canal.
+- **Arquivos:** `messages/AttachmentServingController.java`, `messages/MessageService.java` (`requireAttachmentAccess`), `messages/MessageAttachmentRepository.java` (`findByUrl`), `config/SecurityConfig.java`.
+- **Descrição (achado original):** `messages/AttachmentServingController.java:28-45`, `config/SecurityConfig.java:50` (`/api/v1/uploads/**` em `permitAll()`). Qualquer pessoa com a URL (vazada via Referer, cache de preview, logs, print) acessava o arquivo permanentemente, mesmo sem ser membro do servidor/canal, sem possibilidade de revogação seletiva.
+- **Teste:** `MessageServiceTest.requireAttachmentAccess_unknownUrl_throwsNotFound`, `requireAttachmentAccess_nonMember_propagatesForbiddenFromChannelService`, `requireAttachmentAccess_withoutReadMessageHistory_throwsForbidden`, `requireAttachmentAccess_memberWithPermission_doesNotThrow`.
+- **Observação:** o preview do composer (paperclip, drag & drop, colar) usa `URL.createObjectURL` no navegador antes do envio — o upload real só acontece no envio (AGENTS.md), então não há janela em que o cliente precise buscar a URL do servidor antes de existir um `MessageAttachment`.
+
+### A5. Token LiveKit não é revogado quando o vínculo com o servidor termina — ✅ CORRIGIDO (parcial)
+- **Status:** Corrigido para `leaveServer`. `MediaService.removeParticipant(channelId, userId)` (novo) chama a Server API do LiveKit (`POST /twirp/livekit.RoomService/RemoveParticipant`) com um token admin (`roomAdmin: true`, escopado à room) assinado com o mesmo segredo já usado para os tokens de join — sem adicionar `io.livekit:livekit-server` (mesma justificativa de dependência do resto da classe), usando `RestClient` (já vem com `spring-web`). `VoicePresenceService.disconnectFromServer(serverId, userId)` (novo) resolve, a partir do próprio tracking de presença em memória, se o usuário está conectado a algum canal de voz *deste* servidor; se estiver, chama `removeParticipant` e limpa a presença. `ServerService.leaveServer` chama `disconnectFromServer` logo após remover a membership. A chamada é best-effort (captura `RestClientException`, loga e nunca propaga) — LiveKit fora do ar não pode bloquear o usuário de sair do servidor.
+- **Arquivos:** `media/MediaService.java` (`removeParticipant`, `buildRoomAdminToken`), `media/VoicePresenceService.java` (`disconnectFromServer`), `servers/ServerService.java` (`leaveServer`), `application.yml`/`application-dev.yml` (`livekit.server-url`, nova), `infrastructure/docker-compose.yml` (`LIVEKIT_SERVER_URL=http://livekit:7880`, alcançado pela rede interna do Docker — distinto de `LIVEKIT_PUBLIC_URL`, que os clientes usam via nginx).
+- **Descrição (achado original):** `media/MediaService.java:57,84-101` (TTL de 6h, sem integração com LiveKit Server API), `servers/ServerService.java:217-233` (`leaveServer` não chamava `RoomServiceClient.removeParticipant`). Usuário que saía do servidor continuava com áudio/vídeo/tela ativos na chamada por até 6h.
+- **Teste:** `MediaServiceTest.removeParticipant_sendsRemoveParticipantRequestToLiveKitServerApi`, `_sendsAnAdminTokenScopedToTheRoom`, `_livekitUnreachableOrErrors_doesNotThrow` (via `MockRestServiceServer`, sem servidor real); `VoicePresenceServiceTest.disconnectFromServer_*` (3 cenários); `ServerServiceTest.leaveServer_disconnectsFromVoiceInThisServer`.
+- **Pendente (fora do escopo pedido, não implementado):** a auditoria também cita "é removido" — hoje não existe endpoint de expulsão de membro do servidor (moderação não implementada, ver AGENTS.md), então isso é só `leaveServer` mesmo. `deleteServer` (exclusão do servidor inteiro) não itera os membros conectados para desconectá-los do LiveKit — quem estiver em chamada continua até o TTL de 6h expirar. `VoicePresenceService.disconnectParticipant` (o "kick" de voz existente, via `DISCONNECT_MEMBERS`) também não chama `removeParticipant` — hoje só emite o evento WS `VOICE_KICK`, que um cliente adulterado poderia ignorar e permanecer conectado ao LiveKit.
+
+### A6. Exceções genéricas retornam 500 sem nenhum log — ✅ CORRIGIDO
+- **Status:** Corrigido. `GlobalExceptionHandler.handleGeneric` loga com `log.error` (mensagem + stacktrace completo) antes de responder 500. `DataIntegrityViolationException` ganhou handler dedicado (`handleDataIntegrityViolation`), respondendo 409 em vez de cair no genérico — cobre tanto este achado quanto o A7 abaixo e as races de friendship do backlog Média.
+- **Arquivos:** `common/GlobalExceptionHandler.java` (`handleGeneric`, `handleDataIntegrityViolation`).
+- **Teste:** `GlobalExceptionHandlerTest.handlesDataIntegrityViolation_as409`. Sem teste dedicado de asserção de log para `handleGeneric` (o `log.error` existe no código, só não é verificado por teste).
+
+### A7. Race condition no registro de e-mail sem tratamento de constraint — ✅ CORRIGIDO
+- **Status:** Corrigido — pelo handler genérico de `DataIntegrityViolationException` do A6 acima, não por um catch específico em `AuthService.register`. Dois cadastros concorrentes com o mesmo e-mail: o segundo bate na constraint única de `users.email`, vira `DataIntegrityViolationException`, e o handler global responde 409 em vez do 500 original.
+- **Arquivos:** `common/GlobalExceptionHandler.java` (mesmo handler do A6).
+- **Teste:** Nenhum teste de concorrência real (duas threads) reproduzindo especificamente este cenário — a cobertura existente (`GlobalExceptionHandlerTest.handlesDataIntegrityViolation_as409`) testa o handler genericamente, não o caminho de `AuthService.register` especificamente.
+
+### A8. Sem constraint UNIQUE em `users.username` — ✅ CORRIGIDO
+- **Status:** Corrigido. `db/migration/V21__add_username_unique_constraint.sql` normaliza duplicatas existentes (renomeia todas menos a conta mais antiga por username, sufixando com parte do próprio id — seguro porque amizades/DMs referenciam usuários por id, não username) e adiciona `ALTER TABLE users ADD CONSTRAINT uq_users_username UNIQUE (username)`. `UserRepository.existsByUsername`/`existsByUsernameAndIdNot` são checados em `AuthService.register` e `UserService.updateProfile`, ambos lançando `ConflictException` (409) antes de tocar o banco.
+- **Arquivos:** `backend/src/main/resources/db/migration/V21__add_username_unique_constraint.sql`, `auth/AuthService.java:55-57`, `users/UserService.java:69-73`, `users/UserRepository.java:13-15`
+- **Descrição (achado original):** `db/migration/V1__create_users.sql`, `users/User.java:23-24`, `users/UserService.java:69-76`. `username` é usado como identidade pública (amizades, DMs, membros) mas nunca teve unicidade garantida em lugar nenhum. **Correção:** migração `ALTER TABLE users ADD CONSTRAINT uq_users_username UNIQUE (username)` (após normalizar duplicatas) + validação em register/updateProfile.
+- **Teste:** `AuthServiceTest.register_throwsConflict_whenUsernameAlreadyTaken`, `UserServiceTest.updateProfile_throwsConflict_whenUsernameTakenByAnotherUser` — dois usuários com o mesmo username → 409.
+
+### A9. Broadcast de exclusão de servidor acontece antes do commit da transação — ✅ CORRIGIDO (parcial)
+- **Status:** Corrigido para `ServerService.deleteServer`. O `SERVER_DELETE` agora é publicado como `ServerDeletedEvent` (via `ApplicationEventPublisher`) só depois de todas as exclusões, e um listener `@TransactionalEventListener(phase = AFTER_COMMIT)` (`ServerService.onServerDeleted`) é quem de fato chama `realtimeEventPublisher.broadcast` — nunca antes do commit, e nunca se a transação sofrer rollback. `deleteServer` não interage mais com `RealtimeEventPublisher` diretamente.
+- **Arquivos:** `servers/ServerService.java` (`deleteServer`, `onServerDeleted`), `servers/ServerDeletedEvent.java` (novo).
+- **Descrição (achado original):** `servers/ServerService.java:258-296`. `SERVER_DELETE` era publicado antes das exclusões subsequentes; se qualquer uma falhasse, a transação sofria rollback mas o cliente já tinha sido notificado — bug já sinalizado em comentário no próprio código.
+- **Teste:** `ServerServiceTest.deleteServer_deletesEverythingAndOnlyThenPublishesTheDeleteEvent_neverBroadcastingDirectly`, `ServerServiceTest.onServerDeleted_broadcastsTheDeleteEventToRecipients`.
+- **Pendente:** o mesmo padrão (`MessageService.persistAndBroadcast`) continua com o achado equivalente de severidade Baixa, fora do escopo desta correção — não foi tocado.
+
+### A10. PDF renderizado em iframe sem `sandbox`, classificação só por extensão da URL — ✅ CORRIGIDO
+- **Status:** Corrigido. O `<iframe>` de preview de PDF em `MessageList.tsx` ganhou `sandbox="allow-same-origin"` — sem `allow-scripts`, então um HTML/JS disfarçado de `.pdf` não executa nele mesmo que o magic-byte check do backend algum dia falhe.
+- **Arquivos:** `frontend/src/features/chat/MessageList.tsx`.
+- **Descrição (achado original):** `frontend/src/features/chat/MessageList.tsx:28-30,295-302`. Se o backend algum dia falhar em validar o conteúdo real (hoje valida corretamente por magic bytes), um HTML/JS disfarçado de `.pdf` executaria dentro do iframe na origem da aplicação.
+- **Teste:** `MessageList.test.tsx` — `renders a PDF preview and download link (not an <img>)` agora também confere o atributo `sandbox`.
+
+### A11. Runner self-hosted do GitHub Actions em repositório público usado para deploy de produção — ✅ CORRIGIDO
+- **Status:** Corrigido (documentação — o desenho de trigger já era seguro, só não estava formalizado como regra). `infrastructure/CI_CD.md` ganhou a seção "Self-hosted runner safety": nenhum workflow com trigger `pull_request`/`pull_request_target` pode usar `runs-on: [self-hosted]`; antes de adicionar um novo job self-hosted, confirmar que o trigger não é alcançável por PR e considerar uma `environment` protection rule se for menos restritivo que `push` em `master`.
+- **Arquivos:** `infrastructure/CI_CD.md`.
+- **Descrição (achado original):** `.github/workflows/cd-production.yml:16`, `rollback-production.yml:18`. Repositório é público; workflows de deploy rodam num runner self-hosted na própria máquina de produção. Mitigado desde sempre (só dispara em push a `master` protegida ou `workflow_dispatch` manual — `ci.yml`, que roda em PR, sempre usou `ubuntu-latest`), mas a regra nunca tinha sido escrita, então uma mudança futura podia violá-la sem ninguém notar.
+
+### A12. `enforce_admins: false` na proteção de branch (gap entre política documentada e configuração real) — ✅ CORRIGIDO
+- **Status:** Corrigido. `enforce_admins` ativado em `master` e `dev` via `gh api --method POST .../protection/enforce_admins`, confirmado por `gh api .../protection` retornando `enabled: true` nas duas. Nenhuma exceção de admin resta — push direto/merge sem PR + aprovação + CI verde não é mais possível em nenhuma das duas branches, nem para o dono do repositório.
+- **Descrição (achado original):** Confirmado via `gh api repos/.../branches/master/protection`. `CI_CD.md` documenta "no direct pushes", mas a config real permitia ao admin dar push direto/merge sem CI verde em `master`/`dev`.
+
+---
+
+## 🟡 MÉDIA (resumo — detalhe completo nos relatórios dos agentes)
+
+- ~~Registro sem rate limiting~~ — ✅ corrigido: `AuthService.register` agora usa dois `RateLimiter` (por e-mail e por IP, ver `docs/DECISIONS.md` D21). Enumeração de e-mail via 409 **continua existindo**, por decisão documentada em D21 (auto-login no registro impede a mesma abordagem genérica do login/forgot-password) — mitigada, não eliminada.
+- ~~CHANNEL_READ vaza metadados de leitura para quem não tem VIEW_CHANNEL~~ — ✅ já coberto pela correção do C1 (ver nota em C1 acima)
+- ~~Race condition em `FriendshipService.acceptRequest`~~ — ✅ corrigido: `FriendshipRepository.acceptIfPending` faz `UPDATE ... WHERE id=? AND status='PENDING'` condicional; `acceptRequest` só chama `notify()` quando essa atualização afeta 1 linha, então dois `accept` concorrentes nunca notificam duas vezes.
+- ~~N+1 real em `FriendshipService.listFriends`/`listPending`~~ — ✅ corrigido: `listFriends` e `listPending` agora batcham os outros usuários com `UserRepository.findAllById` (helper `usersById`) em vez de um `findById` por amizade.
+- ~~`ServerService.getInvitePreview` carrega lista inteira de membros só para contar~~ — ✅ corrigido: usa `ServerMemberRepository.countByServerId` (`SELECT COUNT(*)`) em vez de carregar todas as linhas para chamar `.size()`. O endpoint continua público sem auth, por design (preview da tela de convite).
+- ~~Cascade delete inconsistente entre tabelas~~ — avaliado e **não é um achado a corrigir**: `docs/DATABASE.md` §26 proíbe deliberadamente `ON DELETE CASCADE` automático (só o `servers`→resto é cascade intencional, D11), então depender de `deleteServer` para a limpeza manual é a decisão funcionando como projetada, não um gap. Ver nota "Revisitada" em D11.
+- ~~Sem configuração explícita de HikariCP~~ — ✅ corrigido: `application.yml` ganhou `spring.datasource.hikari` (`maximum-pool-size: 10`, `minimum-idle: 2`, `connection-timeout`, `idle-timeout`, `max-lifetime`, e `leak-detection-threshold: 60000` — desligado por padrão no Hikari, agora ligado).
+- ~~`ImageIO.read` sem limite de dimensão no upload de avatar~~ — ✅ corrigido: `AvatarStorageService.isDecodable` lê largura/altura via `ImageReader.getWidth`/`getHeight` (só o header, sem decodificar os pixels) e rejeita acima de 4096px, antes de qualquer `BufferedImage` ser criado. `AvatarStorageServiceTest` (novo, arquivo não tinha teste algum antes).
+- Nenhum backup do banco de dados (`docker-compose.yml`, confirmado como lacuna intencional em `DEPLOY.md`)
+- ~~Containers sem `cap_drop`/`no-new-privileges`/`read_only`~~ — ✅ parcialmente corrigido: todos os serviços em `infrastructure/docker-compose.yml` ganharam `cap_drop: [ALL]` + `security_opt: [no-new-privileges:true]`, com `cap_add` mínimo onde a imagem precisa (nginx/frontend: `NET_BIND_SERVICE` para as portas 80/443; `backend-init`: `CHOWN`/`FOWNER` para o `chown` que ele faz). `read_only` ficou de fora deliberadamente — exigiria mapear `tmpfs`/volumes graváveis por imagem sem um ambiente Docker disponível para validar que cada container ainda sobe, risco desnecessário para um deploy self-hosted ao vivo.
+- ~~`.env` de produção com permissão `644` em vez de `600`~~ — ✅ corrigido: `chmod 600` aplicado ao `.env` real neste host e adicionado ao passo 2 de `infrastructure/DEPLOY.md`, para que um deploy novo já nasça com a permissão certa.
+- ~~`unreadCount` sobrescrito para 0 em race entre `onMutate` otimista e `MESSAGE_CREATE` concorrente~~ — ✅ corrigido: `useMarkChannelAsRead` (frontend) tinha `onMutate` e `onSuccess` fazendo o mesmo reset para 0; o `onSuccess` era redundante e é quem causava a race (sobrescrevia um incremento concorrente do `MESSAGE_CREATE` que chegasse enquanto a mutation ainda estava em voo). Removido — só o `onMutate` otimista permanece. `hooks.test.tsx` (novo) reproduz a race.
+- ~~Checkbox de papel de membro não desabilita durante mutation pendente~~ — ✅ corrigido: `MemberRoleEditor` (frontend) desabilita todos os checkboxes de papel enquanto `useAssignRole`/`useUnassignRole` está pendente (as duas mutations são compartilhadas entre todos os checkboxes do membro, então o disable é do conjunto, não por papel individual).
+- ~~`websocketClient.connect()` não fecha socket existente antes de abrir um novo~~ — ✅ corrigido: `openSocket` agora fecha (e desliga os handlers de) qualquer socket anterior antes de criar um novo, evitando leak de conexão e double-dispatch de eventos para os `subscribers` caso `connect()` seja chamado de novo com uma conexão ainda aberta.
+
+## 🟢 BAIXA / informativo
+
+- Diferença de tempo de resposta no login (timing side-channel) — **sem ação**: a mitigação que importa (custo de CPU do bcrypt constante entre e-mail inexistente e senha errada, via `DUMMY_PASSWORD_HASH`) já existe; o resíduo é só jitter de rede/DB, não um achado corrigível.
+- `RateLimiter` em memória (não distribuído) — **sem ação**, decisão documentada em `docs/DECISIONS.md` D3 (instância única).
+- JWT secret de fallback hardcoded no perfil dev — **sem ação**: só existe em `application-dev.yml` (prod não tem fallback, falha ao subir sem a env var), nome já avisa "do-not-use-in-production".
+- ~~`sendRequest` de amizade sem tratamento de constraint (500 em vez de 409)~~ — ✅ já resolvido incidentalmente pelo handler genérico de `DataIntegrityViolationException` (achados A6/A7 acima).
+- ~~Inconsistência 403 vs 404 em `ChannelReadStateController`~~ — ✅ corrigido: removido o try/catch que convertia tudo em 403; agora propaga a mesma distinção 404-se-invisível/403-se-não-membro que o resto do código usa.
+- ~~Broadcast de mensagem antes do commit (`MessageService.persistAndBroadcast`)~~ — ✅ corrigido: mesmo padrão do A9 (`@TransactionalEventListener(phase = AFTER_COMMIT)`), agora também para `MESSAGE_CREATE`/`MESSAGE_DELETE`.
+- Sem deduplicação de mensagens por `clientMessageId` — **não corrigido, mudança maior**: exige protocolo WS novo, coluna/índice de dedup e lógica no frontend para gerar e rastrear o id. Fora do escopo desta leva.
+- Backfill de migração sem lote (`V21`) — **sem ação**: tabela pequena o bastante (D1, grupo de amigos) para o `UPDATE` em massa ser trivial; revisitar se a escala mudar.
+- Índices sub-ótimos em `friendships` (`findByPair` não usa o índice `LEAST/GREATEST`) — **não corrigido, baixo retorno**: impacto real desprezível na escala do projeto. `roles`/`member_roles` foram checados e estão corretos, não é um achado ali.
+- ~~Avatar sem limite de multipart dedicado~~ — ✅ corrigido: `AvatarUploadSizeFilter` rejeita por `Content-Length` antes do multipart parsing, escopado à rota do avatar.
+- ~~Sem rate limit em uploads de anexo/avatar~~ — ✅ corrigido: `RateLimiter` por usuário em `AttachmentUploadService`/`UserService.updateAvatar`.
+- ~~PDFs servidos inline na mesma origem~~ — mantido como está, formalizado como exceção deliberada em `AGENTS.md`/`docs/DECISIONS.md` D23 (decisão do dono do projeto), não é mais uma divergência não-intencional entre spec e código.
+- ~~Timeouts não limpos em `InvitePeopleModal`/`useRealtimeSync`~~ — ✅ corrigido: ambos guardam o id do timeout numa ref e limpam no unmount/antes de reagendar.
+- ~~`ServerSidebar` sem estado de erro~~ — ✅ corrigido: indicador de erro com retry quando `useServers`/`useFriends` falha.
+- Reconexão WS sem backoff exponencial — **sem ação**: decisão deliberada, documentada no próprio `websocketClient.ts` (app pequeno, não precisa sobreviver a thundering herd).
+- ~~Workflows CI sem bloco `permissions:` explícito~~ — ✅ corrigido: `permissions: contents: read` nos três workflows.
+- Credenciais triviais no Postgres de CI — **sem ação**: container efêmero, nunca exposto fora do job, risco nulo (mesma leitura da auditoria original).
+- Certificado de produção sob nome "selfsigned" — **sem ação**: já documentado e mitigado em `infrastructure/DUCKDNS.md` (comando de verificação do emissor real).
+- ~~Serviços nginx/livekit/duckdns rodando como root~~ — ✅ corrigido (parcial, junto com o achado Média equivalente): `cap_drop`/`no-new-privileges` em todos; `duckdns` também ganhou `PUID`/`PGID`. O root do master process do nginx/frontend é como a imagem oficial funciona (bind privilegiado + workers não-root) e não é removível sem trocar de imagem.
+- ~~Sem Dependabot/scanner de dependências~~ — ✅ corrigido: `.github/dependabot.yml` cobrindo npm, Maven, Docker e GitHub Actions.
+
+## ✅ Verificado e correto (não são achados)
+
+IDOR em REST (mensagens/DM/amigos/canais/servidores), hierarquia de roles e escalada de privilégio, path traversal em avatar/anexos (nomes sempre UUID gerados no servidor), hashing de tokens de reset/verificação, invalidação de sessão ao trocar senha, cookie httpOnly+secure+SameSite=Strict, handshake WebSocket com ticket single-use, SQL Injection (100% JPQL parametrizado), XSS clássico (sem `dangerouslySetInnerHTML`, token nunca em localStorage), paginação por cursor em mensagens/DMs, magic-byte validation em uploads, controle de acesso a avatar, emissão de token LiveKit checando membership/permissão antes de mintar, volume persistente de uploads, secrets não versionados no Git, branch protection com status checks obrigatórios, porta do Postgres não exposta publicamente.
+
+---
+
+## Relatórios completos por domínio
+Os 6 agentes de auditoria produziram relatórios detalhados (evidência, arquivo:linha, teste necessário) para cada achado — este documento é a consolidação. Domínios: (1) auth & authorization, (2) messages/DM/realtime, (3) media/uploads/LiveKit, (4) banco de dados, (5) frontend React, (6) Docker/CI/infraestrutura.

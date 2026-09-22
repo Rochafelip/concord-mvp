@@ -96,7 +96,10 @@ public class ChannelService {
             }
         }
 
-        Set<UUID> recipients = currentMemberIds(serverId);
+        // Only members who can actually see the new channel (base permissions + any override
+        // already in place) may receive the broadcast — currentMemberIds(serverId) alone would
+        // leak the channel's existence/name to the whole server.
+        Set<UUID> recipients = permissionService.visibleMemberIds(saved, currentMemberIds(serverId));
         ChannelResponse payload = toResponse(saved);
         realtimeEventPublisher.broadcast(recipients, new WsEvent(WsEventType.CHANNEL_CREATE, payload));
 
@@ -115,6 +118,11 @@ public class ChannelService {
         requireServer(channel.getServerId());
         permissionService.requireServer(channel.getServerId(), requesterId, Permission.MANAGE_CHANNELS);
 
+        // Computed before the delete below: channel_permission_overrides rows for this channel
+        // are removed by ON DELETE CASCADE as part of it, so visibility can no longer be resolved
+        // correctly afterwards.
+        Set<UUID> recipients = permissionService.visibleMemberIds(channel, currentMemberIds(channel.getServerId()));
+
         List<UUID> messageIds = messageRepository.findByChannelIdIn(List.of(channelId)).stream()
                 .map(com.concordmvp.messages.Message::getId)
                 .toList();
@@ -122,7 +130,6 @@ public class ChannelService {
         messageRepository.deleteByChannelIdIn(List.of(channelId));
         channelRepository.delete(channel);
 
-        Set<UUID> recipients = currentMemberIds(channel.getServerId());
         realtimeEventPublisher.broadcast(recipients,
                 new WsEvent(WsEventType.CHANNEL_DELETE, new ChannelDeletedPayload(channelId, channel.getServerId())));
     }

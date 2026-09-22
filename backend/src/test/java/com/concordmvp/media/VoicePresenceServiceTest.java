@@ -64,13 +64,19 @@ class VoicePresenceServiceTest {
     @Mock
     private PermissionService permissionService;
 
+    @Mock
+    private MediaService mediaService;
+
+    @Mock
+    private WhistleService whistleService;
+
     private VoicePresenceService voicePresenceService;
 
     @BeforeEach
     void setUp() {
         voicePresenceService = new VoicePresenceService(
                 channelService, serverMemberRepository, serverRepository, userRepository,
-                realtimeEventPublisher, permissionService);
+                realtimeEventPublisher, permissionService, mediaService, whistleService);
         // Default: the requester can see every voice channel. Tests that care about the filter
         // override this for one specific channel.
         lenient().when(permissionService.hasChannel(any(UUID.class), any(), eq(Permission.VIEW_CHANNEL)))
@@ -220,11 +226,71 @@ class VoicePresenceServiceTest {
         assertThat(current.get(0).deafened()).isTrue();
     }
 
+    // --- isConnected ---
+
+    @Test
+    void isConnected_userPresentInThatChannel_returnsTrue() {
+        UUID channelId = UUID.randomUUID();
+        UUID serverId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        when(channelService.getChannel(channelId, userId)).thenReturn(channel(channelId, serverId, ChannelType.VOICE));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user(userId, "Felipe")));
+        lenient().when(serverMemberRepository.findByServerId(serverId)).thenReturn(List.of(member(userId, serverId)));
+        voicePresenceService.updatePresence(channelId, userId, false, false, false, false, false);
+
+        assertThat(voicePresenceService.isConnected(channelId, userId)).isTrue();
+    }
+
+    @Test
+    void isConnected_userPresentInADifferentChannel_returnsFalse() {
+        UUID channelId = UUID.randomUUID();
+        UUID otherChannelId = UUID.randomUUID();
+        UUID serverId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        when(channelService.getChannel(channelId, userId)).thenReturn(channel(channelId, serverId, ChannelType.VOICE));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user(userId, "Felipe")));
+        lenient().when(serverMemberRepository.findByServerId(serverId)).thenReturn(List.of(member(userId, serverId)));
+        voicePresenceService.updatePresence(channelId, userId, false, false, false, false, false);
+
+        assertThat(voicePresenceService.isConnected(otherChannelId, userId)).isFalse();
+    }
+
+    @Test
+    void isConnected_userNotInVoiceAtAll_returnsFalse() {
+        assertThat(voicePresenceService.isConnected(UUID.randomUUID(), UUID.randomUUID())).isFalse();
+    }
+
     @Test
     void removePresence_absentUser_isNoOp() {
         voicePresenceService.removePresence(UUID.randomUUID());
 
         verify(realtimeEventPublisher, never()).broadcast(any(), any());
+    }
+
+    @Test
+    void removePresence_absentUser_stillClearsAnyActiveWhistle() {
+        // Defensive: covers a presence entry that already expired/was removed while a
+        // WHISTLE_STOP frame was lost, so a whistle never survives its sender disappearing.
+        UUID userId = UUID.randomUUID();
+
+        voicePresenceService.removePresence(userId);
+
+        verify(whistleService).clearForUser(userId);
+    }
+
+    @Test
+    void removePresence_presentUser_alsoClearsAnyActiveWhistle() {
+        UUID channelId = UUID.randomUUID();
+        UUID serverId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        when(channelService.getChannel(channelId, userId)).thenReturn(channel(channelId, serverId, ChannelType.VOICE));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user(userId, "Felipe")));
+        lenient().when(serverMemberRepository.findByServerId(serverId)).thenReturn(List.of(member(userId, serverId)));
+        voicePresenceService.updatePresence(channelId, userId, false, false, false, false, false);
+
+        voicePresenceService.removePresence(userId);
+
+        verify(whistleService).clearForUser(userId);
     }
 
     @Test
@@ -379,5 +445,50 @@ class VoicePresenceServiceTest {
         when(permissionService.hasChannel(hiddenChannelId, requesterId, Permission.VIEW_CHANNEL)).thenReturn(false);
 
         assertThat(voicePresenceService.getPresence(serverId, requesterId)).isEmpty();
+    }
+
+    // --- disconnectFromServer ---
+
+    @Test
+    void disconnectFromServer_userConnectedInThisServer_removesLiveKitParticipant_andClearsPresence() {
+        // Security audit A5: leaving a server must not leave the member talking in a voice room
+        // whose join token stays valid for hours.
+        UUID channelId = UUID.randomUUID();
+        UUID serverId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        when(channelService.getChannel(channelId, userId)).thenReturn(channel(channelId, serverId, ChannelType.VOICE));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user(userId, "Felipe")));
+        when(serverMemberRepository.findByServerId(serverId)).thenReturn(List.of(member(userId, serverId)));
+        voicePresenceService.updatePresence(channelId, userId, false, false, false, false, false);
+
+        voicePresenceService.disconnectFromServer(serverId, userId);
+
+        verify(mediaService).removeParticipant(channelId, userId);
+
+        when(serverMemberRepository.existsByServerIdAndUserId(serverId, userId)).thenReturn(true);
+        assertThat(voicePresenceService.getPresence(serverId, userId)).isEmpty();
+    }
+
+    @Test
+    void disconnectFromServer_userNotInVoice_isNoOp() {
+        voicePresenceService.disconnectFromServer(UUID.randomUUID(), UUID.randomUUID());
+
+        verifyNoInteractions(mediaService);
+    }
+
+    @Test
+    void disconnectFromServer_userInVoiceOnADifferentServer_isNoOp() {
+        UUID channelId = UUID.randomUUID();
+        UUID actualServerId = UUID.randomUUID();
+        UUID otherServerId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        when(channelService.getChannel(channelId, userId)).thenReturn(channel(channelId, actualServerId, ChannelType.VOICE));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user(userId, "Felipe")));
+        lenient().when(serverMemberRepository.findByServerId(actualServerId)).thenReturn(List.of(member(userId, actualServerId)));
+        voicePresenceService.updatePresence(channelId, userId, false, false, false, false, false);
+
+        voicePresenceService.disconnectFromServer(otherServerId, userId);
+
+        verifyNoInteractions(mediaService);
     }
 }

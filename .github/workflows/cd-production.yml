@@ -7,6 +7,11 @@ on:
   push:
     branches: [master]
 
+# Least privilege for the GITHUB_TOKEN (security audit, Baixa finding) — this job only
+# checks out code and runs docker compose locally, it never calls back to the GitHub API.
+permissions:
+  contents: read
+
 concurrency:
   group: cd-production
   cancel-in-progress: false
@@ -21,9 +26,21 @@ jobs:
         with:
           clean: false
 
+      # Built one at a time on purpose: this runner is the same low-memory home PC that hosts
+      # prod (3.8GB RAM, 1GB swap). Building backend (Maven) and frontend (Node/rolldown)
+      # concurrently under `up -d --build` was pushing the box into swap thrashing and killing
+      # the frontend build with an opaque rolldown error.
+      - name: Build backend image
+        working-directory: infrastructure
+        run: docker compose --env-file .env -f docker-compose.yml -f docker-compose.prod.yml build backend
+
+      - name: Build frontend image
+        working-directory: infrastructure
+        run: docker compose --env-file .env -f docker-compose.yml -f docker-compose.prod.yml build frontend
+
       - name: Deploy
         working-directory: infrastructure
-        run: docker compose --env-file .env -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+        run: docker compose --env-file .env -f docker-compose.yml -f docker-compose.prod.yml up -d
 
       - name: Health check
         run: |

@@ -147,6 +147,31 @@ public class PermissionService {
         return visible;
     }
 
+    /**
+     * Which of the given candidates may actually see this channel — the set a realtime broadcast
+     * for the channel is allowed to reach. Unlike {@link #filterVisible}, which fixes the user and
+     * varies the channels, this fixes the channel and varies the users, so it fetches the
+     * channel's overrides once rather than once per candidate.
+     */
+    public Set<UUID> visibleMemberIds(Channel channel, Set<UUID> candidateMemberIds) {
+        if (candidateMemberIds.isEmpty()) {
+            return Set.of();
+        }
+
+        List<ChannelPermissionOverride> overrides = overrideRepository.findByChannelId(channel.getId());
+        Set<UUID> visible = new HashSet<>();
+        for (UUID userId : candidateMemberIds) {
+            MemberContext context = resolve(channel.getServerId(), userId);
+            long permissions = context.elevated() || !context.member()
+                    ? context.base()
+                    : applyOverrides(context, userId, overrides);
+            if (PermissionSet.has(permissions, Permission.VIEW_CHANNEL)) {
+                visible.add(userId);
+            }
+        }
+        return visible;
+    }
+
     // ------------------------------------------------------------------ hierarchy
 
     /**

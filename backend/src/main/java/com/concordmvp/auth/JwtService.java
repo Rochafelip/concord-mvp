@@ -39,6 +39,7 @@ public class JwtService {
         Instant expiry = now.plus(tokenTtl());
         return Jwts.builder()
                 .subject(userId.toString())
+                .id(UUID.randomUUID().toString())
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(expiry))
                 .signWith(signingKey)
@@ -47,7 +48,43 @@ public class JwtService {
 
     public UUID parseUserId(String token) {
         try {
-            return UUID.fromString(parseClaims(token).getSubject());
+            String subject = parseClaims(token).getSubject();
+            if (subject == null) {
+                throw new UnauthorizedException("Sessão inválida ou expirada");
+            }
+            return UUID.fromString(subject);
+        } catch (JwtException | IllegalArgumentException e) {
+            throw new UnauthorizedException("Sessão inválida ou expirada");
+        }
+    }
+
+    /**
+     * The {@code jti} claim — how a specific token is identified in {@link JwtDenylist}.
+     *
+     * <p>Null for a token issued before {@code jti} was added to {@link #generateToken}: an
+     * existing session cookie from before that change, not a malformed/tampered one, so it's
+     * treated the same as any other unusable token rather than left to throw a raw NPE out of
+     * {@link JwtAuthFilter} (which runs on every request, including public ones).
+     */
+    public UUID parseJti(String token) {
+        try {
+            String id = parseClaims(token).getId();
+            if (id == null) {
+                throw new UnauthorizedException("Sessão inválida ou expirada");
+            }
+            return UUID.fromString(id);
+        } catch (JwtException | IllegalArgumentException e) {
+            throw new UnauthorizedException("Sessão inválida ou expirada");
+        }
+    }
+
+    public Instant parseExpiration(String token) {
+        try {
+            Date expiration = parseClaims(token).getExpiration();
+            if (expiration == null) {
+                throw new UnauthorizedException("Sessão inválida ou expirada");
+            }
+            return expiration.toInstant();
         } catch (JwtException | IllegalArgumentException e) {
             throw new UnauthorizedException("Sessão inválida ou expirada");
         }

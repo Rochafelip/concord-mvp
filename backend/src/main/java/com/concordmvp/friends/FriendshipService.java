@@ -21,10 +21,14 @@ import com.concordmvp.users.dto.UserSummaryResponse;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 public class FriendshipService {
@@ -83,11 +87,17 @@ public class FriendshipService {
             throw new ForbiddenException("Somente quem recebeu o pedido pode aceitá-lo");
         }
 
+        // Conditional UPDATE instead of read-then-save: two requests racing past the PENDING
+        // check above could otherwise both save ACCEPTED and both call notify() below, sending a
+        // duplicate FRIEND_UPDATE. Only the request whose UPDATE actually flips a row gets to
+        // notify.
+        if (friendshipRepository.acceptIfPending(friendshipId) == 0) {
+            throw new ResourceNotFoundException("Friendship not found: " + friendshipId);
+        }
         friendship.setStatus(FriendshipStatus.ACCEPTED);
-        Friendship saved = friendshipRepository.save(friendship);
 
         notify(friendship.getRequesterId(), friendship.getAddresseeId());
-        return saved;
+        return friendship;
     }
 
     /** Cancels (by the requester) or declines (by the addressee) a still-pending request. */
@@ -119,24 +129,32 @@ public class FriendshipService {
 
     public List<FriendResponse> listFriends(UUID userId) {
         List<Friendship> accepted = friendshipRepository.findAcceptedForUser(userId);
+        Map<UUID, User> usersById = usersById(accepted.stream().map(f -> f.otherUserId(userId)).toList());
         return accepted.stream()
                 .map(f -> {
                     UUID otherId = f.otherUserId(userId);
-                    User other = userRepository.findById(otherId)
-                            .orElseThrow(() -> new ResourceNotFoundException("User not found: " + otherId));
-                    return new FriendResponse(f.getId(), toSummary(other), isOnline(otherId), f.getUpdatedAt());
+                    return new FriendResponse(
+                            f.getId(), toSummary(requireUser(usersById, otherId)), isOnline(otherId), f.getUpdatedAt());
                 })
                 .toList();
     }
 
     public PendingFriendRequestsResponse listPending(UUID userId) {
-        List<FriendRequestResponse> incoming = friendshipRepository
-                .findByStatusAndAddresseeId(FriendshipStatus.PENDING, userId).stream()
-                .map(f -> toRequestResponse(f, f.getRequesterId()))
+        List<Friendship> incomingFriendships =
+                friendshipRepository.findByStatusAndAddresseeId(FriendshipStatus.PENDING, userId);
+        List<Friendship> outgoingFriendships =
+                friendshipRepository.findByStatusAndRequesterId(FriendshipStatus.PENDING, userId);
+
+        List<UUID> otherIds = new ArrayList<>(incomingFriendships.size() + outgoingFriendships.size());
+        incomingFriendships.forEach(f -> otherIds.add(f.getRequesterId()));
+        outgoingFriendships.forEach(f -> otherIds.add(f.getAddresseeId()));
+        Map<UUID, User> usersById = usersById(otherIds);
+
+        List<FriendRequestResponse> incoming = incomingFriendships.stream()
+                .map(f -> toRequestResponse(f, requireUser(usersById, f.getRequesterId())))
                 .toList();
-        List<FriendRequestResponse> outgoing = friendshipRepository
-                .findByStatusAndRequesterId(FriendshipStatus.PENDING, userId).stream()
-                .map(f -> toRequestResponse(f, f.getAddresseeId()))
+        List<FriendRequestResponse> outgoing = outgoingFriendships.stream()
+                .map(f -> toRequestResponse(f, requireUser(usersById, f.getAddresseeId())))
                 .toList();
         return new PendingFriendRequestsResponse(incoming, outgoing);
     }
@@ -161,10 +179,26 @@ public class FriendshipService {
                 .anyMatch(serversOfA::contains);
     }
 
-    private FriendRequestResponse toRequestResponse(Friendship friendship, UUID otherUserId) {
-        User other = userRepository.findById(otherUserId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + otherUserId));
+    private FriendRequestResponse toRequestResponse(Friendship friendship, User other) {
         return new FriendRequestResponse(friendship.getId(), toSummary(other), friendship.getCreatedAt());
+    }
+
+    /** Batches the per-friendship user lookups in {@code listFriends}/{@code listPending} into
+     *  one {@code IN (...)} query instead of one {@code findById} per row. */
+    private Map<UUID, User> usersById(List<UUID> ids) {
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        return userRepository.findAllById(ids).stream()
+                .collect(Collectors.toMap(User::getId, Function.identity()));
+    }
+
+    private User requireUser(Map<UUID, User> usersById, UUID id) {
+        User user = usersById.get(id);
+        if (user == null) {
+            throw new ResourceNotFoundException("User not found: " + id);
+        }
+        return user;
     }
 
     private UserSummaryResponse toSummary(User user) {

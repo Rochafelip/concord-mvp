@@ -29,6 +29,7 @@ import type {
   VoicePresencePayload,
   UserProfileUpdatePayload,
   ChannelReadPayload,
+  WhistlePayload,
 } from '../types/websocket';
 
 function truncate(text: string, maxLength: number): string {
@@ -63,6 +64,7 @@ export function useRealtimeSync(): void {
   const currentChannelIdRef = useRef(currentChannelId);
   const currentFriendUserIdRef = useRef(currentFriendUserId);
   const currentPathRef = useRef(location.pathname);
+  const voiceKickNotificationTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   useLayoutEffect(() => {
     currentServerIdRef.current = currentServerId;
     currentChannelIdRef.current = currentChannelId;
@@ -318,11 +320,35 @@ export function useRealtimeSync(): void {
           voiceClient.disconnect();
           const message = 'You were disconnected from the voice channel by a server admin.';
           setNotification(message);
-          window.setTimeout(() => {
+          if (voiceKickNotificationTimeoutRef.current != null) {
+            window.clearTimeout(voiceKickNotificationTimeoutRef.current);
+          }
+          voiceKickNotificationTimeoutRef.current = window.setTimeout(() => {
             if (useNotificationStore.getState().message === message) {
               useNotificationStore.getState().clear();
             }
           }, 5000);
+        }
+      }),
+
+      websocketClient.subscribe('WHISTLE_START', (payload) => {
+        const { senderId, targetUserId } = payload as WhistlePayload;
+        if (targetUserId === useAuthStore.getState().user?.id) {
+          useVoiceStore.getState().setReceivingWhistleFrom(senderId);
+        }
+      }),
+
+      // Covers both roles: I'm the target (stop showing the incoming-whistle badge) and I'm the
+      // sender (the backend force-stopped it, e.g. the target disconnected — voiceClient.stopWhistle
+      // resets the local LiveKit subscription permissions even if the hotkey is still held).
+      websocketClient.subscribe('WHISTLE_STOP', (payload) => {
+        const { senderId, targetUserId } = payload as WhistlePayload;
+        const myId = useAuthStore.getState().user?.id;
+        if (targetUserId === myId) {
+          useVoiceStore.getState().setReceivingWhistleFrom(null);
+        }
+        if (senderId === myId) {
+          voiceClient.stopWhistle();
         }
       }),
 
@@ -446,6 +472,9 @@ export function useRealtimeSync(): void {
 
     return () => {
       unsubscribers.forEach((unsubscribe) => unsubscribe());
+      if (voiceKickNotificationTimeoutRef.current != null) {
+        window.clearTimeout(voiceKickNotificationTimeoutRef.current);
+      }
     };
   }, [markServerUnread, markFriendUnread, queryClient, navigate, setNotification]);
 }

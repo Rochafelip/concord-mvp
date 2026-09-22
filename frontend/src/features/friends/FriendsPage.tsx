@@ -1,3 +1,4 @@
+import { useAutoAnimate } from '@formkit/auto-animate/react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Avatar } from '../../components/Avatar';
@@ -30,6 +31,9 @@ export function FriendsPage() {
   const cancelMutation = useCancelOrDeclineFriendRequest();
   const unreadFriendIds = useNotificationStore((state) => state.unreadFriendIds);
   const clearFriendUnread = useNotificationStore((state) => state.clearFriendUnread);
+  const [friendsListRef] = useAutoAnimate();
+  const [incomingListRef] = useAutoAnimate();
+  const [outgoingListRef] = useAutoAnimate();
 
   // This page surfaces both pending requests and (via "Mensagem") every open DM, so opening it
   // addresses everything the friends rail icon's badge was flagging.
@@ -70,7 +74,7 @@ export function FriendsPage() {
         </div>
 
         {tab !== 'pending' && (
-          <ul className="space-y-1">
+          <ul ref={friendsListRef} className="space-y-1">
             {isLoading && <p className="text-body text-muted">Carregando…</p>}
             {!isLoading && (tab === 'online' ? onlineFriends : friends).length === 0 && (
               <p className="text-body text-muted">
@@ -120,7 +124,7 @@ export function FriendsPage() {
               {(pending?.incoming.length ?? 0) === 0 && (
                 <p className="text-body text-muted">Nenhum pedido recebido.</p>
               )}
-              <ul className="space-y-1">
+              <ul ref={incomingListRef} className="space-y-1">
                 {pending?.incoming.map((request) => (
                   <PendingRow key={request.friendshipId} request={request}>
                     <Button
@@ -146,7 +150,7 @@ export function FriendsPage() {
               {(pending?.outgoing.length ?? 0) === 0 && (
                 <p className="text-body text-muted">Nenhum pedido enviado.</p>
               )}
-              <ul className="space-y-1">
+              <ul ref={outgoingListRef} className="space-y-1">
                 {pending?.outgoing.map((request) => (
                   <PendingRow key={request.friendshipId} request={request}>
                     <Button

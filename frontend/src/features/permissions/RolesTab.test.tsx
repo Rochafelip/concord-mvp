@@ -35,6 +35,28 @@ function rowFor(name: string) {
   return row as HTMLElement;
 }
 
+/**
+ * dnd-kit's keyboard sensor picks the next slot by comparing each sortable row's
+ * getBoundingClientRect() — which jsdom always reports as all-zero. Stacking the rows at
+ * distinct, increasing `top` offsets (matching their rendered order) gives the coordinate
+ * getter real geometry to compare, the same way a real browser layout would.
+ */
+function mockStackedRowRects() {
+  screen.getAllByRole('listitem').forEach((row, index) => {
+    vi.spyOn(row, 'getBoundingClientRect').mockReturnValue({
+      top: index * 40,
+      bottom: index * 40 + 40,
+      left: 0,
+      right: 200,
+      width: 200,
+      height: 40,
+      x: 0,
+      y: index * 40,
+      toJSON: () => {},
+    } as DOMRect);
+  });
+}
+
 function renderTab(overrides: { isOwner?: boolean; currentUserId?: string } = {}) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -74,26 +96,30 @@ describe('RolesTab', () => {
 
     const everyoneRow = rowFor('@everyone');
     expect(within(everyoneRow).queryByRole('button', { name: 'Delete role' })).not.toBeInTheDocument();
-    expect(within(everyoneRow).queryByRole('button', { name: 'Move up' })).not.toBeInTheDocument();
-    expect(within(everyoneRow).queryByRole('button', { name: 'Move down' })).not.toBeInTheDocument();
+    expect(within(everyoneRow).queryByRole('button', { name: 'Reorder @everyone' })).not.toBeInTheDocument();
   });
 
-  it("disables the top role's move-up and the bottom non-everyone role's move-down", async () => {
+  it('gives every non-everyone role a drag handle to reorder it', async () => {
     renderTab();
     await screen.findAllByRole('listitem');
 
-    expect(within(rowFor('Admin')).getByRole('button', { name: 'Move up' })).toBeDisabled();
-    expect(within(rowFor('Trusted')).getByRole('button', { name: 'Move down' })).toBeDisabled();
-    expect(within(rowFor('Moderator')).getByRole('button', { name: 'Move up' })).toBeEnabled();
-    expect(within(rowFor('Moderator')).getByRole('button', { name: 'Move down' })).toBeEnabled();
+    expect(within(rowFor('Admin')).getByRole('button', { name: 'Reorder Admin' })).toBeInTheDocument();
+    expect(within(rowFor('Moderator')).getByRole('button', { name: 'Reorder Moderator' })).toBeInTheDocument();
+    expect(within(rowFor('Trusted')).getByRole('button', { name: 'Reorder Trusted' })).toBeInTheDocument();
   });
 
-  it('moving a role up swaps its position with the role above it in one batched call', async () => {
+  it('dragging a role via the keyboard swaps its position with the role above it in one batched call', async () => {
     const user = userEvent.setup();
     renderTab();
     await screen.findAllByRole('listitem');
+    mockStackedRowRects();
 
-    await user.click(within(rowFor('Moderator')).getByRole('button', { name: 'Move up' }));
+    // Admin, Moderator, Trusted are rows 0/1/2 — picking up Moderator (row 1) and moving it
+    // up one slot swaps it with Admin, the same result the old "Move up" button gave.
+    within(rowFor('Moderator')).getByRole('button', { name: 'Reorder Moderator' }).focus();
+    await user.keyboard('[Space]');
+    await user.keyboard('[ArrowUp]');
+    await user.keyboard('[Space]');
 
     expect(api.updateRolePositions).toHaveBeenCalledWith('s1', [
       { roleId: 'role-mod', position: 5 },
@@ -168,8 +194,12 @@ describe('RolesTab', () => {
     );
     renderTab();
     await screen.findAllByRole('listitem');
+    mockStackedRowRects();
 
-    await user.click(within(rowFor('Moderator')).getByRole('button', { name: 'Move up' }));
+    within(rowFor('Moderator')).getByRole('button', { name: 'Reorder Moderator' }).focus();
+    await user.keyboard('[Space]');
+    await user.keyboard('[ArrowUp]');
+    await user.keyboard('[Space]');
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/não pode gerenciar um cargo/);
   });

@@ -17,11 +17,15 @@ import com.concordmvp.users.UserRepository;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
+import org.hamcrest.Matchers;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpMethod;
+import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.web.client.RestClient;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
@@ -32,11 +36,18 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 @ExtendWith(MockitoExtension.class)
 class MediaServiceTest {
@@ -44,6 +55,7 @@ class MediaServiceTest {
     private static final String API_KEY = "test-api-key";
     private static final String API_SECRET = "test-api-secret-at-least-32-bytes-long";
     private static final String PUBLIC_URL = "wss://example.test/livekit";
+    private static final String SERVER_URL = "http://livekit.internal:7880";
 
     @Mock
     private ChannelService channelService;
@@ -58,11 +70,14 @@ class MediaServiceTest {
     private PermissionService permissionService;
 
     private MediaService mediaService;
+    private MockRestServiceServer mockLivekitServer;
 
     @BeforeEach
     void setUp() {
-        mediaService = new MediaService(channelService, userRepository, API_KEY, API_SECRET, PUBLIC_URL,
-                serverMemberRepository, permissionService);
+        RestClient.Builder restClientBuilder = RestClient.builder();
+        mockLivekitServer = MockRestServiceServer.bindTo(restClientBuilder).build();
+        mediaService = new MediaService(channelService, userRepository, API_KEY, API_SECRET, PUBLIC_URL, SERVER_URL,
+                serverMemberRepository, permissionService, restClientBuilder);
     }
 
     /**
@@ -365,5 +380,57 @@ class MediaServiceTest {
         assertThat(video.get("roomJoin")).isEqualTo(true);
         assertThat(video.get("canSubscribe")).isEqualTo(true);
         assertThat(publishSources(claims)).isEmpty();
+    }
+
+    // --- removeParticipant ---
+
+    @Test
+    void removeParticipant_sendsRemoveParticipantRequestToLiveKitServerApi() {
+        UUID channelId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        String roomName = "voice-channel-" + channelId;
+
+        mockLivekitServer.expect(requestTo(SERVER_URL + "/twirp/livekit.RoomService/RemoveParticipant"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("Authorization", Matchers.startsWith("Bearer ")))
+                .andExpect(jsonPath("$.room").value(roomName))
+                .andExpect(jsonPath("$.identity").value(userId.toString()))
+                .andRespond(withSuccess());
+
+        mediaService.removeParticipant(channelId, userId);
+
+        mockLivekitServer.verify();
+    }
+
+    @Test
+    void removeParticipant_sendsAnAdminTokenScopedToTheRoom() {
+        UUID channelId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        String roomName = "voice-channel-" + channelId;
+        String[] capturedAuthorization = new String[1];
+
+        mockLivekitServer.expect(requestTo(SERVER_URL + "/twirp/livekit.RoomService/RemoveParticipant"))
+                .andExpect(request -> capturedAuthorization[0] = request.getHeaders().getFirst("Authorization"))
+                .andRespond(withSuccess());
+
+        mediaService.removeParticipant(channelId, userId);
+
+        String token = capturedAuthorization[0].substring("Bearer ".length());
+        Claims claims = parse(token);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> video = claims.get("video", Map.class);
+        assertThat(video.get("roomAdmin")).isEqualTo(true);
+        assertThat(video.get("room")).isEqualTo(roomName);
+    }
+
+    @Test
+    void removeParticipant_livekitUnreachableOrErrors_doesNotThrow() {
+        UUID channelId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+
+        mockLivekitServer.expect(requestTo(SERVER_URL + "/twirp/livekit.RoomService/RemoveParticipant"))
+                .andRespond(withServerError());
+
+        assertThatCode(() -> mediaService.removeParticipant(channelId, userId)).doesNotThrowAnyException();
     }
 }

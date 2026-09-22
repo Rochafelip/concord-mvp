@@ -1,5 +1,6 @@
 import { Maximize2, Mic, MicOff, Minimize2, MonitorUp, PhoneOff, X } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
+import { ContextMenu } from '../../components/ContextMenu';
 import { voiceClient } from '../../services/voiceClient';
 import { disconnectVoiceParticipant } from './api';
 import type { VoiceParticipant } from '../../types/voice';
@@ -52,9 +53,7 @@ interface ScreenShareTileProps {
 export function ScreenShareTile({ participant, className = '', onWatchClick, canDisconnect = false, channelId = null }: ScreenShareTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const contextMenuRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [contextMenuOpen, setContextMenuOpen] = useState(false);
   const { screenShareTrack } = participant;
   const localParticipant = useVoiceParticipants().find((candidate) => candidate.isLocal);
 
@@ -111,31 +110,6 @@ export function ScreenShareTile({ participant, className = '', onWatchClick, can
     event.stopPropagation();
   }
 
-  function handleContextMenu(event: MouseEvent<HTMLDivElement>) {
-    if (participant.isLocal || !canDisconnect || !channelId) return;
-    event.preventDefault();
-    setContextMenuOpen(true);
-  }
-
-  useEffect(() => {
-    if (!contextMenuOpen) return;
-
-    function handlePointerDown(event: PointerEvent) {
-      if (!contextMenuRef.current?.contains(event.target as Node)) setContextMenuOpen(false);
-    }
-
-    function handleKeyDown(event: globalThis.KeyboardEvent) {
-      if (event.key === 'Escape') setContextMenuOpen(false);
-    }
-
-    document.addEventListener('pointerdown', handlePointerDown);
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [contextMenuOpen]);
-
   async function handleEnterFullscreen(event: MouseEvent) {
     stopPropagation(event);
     try {
@@ -172,125 +146,121 @@ export function ScreenShareTile({ participant, className = '', onWatchClick, can
   }
 
   return (
-    <div
-      ref={containerRef}
-      role={clickToRemove ? 'button' : undefined}
-      tabIndex={clickToRemove ? 0 : undefined}
-      aria-label={clickToRemove ? `Stop watching ${participant.name}'s screen` : undefined}
-      title={clickToRemove ? `Stop watching ${participant.name}'s screen` : undefined}
-      onClick={clickToRemove ? stopWatching : undefined}
-      onKeyDown={handleKeyDown}
-      onContextMenu={handleContextMenu}
-      className={
-        isFullscreen
-          ? 'fixed inset-0 z-50 flex items-center justify-center bg-gray-900'
-          : `group/participant-tile relative flex w-full items-center justify-center overflow-hidden rounded bg-gray-900 ${clickToRemove ? 'cursor-pointer' : ''} ${className}`
-      }
+    <ContextMenu
+      disabled={participant.isLocal || !canDisconnect || !channelId || isFullscreen}
+      items={[
+        {
+          label: 'Disconnect from voice',
+          variant: 'danger',
+          onSelect: () => {
+            if (channelId) void disconnectVoiceParticipant(channelId, participant.identity);
+          },
+        },
+      ]}
     >
-      <video ref={videoRef} muted autoPlay playsInline className="h-full w-full object-contain" />
-      {!isFullscreen && (
-        <>
-          <span className="absolute bottom-1 left-1 flex items-center gap-1 rounded bg-black/50 px-1.5 py-0.5 text-caption text-white">
-            <MonitorUp size={12} aria-hidden="true" />
-            {participant.name}
-            's screen
-            {participant.isLocal ? ' (you)' : ''}
-          </span>
-          <button
-            type="button"
-            aria-label="Enter fullscreen"
-            onClick={handleEnterFullscreen}
-            className="absolute left-1 top-1 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity hover:bg-black/80 focus-visible:opacity-100 group-hover/camera-grid:opacity-100"
-          >
-            <Maximize2 size={16} aria-hidden="true" />
-          </button>
-          {!participant.isLocal && participant.screenShareHasAudio && participant.screenShareAudioEnabled && (
-            <div
-              className="pointer-events-none absolute right-1 top-1 opacity-0 transition-opacity group-hover/participant-tile:pointer-events-auto group-hover/participant-tile:opacity-100 group-focus-within/participant-tile:pointer-events-auto group-focus-within/participant-tile:opacity-100"
-              onClick={stopPropagation}
-              onKeyDown={stopPropagation}
+      <div
+        ref={containerRef}
+        role={clickToRemove ? 'button' : undefined}
+        tabIndex={clickToRemove ? 0 : undefined}
+        aria-label={clickToRemove ? `Stop watching ${participant.name}'s screen` : undefined}
+        title={clickToRemove ? `Stop watching ${participant.name}'s screen` : undefined}
+        onClick={clickToRemove ? stopWatching : undefined}
+        onKeyDown={handleKeyDown}
+        className={
+          isFullscreen
+            ? 'fixed inset-0 z-50 flex items-center justify-center bg-gray-900'
+            : `group/participant-tile relative flex w-full items-center justify-center overflow-hidden rounded bg-gray-900 ${clickToRemove ? 'cursor-pointer' : ''} ${className}`
+        }
+      >
+        <video ref={videoRef} muted autoPlay playsInline className="h-full w-full object-contain" />
+        {!isFullscreen && (
+          <>
+            <span className="absolute bottom-1 left-1 flex items-center gap-1 rounded bg-black/50 px-1.5 py-0.5 text-caption text-white">
+              <MonitorUp size={12} aria-hidden="true" />
+              {participant.name}
+              's screen
+              {participant.isLocal ? ' (you)' : ''}
+            </span>
+            <button
+              type="button"
+              aria-label="Enter fullscreen"
+              onClick={handleEnterFullscreen}
+              className="absolute left-1 top-1 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity hover:bg-black/80 focus-visible:opacity-100 group-hover/camera-grid:opacity-100"
             >
+              <Maximize2 size={16} aria-hidden="true" />
+            </button>
+            {!participant.isLocal && participant.screenShareHasAudio && participant.screenShareAudioEnabled && (
+              <div
+                className="pointer-events-none absolute right-1 top-1 opacity-0 transition-opacity group-hover/participant-tile:pointer-events-auto group-hover/participant-tile:opacity-100 group-focus-within/participant-tile:pointer-events-auto group-focus-within/participant-tile:opacity-100"
+                onClick={stopPropagation}
+                onKeyDown={stopPropagation}
+              >
+                <VolumeControl
+                  label={`${participant.name}'s screen`}
+                  initialVolume={voiceClient.getScreenShareVolume(participant.identity) ?? 0}
+                  onVolumeChange={(volume) => voiceClient.setScreenShareVolume(participant.identity, volume)}
+                />
+              </div>
+            )}
+            {clickToRemove && (
+              // Stays faintly visible at rest (not just on hover) since touch devices have no
+              // hover state to reveal it — this is the only cue that the tile is tappable to stop
+              // watching. Decorative only: pointer-events-none so it never competes with the
+              // tile's own onClick above.
+              <span
+                aria-hidden="true"
+                data-testid="watch-affordance"
+                className="pointer-events-none absolute bottom-1 right-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/50 text-white opacity-40 transition-opacity group-hover/participant-tile:opacity-100"
+              >
+                <X size={14} aria-hidden="true" />
+              </span>
+            )}
+          </>
+        )}
+        {isFullscreen && (
+          <div className="absolute right-2 top-2 flex items-center gap-1.5 rounded bg-black/60 px-2 py-1.5">
+            {/* Leads the bar (not sandwiched between the other buttons): its popover opens
+                downward from this position without overlapping a neighboring button. */}
+            {!participant.isLocal && participant.screenShareHasAudio && participant.screenShareAudioEnabled && (
               <VolumeControl
                 label={`${participant.name}'s screen`}
                 initialVolume={voiceClient.getScreenShareVolume(participant.identity) ?? 0}
                 onVolumeChange={(volume) => voiceClient.setScreenShareVolume(participant.identity, volume)}
               />
-            </div>
-          )}
-          {clickToRemove && (
-            // Stays faintly visible at rest (not just on hover) since touch devices have no
-            // hover state to reveal it — this is the only cue that the tile is tappable to stop
-            // watching. Decorative only: pointer-events-none so it never competes with the
-            // tile's own onClick above.
-            <span
-              aria-hidden="true"
-              data-testid="watch-affordance"
-              className="pointer-events-none absolute bottom-1 right-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/50 text-white opacity-40 transition-opacity group-hover/participant-tile:opacity-100"
-            >
-              <X size={14} aria-hidden="true" />
-            </span>
-          )}
-        </>
-      )}
-      {isFullscreen && (
-        <div className="absolute right-2 top-2 flex items-center gap-1.5 rounded bg-black/60 px-2 py-1.5">
-          {/* Leads the bar (not sandwiched between the other buttons): its slider opens
-              leftward over open space instead of overlapping a neighboring button — see the bug
-              this fixed, where wedging it mid-row put the opened slider on top of the mute
-              button. */}
-          {!participant.isLocal && participant.screenShareHasAudio && participant.screenShareAudioEnabled && (
-            <VolumeControl
-              label={`${participant.name}'s screen`}
-              initialVolume={voiceClient.getScreenShareVolume(participant.identity) ?? 0}
-              onVolumeChange={(volume) => voiceClient.setScreenShareVolume(participant.identity, volume)}
-            />
-          )}
-          <button
-            type="button"
-            aria-label="Exit fullscreen"
-            onClick={handleExitFullscreen}
-            className="flex h-9 w-9 items-center justify-center rounded-full text-white hover:bg-white/10"
-          >
-            <Minimize2 size={18} aria-hidden="true" />
-          </button>
-          {localParticipant && (
+            )}
             <button
               type="button"
-              aria-label={localParticipant.micEnabled ? 'Mute' : 'Unmute'}
-              onClick={() => voiceClient.toggleMute()}
+              aria-label="Exit fullscreen"
+              onClick={handleExitFullscreen}
               className="flex h-9 w-9 items-center justify-center rounded-full text-white hover:bg-white/10"
             >
-              {localParticipant.micEnabled ? (
-                <Mic size={18} aria-hidden="true" />
-              ) : (
-                <MicOff size={18} aria-hidden="true" />
-              )}
+              <Minimize2 size={18} aria-hidden="true" />
             </button>
-          )}
-          <button
-            type="button"
-            aria-label="Leave call"
-            onClick={() => voiceClient.disconnect()}
-            className="flex h-9 w-9 items-center justify-center rounded-full text-white hover:bg-danger/80"
-          >
-            <PhoneOff size={18} aria-hidden="true" />
-          </button>
-        </div>
-      )}
-      {contextMenuOpen && canDisconnect && !participant.isLocal && channelId && !isFullscreen && (
-        <div ref={contextMenuRef} className="absolute right-2 top-2 z-20 min-w-44 rounded border border-border bg-surface p-1 shadow-lg" onClick={stopPropagation}>
-          <button
-            type="button"
-            className="w-full rounded px-2 py-1.5 text-left text-caption text-danger hover:bg-danger/10"
-            onClick={() => {
-              void disconnectVoiceParticipant(channelId, participant.identity);
-              setContextMenuOpen(false);
-            }}
-          >
-            Disconnect from voice
-          </button>
-        </div>
-      )}
-    </div>
+            {localParticipant && (
+              <button
+                type="button"
+                aria-label={localParticipant.micEnabled ? 'Mute' : 'Unmute'}
+                onClick={() => voiceClient.toggleMute()}
+                className="flex h-9 w-9 items-center justify-center rounded-full text-white hover:bg-white/10"
+              >
+                {localParticipant.micEnabled ? (
+                  <Mic size={18} aria-hidden="true" />
+                ) : (
+                  <MicOff size={18} aria-hidden="true" />
+                )}
+              </button>
+            )}
+            <button
+              type="button"
+              aria-label="Leave call"
+              onClick={() => voiceClient.disconnect()}
+              className="flex h-9 w-9 items-center justify-center rounded-full text-white hover:bg-danger/80"
+            >
+              <PhoneOff size={18} aria-hidden="true" />
+            </button>
+          </div>
+        )}
+      </div>
+    </ContextMenu>
   );
 }

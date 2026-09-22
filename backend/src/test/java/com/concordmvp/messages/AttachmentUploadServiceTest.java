@@ -23,6 +23,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 
@@ -236,5 +237,43 @@ class AttachmentUploadServiceTest {
                 .isInstanceOf(ForbiddenException.class);
 
         assertThat(Files.list(uploadsDir).toList()).isEmpty();
+    }
+
+    @Test
+    void upload_tooManyUploadsInAShortWindow_throwsTooManyRequests() {
+        UUID channelId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        when(channelService.getChannel(channelId, requesterId)).thenReturn(channel(channelId, UUID.randomUUID()));
+
+        for (int i = 0; i < 20; i++) {
+            MockMultipartFile file = new MockMultipartFile("file", "a.png", "image/png", pngBytes());
+            attachmentUploadService.upload(channelId, requesterId, file);
+        }
+
+        MockMultipartFile oneTooMany = new MockMultipartFile("file", "a.png", "image/png", pngBytes());
+        assertThatThrownBy(() -> attachmentUploadService.upload(channelId, requesterId, oneTooMany))
+                .isInstanceOf(com.concordmvp.common.exception.TooManyRequestsException.class);
+    }
+
+    @Test
+    void upload_rateLimitIsPerUser_anotherUserIsUnaffected() {
+        UUID channelId = UUID.randomUUID();
+        UUID floodingUserId = UUID.randomUUID();
+        UUID otherUserId = UUID.randomUUID();
+        when(channelService.getChannel(eq(channelId), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(channel(channelId, UUID.randomUUID()));
+
+        for (int i = 0; i < 20; i++) {
+            attachmentUploadService.upload(channelId, floodingUserId,
+                    new MockMultipartFile("file", "a.png", "image/png", pngBytes()));
+        }
+        assertThatThrownBy(() -> attachmentUploadService.upload(channelId, floodingUserId,
+                new MockMultipartFile("file", "a.png", "image/png", pngBytes())))
+                .isInstanceOf(com.concordmvp.common.exception.TooManyRequestsException.class);
+
+        UploadedAttachment result = attachmentUploadService.upload(channelId, otherUserId,
+                new MockMultipartFile("file", "a.png", "image/png", pngBytes()));
+
+        assertThat(result.url()).startsWith("/api/v1/uploads/");
     }
 }

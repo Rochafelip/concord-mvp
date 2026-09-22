@@ -19,6 +19,18 @@ public class PasswordResetService {
 
     private static final Duration TOKEN_TTL = Duration.ofHours(1);
     private static final String INVALID_TOKEN_MESSAGE = "Link de redefinição inválido ou expirado";
+    // requestReset() invalidates every earlier unused token for the user (see markAllUsedForUser
+    // below), so a token can be "used" without anyone having ever clicked it: the person simply
+    // asked for another link first. That is a different situation from actually having completed
+    // a reset with this exact link, and from the link being older than TOKEN_TTL -- each gets its
+    // own message so "solicite um novo link" doesn't get shown to someone whose newer email would
+    // have worked.
+    private static final String SUPERSEDED_TOKEN_MESSAGE =
+            "Este link foi substituído por um pedido de redefinição mais recente. "
+                    + "Use o e-mail mais novo que você recebeu ou solicite outro link";
+    private static final String ALREADY_USED_TOKEN_MESSAGE =
+            "Este link já foi usado para redefinir a senha. "
+                    + "Solicite um novo link se ainda precisar trocar a senha";
 
     private final PasswordResetTokenRepository tokenRepository;
     private final UserRepository userRepository;
@@ -94,8 +106,19 @@ public class PasswordResetService {
             throw new BadRequestException(INVALID_TOKEN_MESSAGE);
         }
 
-        return tokenRepository.findByTokenHash(TokenHashing.hash(rawToken))
-                .filter(token -> token.isUsable(now))
+        PasswordResetToken token = tokenRepository.findByTokenHash(TokenHashing.hash(rawToken))
                 .orElseThrow(() -> new BadRequestException(INVALID_TOKEN_MESSAGE));
+
+        if (token.isUsable(now)) {
+            return token;
+        }
+
+        if (token.getUsedAt() != null) {
+            boolean superseded = tokenRepository.existsByUserIdAndCreatedAtAfter(
+                    token.getUserId(), token.getCreatedAt());
+            throw new BadRequestException(superseded ? SUPERSEDED_TOKEN_MESSAGE : ALREADY_USED_TOKEN_MESSAGE);
+        }
+
+        throw new BadRequestException(INVALID_TOKEN_MESSAGE);
     }
 }

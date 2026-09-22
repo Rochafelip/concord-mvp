@@ -37,6 +37,58 @@ class JwtServiceTest {
     }
 
     @Test
+    void generateToken_assignsAUniqueJtiToEachToken() {
+        UUID userId = UUID.randomUUID();
+
+        String first = jwtService.generateToken(userId);
+        String second = jwtService.generateToken(userId);
+
+        assertThat(jwtService.parseJti(first)).isNotEqualTo(jwtService.parseJti(second));
+    }
+
+    @Test
+    void parseJti_throwsUnauthorized_whenTokenIsMalformed() {
+        assertThatThrownBy(() -> jwtService.parseJti("not-a-valid-jwt"))
+                .isInstanceOf(UnauthorizedException.class);
+    }
+
+    // A session cookie issued before `jti` was added to generateToken() has no id claim at all
+    // (not merely blank) — UUID.fromString(null) throws NullPointerException rather than
+    // IllegalArgumentException, which JwtAuthFilter runs into on every request from a browser
+    // still holding such a cookie, including on public endpoints.
+    @Test
+    void parseJti_throwsUnauthorized_whenTokenHasNoIdClaim() {
+        SecretKey key = Keys.hmacShaKeyFor(TEST_SECRET.getBytes(StandardCharsets.UTF_8));
+        String legacyToken = Jwts.builder()
+                .subject(UUID.randomUUID().toString())
+                .issuedAt(Date.from(Instant.now()))
+                .expiration(Date.from(Instant.now().plusSeconds(3600)))
+                .signWith(key)
+                .compact();
+
+        assertThatThrownBy(() -> jwtService.parseJti(legacyToken))
+                .isInstanceOf(UnauthorizedException.class);
+    }
+
+    @Test
+    void parseExpiration_returnsWhenTheTokenStopsBeingValid() {
+        UUID userId = UUID.randomUUID();
+        Instant before = Instant.now();
+
+        String token = jwtService.generateToken(userId);
+
+        Instant expiration = jwtService.parseExpiration(token);
+        assertThat(expiration).isAfter(before.plus(java.time.Duration.ofDays(29)));
+        assertThat(expiration).isBefore(before.plus(java.time.Duration.ofDays(31)));
+    }
+
+    @Test
+    void parseExpiration_throwsUnauthorized_whenTokenIsMalformed() {
+        assertThatThrownBy(() -> jwtService.parseExpiration("not-a-valid-jwt"))
+                .isInstanceOf(UnauthorizedException.class);
+    }
+
+    @Test
     void parseUserId_throwsUnauthorized_whenTokenIsTampered() {
         UUID userId = UUID.randomUUID();
         String token = jwtService.generateToken(userId);
