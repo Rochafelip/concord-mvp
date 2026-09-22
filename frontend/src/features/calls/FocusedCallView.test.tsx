@@ -93,9 +93,8 @@ describe('FocusedCallView', () => {
     );
 
     expect(screen.getByTestId('watched-area')).toHaveClass('group/camera-grid');
-    const control = screen.getByRole('slider', { name: 'Volume for Felipe' }).parentElement;
-    expect(control).toHaveClass('group/volume-control');
-    expect(control).not.toHaveClass('group/camera-grid');
+    const trigger = screen.getByRole('button', { name: 'Volume for Felipe' });
+    expect(trigger.parentElement).not.toHaveClass('group/camera-grid');
   });
 
   it('reveals a watched share tile\'s fullscreen button on hover over the whole watched area', () => {

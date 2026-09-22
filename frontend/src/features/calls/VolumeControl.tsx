@@ -1,5 +1,5 @@
 import { Volume2, VolumeX } from 'lucide-react';
-import { useState, type ChangeEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 
 interface VolumeControlProps {
   /** Display name used only to build distinct aria-labels, e.g. "Bob" or "Bob's screen". */
@@ -14,9 +14,10 @@ interface VolumeControlProps {
 }
 
 /**
- * A small, self-contained local volume control: a mute toggle plus a 0-100% slider. Muting
- * doesn't discard the slider's remembered position; moving the slider while muted un-mutes
- * automatically, matching how OS volume mixers behave.
+ * A small, self-contained local volume control: a speaker icon that opens a vertical slider
+ * popover, plus a mute toggle inside it — the same shape as the OS volume mixer flyouts this
+ * mirrors. Muting doesn't discard the slider's remembered position; moving the slider while
+ * muted un-mutes automatically, matching how those flyouts behave too.
  *
  * The *working* volume is component state, but the level a listener settled on is not: it
  * belongs to the call, and this control is mounted and unmounted several times during one.
@@ -37,6 +38,24 @@ export function VolumeControl({ label, onVolumeChange, initialVolume = 1 }: Volu
   // un-muting a source that opened silent would restore it to silence.
   const [volume, setVolume] = useState(initialVolume === 0 ? 1 : initialVolume);
   const [muted, setMuted] = useState(initialVolume === 0);
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handlePointerDown(event: PointerEvent) {
+      if (!containerRef.current?.contains(event.target as Node)) setOpen(false);
+    }
+    function handleKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key === 'Escape') setOpen(false);
+    }
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [open]);
 
   function handleSliderChange(event: ChangeEvent<HTMLInputElement>) {
     const nextVolume = Number(event.target.value) / 100;
@@ -52,27 +71,48 @@ export function VolumeControl({ label, onVolumeChange, initialVolume = 1 }: Volu
   }
 
   return (
-    <div className="group/volume-control relative flex items-center rounded bg-black/60 px-1.5 py-1">
+    <div ref={containerRef} className="relative flex items-center rounded bg-black/60 px-1.5 py-1">
       <button
         type="button"
-        aria-label={muted ? `Unmute ${label} for you` : `Mute ${label} for you`}
-        onClick={handleMuteToggle}
+        aria-label={`Volume for ${label}`}
+        aria-haspopup="true"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
         className="flex h-5 w-5 items-center justify-center rounded text-white hover:bg-white/10"
       >
         {muted ? <VolumeX size={14} aria-hidden="true" /> : <Volume2 size={14} aria-hidden="true" />}
       </button>
-      {/* Flush against the button (no margin): a gap here would be dead space the cursor crosses
-          when moving from the button onto the track, dropping :hover mid-transition and leaving
-          the track pointer-events-none right as the user tries to reach it. */}
-      <input
-        type="range"
-        aria-label={`Volume for ${label}`}
-        min={0}
-        max={100}
-        value={muted ? 0 : Math.round(volume * 100)}
-        onChange={handleSliderChange}
-        className="pointer-events-none absolute right-full h-1 w-16 origin-right opacity-0 transition-opacity group-hover/volume-control:pointer-events-auto group-hover/volume-control:opacity-100 group-focus-within/volume-control:pointer-events-auto group-focus-within/volume-control:opacity-100"
-      />
+      {open && (
+        <div
+          role="dialog"
+          aria-label={`Volume for ${label}`}
+          className="absolute left-1/2 top-full z-10 mt-1 flex -translate-x-1/2 flex-col items-center gap-1.5 rounded bg-black/80 px-1.5 py-2 shadow-lg"
+        >
+          {/* The range input keeps its native horizontal layout box (w-16 h-1) so browsers still
+              render and drag it correctly; centering it absolutely inside a slim, tall wrapper
+              and rotating it -90deg is what turns it into a vertical slider without a custom
+              slider implementation. */}
+          <div className="relative h-20 w-6">
+            <input
+              type="range"
+              aria-label={`Volume for ${label}`}
+              min={0}
+              max={100}
+              value={muted ? 0 : Math.round(volume * 100)}
+              onChange={handleSliderChange}
+              className="absolute left-1/2 top-1/2 h-1 w-16 -translate-x-1/2 -translate-y-1/2 -rotate-90"
+            />
+          </div>
+          <button
+            type="button"
+            aria-label={muted ? `Unmute ${label} for you` : `Mute ${label} for you`}
+            onClick={handleMuteToggle}
+            className="flex h-5 w-5 items-center justify-center rounded text-white hover:bg-white/10"
+          >
+            {muted ? <VolumeX size={14} aria-hidden="true" /> : <Volume2 size={14} aria-hidden="true" />}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

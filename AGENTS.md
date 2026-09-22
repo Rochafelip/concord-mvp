@@ -72,7 +72,10 @@ Each application must remain independently buildable.
 * File attachments on messages: up to 10 per message, 150 MB each. An upload
   whose real file content matches a known image signature (JPEG/PNG/GIF/WebP/
   BMP/AVIF — magic bytes, not the declared type) is rendered inline with a
-  full-size lightbox; any other file type is allowed and rendered as a
+  full-size lightbox. A `.pdf` (by extension, not magic bytes — see
+  docs/DECISIONS.md D23) is also rendered inline, in a sandboxed iframe
+  (`sandbox="allow-same-origin"`, no `allow-scripts`) with a download link
+  alongside it. Every other file type is allowed and rendered as a
   downloadable file chip, served with a forced download so it can never
   execute in the browser
 * Attaching files to a message: the paperclip button, drag & drop onto the

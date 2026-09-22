@@ -127,6 +127,24 @@ describe('MessageInput', () => {
     expect(screen.getByLabelText(/attach file/i, { selector: 'input' })).toBeDisabled();
   });
 
+  it(
+    'appends a picked emoji to the message text',
+    async () => {
+      const user = userEvent.setup();
+      render(<MessageInput channelId="c1" />);
+
+      const input = screen.getByLabelText(/message/i);
+      await user.type(input, 'hi');
+      await user.click(screen.getByRole('button', { name: 'Add emoji' }));
+      await user.click(await screen.findByRole('button', { name: 'grinning face' }));
+
+      expect(input).toHaveValue('hi😀');
+    },
+    // See the same timeout note in EmojiPickerButton.test.tsx — rendering the full emoji grid is
+    // slow under a contended full-suite run.
+    20000,
+  );
+
   it('stages a picked file as a preview without uploading it yet', async () => {
     const user = userEvent.setup();
     render(<MessageInput channelId="c1" canAttachFiles />);
@@ -183,6 +201,54 @@ describe('MessageInput', () => {
     expect(attachments?.map((attachment) => attachment.url)).toEqual([
       '/api/v1/uploads/a.png',
       '/api/v1/uploads/b.png',
+    ]);
+  });
+
+  it('reorders pending attachments by dragging, sending them in the new order', async () => {
+    vi.mocked(apiModule.uploadAttachment).mockImplementation(async (_channelId, file) => ({
+      url: `/api/v1/uploads/${file.name}`,
+      fileName: file.name,
+      fileSize: file.size,
+    }));
+    const user = userEvent.setup();
+    render(<MessageInput channelId="c1" canAttachFiles />);
+
+    const input = screen.getByLabelText(/attach file/i, { selector: 'input' });
+    await user.upload(input, [
+      new File(['a'], 'a.png', { type: 'image/png' }),
+      new File(['b'], 'b.png', { type: 'image/png' }),
+    ]);
+
+    // dnd-kit's keyboard sensor picks the next slot by comparing each item's
+    // getBoundingClientRect() — jsdom always reports that as all-zero, so the items are stacked
+    // at distinct, increasing `left` offsets (matching their rendered horizontal order) to give
+    // the coordinate getter real geometry to compare, the same way a real layout would.
+    screen.getAllByRole('listitem').forEach((item, index) => {
+      vi.spyOn(item, 'getBoundingClientRect').mockReturnValue({
+        top: 0,
+        bottom: 88,
+        left: index * 90,
+        right: index * 90 + 88,
+        width: 88,
+        height: 88,
+        x: index * 90,
+        y: 0,
+        toJSON: () => {},
+      } as DOMRect);
+    });
+
+    screen.getByRole('button', { name: 'Reorder a.png' }).focus();
+    await user.keyboard('[Space]');
+    await user.keyboard('[ArrowRight]');
+    await user.keyboard('[Space]');
+
+    await user.click(screen.getByRole('button', { name: /send/i }));
+
+    await waitFor(() => expect(hooksModule.sendMessage).toHaveBeenCalled());
+    const [, , attachments] = vi.mocked(hooksModule.sendMessage).mock.calls[0];
+    expect(attachments?.map((attachment) => attachment.url)).toEqual([
+      '/api/v1/uploads/b.png',
+      '/api/v1/uploads/a.png',
     ]);
   });
 

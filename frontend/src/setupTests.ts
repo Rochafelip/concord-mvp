@@ -21,6 +21,44 @@ if (typeof ResizeObserver === 'undefined') {
   } as unknown as typeof ResizeObserver
 }
 
+// jsdom has no IntersectionObserver. emoji-picker-react (used by
+// components/EmojiPickerButton.tsx) uses it to only render each emoji row once it scrolls into
+// view — reporting every observed element as immediately intersecting (rather than a no-op) is
+// what makes its emoji buttons actually appear in tests, since nothing in a jsdom test ever
+// scrolls the picker to trigger a real intersection.
+if (typeof IntersectionObserver === 'undefined') {
+  globalThis.IntersectionObserver = class IntersectionObserver {
+    private callback: IntersectionObserverCallback
+    constructor(callback: IntersectionObserverCallback) {
+      this.callback = callback
+    }
+    observe(target: Element) {
+      this.callback(
+        [{ isIntersecting: true, target } as IntersectionObserverEntry],
+        this as unknown as globalThis.IntersectionObserver,
+      )
+    }
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof IntersectionObserver
+}
+
+// jsdom has no window.matchMedia. @formkit/auto-animate (used by useAutoAnimate() in
+// FriendsPage.tsx and ChannelSidebar.tsx) checks prefers-reduced-motion through it on every
+// animated element, so it needs to exist even though no test asserts on reduced-motion behavior.
+if (typeof window.matchMedia === 'undefined') {
+  window.matchMedia = ((query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  })) as unknown as typeof window.matchMedia
+}
+
 // jsdom implements neither half of the object-URL API. The chat composer creates one per staged
 // attachment to render its thumbnail and revokes it when the attachment is dropped, so both need
 // to exist; the counter keeps the returned URLs distinct so a test can tell two previews apart.

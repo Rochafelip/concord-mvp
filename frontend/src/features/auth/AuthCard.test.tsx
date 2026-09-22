@@ -29,9 +29,12 @@ describe('AuthCard', () => {
     expect(screen.getByText('footer body')).toBeInTheDocument();
   });
 
-  it('omits the footer region when none is given', () => {
+  it('omits the optional footer region when none is given, but keeps the site footer', () => {
     render(<AuthCard title="Log in">form</AuthCard>);
 
-    expect(screen.queryByRole('contentinfo')).not.toBeInTheDocument();
+    // Only the site-wide Footer (version/copyright/GitHub) renders — the caller-supplied
+    // `footer` prop is what's optional, not the landmark itself.
+    expect(screen.getAllByRole('contentinfo')).toHaveLength(1);
+    expect(screen.getByText(/Concord v/)).toBeInTheDocument();
   });
 });

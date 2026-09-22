@@ -15,9 +15,15 @@ import com.concordmvp.servers.ServerMember;
 import com.concordmvp.servers.ServerMemberRepository;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
@@ -49,12 +55,19 @@ import java.util.UUID;
  * become entries in {@code canPublishSources}, so LiveKit itself refuses a track the user may not
  * publish — a tampered client cannot talk its way past it. Because the grant is fixed when the
  * token is minted, a permission change during a call is applied by having the client rejoin
- * (docs/DECISIONS.md D20); no Server API call to LiveKit is made from here.
+ * (docs/DECISIONS.md D20).
+ *
+ * <p>{@link #removeParticipant} is the one operation that does call LiveKit's Server API
+ * (security audit A5) — the join token above stays valid for {@link #TOKEN_TTL} regardless of
+ * server membership, so ending a call early needs an explicit disconnect, not just letting the
+ * token expire.
  */
 @Service
 public class MediaService {
 
+    private static final Logger log = LoggerFactory.getLogger(MediaService.class);
     private static final Duration TOKEN_TTL = Duration.ofHours(6);
+    private static final Duration ADMIN_TOKEN_TTL = Duration.ofSeconds(30);
 
     private final ChannelService channelService;
     private final UserRepository userRepository;
@@ -63,6 +76,7 @@ public class MediaService {
     private final String livekitApiKey;
     private final SecretKey livekitSigningKey;
     private final String livekitPublicUrl;
+    private final RestClient livekitServerClient;
 
     @Autowired
     public MediaService(ChannelService channelService,
@@ -70,14 +84,17 @@ public class MediaService {
                          @Value("${livekit.api-key}") String livekitApiKey,
                          @Value("${livekit.api-secret}") String livekitApiSecret,
                          @Value("${livekit.public-url}") String livekitPublicUrl,
+                         @Value("${livekit.server-url}") String livekitServerUrl,
                          ServerMemberRepository serverMemberRepository,
-                         PermissionService permissionService) {
+                         PermissionService permissionService,
+                         RestClient.Builder restClientBuilder) {
         this.permissionService = permissionService;
         this.channelService = channelService;
         this.userRepository = userRepository;
         this.serverMemberRepository = serverMemberRepository;
         this.livekitApiKey = livekitApiKey;
         this.livekitSigningKey = Keys.hmacShaKeyFor(livekitApiSecret.getBytes(StandardCharsets.UTF_8));
+        this.livekitServerClient = restClientBuilder.baseUrl(livekitServerUrl).build();
         this.livekitPublicUrl = livekitPublicUrl;
     }
 
@@ -117,6 +134,42 @@ public class MediaService {
         String token = buildLiveKitToken(requester, requester.getDisplayName(), roomName, List.of(), true);
 
         return new VoiceTokenResponse(token, livekitPublicUrl, roomName);
+    }
+
+    /**
+     * Forcibly disconnects a participant from a voice channel's LiveKit room via the Server API
+     * (security audit A5), called by {@link com.concordmvp.media.VoicePresenceService#disconnectFromServer}
+     * when server membership ends. Best-effort: a participant who already disconnected, an
+     * unknown room, or LiveKit being briefly unreachable must never block whatever caller
+     * triggered this (e.g. leaving a server).
+     */
+    public void removeParticipant(UUID channelId, UUID userId) {
+        String roomName = "voice-channel-" + channelId;
+        try {
+            livekitServerClient.post()
+                    .uri("/twirp/livekit.RoomService/RemoveParticipant")
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + buildRoomAdminToken(roomName))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(Map.of("room", roomName, "identity", userId.toString()))
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (RestClientException ex) {
+            log.warn("Failed to remove participant {} from LiveKit room {}", userId, roomName, ex);
+        }
+    }
+
+    private String buildRoomAdminToken(String roomName) {
+        Instant now = Instant.now();
+        Map<String, Object> videoGrant = new LinkedHashMap<>();
+        videoGrant.put("roomAdmin", true);
+        videoGrant.put("room", roomName);
+
+        return Jwts.builder()
+                .issuer(livekitApiKey)
+                .expiration(Date.from(now.plus(ADMIN_TOKEN_TTL)))
+                .claim("video", videoGrant)
+                .signWith(livekitSigningKey)
+                .compact();
     }
 
     private Channel validateVoiceChannel(UUID channelId, UUID requesterId) {

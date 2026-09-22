@@ -130,6 +130,17 @@ describe('VoiceConnectionBar', () => {
     expect(voiceClient.toggleMute).toHaveBeenCalledTimes(1);
   });
 
+  it('shows a tooltip with the same label on hover, since these icon-only buttons have no other visual hint', async () => {
+    const user = userEvent.setup();
+    useVoiceStore.setState({ status: 'connected', channelId: 'c1', participants: [localParticipant({ micEnabled: true })] });
+    renderBar();
+
+    await screen.findByText('Alpha');
+    await user.hover(screen.getByRole('button', { name: 'Mute' }));
+
+    expect(await screen.findAllByText('Mute')).not.toHaveLength(0);
+  });
+
   it('clicking Deafen calls voiceClient.toggleDeafen, and its icon reflects isDeafened', async () => {
     const user = userEvent.setup();
     useVoiceStore.setState({

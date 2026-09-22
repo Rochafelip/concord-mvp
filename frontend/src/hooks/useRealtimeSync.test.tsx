@@ -44,6 +44,7 @@ vi.mock('../services/voiceClient', () => ({
     disconnect: vi.fn(),
     beginConnect: vi.fn(() => 1),
     connect: vi.fn(() => Promise.resolve()),
+    stopWhistle: vi.fn(),
   },
 }));
 
@@ -110,12 +111,22 @@ describe('useRealtimeSync', () => {
     vi.mocked(voiceClient.disconnect).mockClear();
     vi.mocked(voiceClient.connect).mockClear();
     vi.mocked(voiceClient.beginConnect).mockClear();
+    vi.mocked(voiceClient.stopWhistle).mockClear();
     vi.mocked(getVoiceToken).mockClear();
     vi.mocked(getWsTicket).mockClear();
     vi.mocked(notify).mockClear();
     vi.mocked(playChime).mockClear();
     setBackgrounded(false);
-    useVoiceStore.setState({ status: 'disconnected', channelId: null, participants: [], error: null, isDeafened: false });
+    useVoiceStore.setState({
+      status: 'disconnected',
+      channelId: null,
+      participants: [],
+      error: null,
+      isDeafened: false,
+      armedWhistleTarget: null,
+      whisperingTo: null,
+      receivingWhistleFrom: null,
+    });
     useAuthStore.setState({
       isAuthenticated: true,
       user: { id: 'u1', username: 'a', displayName: 'A', email: 'a@x.com', avatarUrl: null },
@@ -666,6 +677,70 @@ describe('useRealtimeSync', () => {
 
     const cached = queryClient.getQueryData<VoicePresenceEntry[]>(['servers', 's1', 'voice-presence']);
     expect(cached).toEqual([existing[1]]);
+  });
+
+  it('VOICE_KICK clears its notification-reset timeout on unmount (security audit, Baixa finding)', () => {
+    const queryClient = newQueryClient();
+    const { unmount } = renderHarness(queryClient, '/app');
+
+    emit('VOICE_KICK', { serverId: 's1', channelId: 'c1', userId: 'u1' });
+
+    expect(useNotificationStore.getState().message).toBe(
+      'You were disconnected from the voice channel by a server admin.',
+    );
+
+    const clearTimeoutSpy = vi.spyOn(window, 'clearTimeout');
+    unmount();
+
+    expect(clearTimeoutSpy).toHaveBeenCalled();
+  });
+
+  it('WHISTLE_START addressed to me sets receivingWhistleFrom', () => {
+    const queryClient = newQueryClient();
+    renderHarness(queryClient, '/app');
+
+    emit('WHISTLE_START', { channelId: 'c1', senderId: 'u2', targetUserId: 'u1' });
+
+    expect(useVoiceStore.getState().receivingWhistleFrom).toBe('u2');
+  });
+
+  it('WHISTLE_START addressed to someone else does not set receivingWhistleFrom', () => {
+    const queryClient = newQueryClient();
+    renderHarness(queryClient, '/app');
+
+    emit('WHISTLE_START', { channelId: 'c1', senderId: 'u2', targetUserId: 'u3' });
+
+    expect(useVoiceStore.getState().receivingWhistleFrom).toBeNull();
+  });
+
+  it('WHISTLE_STOP addressed to me as target clears receivingWhistleFrom', () => {
+    const queryClient = newQueryClient();
+    renderHarness(queryClient, '/app');
+    useVoiceStore.setState({ receivingWhistleFrom: 'u2' });
+
+    emit('WHISTLE_STOP', { channelId: 'c1', senderId: 'u2', targetUserId: 'u1' });
+
+    expect(useVoiceStore.getState().receivingWhistleFrom).toBeNull();
+  });
+
+  it('WHISTLE_STOP where I am the sender calls voiceClient.stopWhistle (e.g. server-forced stop)', () => {
+    const queryClient = newQueryClient();
+    renderHarness(queryClient, '/app');
+
+    emit('WHISTLE_STOP', { channelId: 'c1', senderId: 'u1', targetUserId: 'u2' });
+
+    expect(voiceClient.stopWhistle).toHaveBeenCalled();
+  });
+
+  it('WHISTLE_STOP for an unrelated sender/target pair is a no-op', () => {
+    const queryClient = newQueryClient();
+    renderHarness(queryClient, '/app');
+    useVoiceStore.setState({ receivingWhistleFrom: 'u2' });
+
+    emit('WHISTLE_STOP', { channelId: 'c1', senderId: 'u3', targetUserId: 'u4' });
+
+    expect(useVoiceStore.getState().receivingWhistleFrom).toBe('u2');
+    expect(voiceClient.stopWhistle).not.toHaveBeenCalled();
   });
 
   it('USER_PROFILE_UPDATE refreshes the display name in the auth and voice presence caches', () => {
