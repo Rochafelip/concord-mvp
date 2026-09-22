@@ -7,6 +7,11 @@ on:
   push:
     branches: [master]
 
+# Least privilege for the GITHUB_TOKEN (security audit, Baixa finding) — this job only
+# checks out code and runs docker compose locally, it never calls back to the GitHub API.
+permissions:
+  contents: read
+
 concurrency:
   group: cd-production
   cancel-in-progress: false

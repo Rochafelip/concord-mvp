@@ -5,6 +5,7 @@ import com.concordmvp.auth.dto.LoginRequest;
 import com.concordmvp.auth.dto.RegisterRequest;
 import com.concordmvp.auth.verification.EmailVerificationService;
 import com.concordmvp.common.exception.ConflictException;
+import com.concordmvp.common.exception.TooManyRequestsException;
 import com.concordmvp.common.exception.UnauthorizedException;
 import com.concordmvp.users.User;
 import com.concordmvp.users.UserRepository;
@@ -54,6 +55,7 @@ class AuthServiceTest {
         UUID generatedId = UUID.randomUUID();
 
         when(userRepository.existsByEmail("alice@example.com")).thenReturn(false);
+        when(userRepository.existsByUsername("alice")).thenReturn(false);
         when(passwordEncoder.encode("password123")).thenReturn("hashed-password");
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> {
             User user = invocation.getArgument(0);
@@ -61,7 +63,7 @@ class AuthServiceTest {
             return user;
         });
 
-        AuthResponse response = authService.register(request);
+        AuthResponse response = authService.register(request, "203.0.113.1");
 
         ArgumentCaptor<User> savedUserCaptor = ArgumentCaptor.forClass(User.class);
         verify(userRepository).save(savedUserCaptor.capture());
@@ -85,10 +87,85 @@ class AuthServiceTest {
         RegisterRequest request = new RegisterRequest("alice", "Alice", "alice@example.com", "password123");
         when(userRepository.existsByEmail("alice@example.com")).thenReturn(true);
 
-        assertThatThrownBy(() -> authService.register(request))
+        assertThatThrownBy(() -> authService.register(request, "203.0.113.1"))
                 .isInstanceOf(ConflictException.class);
 
         verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void register_throwsConflict_whenUsernameAlreadyTaken() {
+        // username is used as a public identity (friend requests, DMs, member lists), so it needs
+        // the same uniqueness guarantee as email.
+        RegisterRequest request = new RegisterRequest("alice", "Alice", "alice@example.com", "password123");
+        when(userRepository.existsByEmail("alice@example.com")).thenReturn(false);
+        when(userRepository.existsByUsername("alice")).thenReturn(true);
+
+        assertThatThrownBy(() -> authService.register(request, "203.0.113.1"))
+                .isInstanceOf(ConflictException.class);
+
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void register_tooManyAttemptsForTheSameEmail_throwsTooManyRequests() {
+        RegisterRequest request = new RegisterRequest("alice", "Alice", "alice@example.com", "password123");
+        when(userRepository.existsByEmail("alice@example.com")).thenReturn(true);
+
+        for (int i = 0; i < 3; i++) {
+            assertThatThrownBy(() -> authService.register(request, "203.0.113.1"))
+                    .isInstanceOf(ConflictException.class);
+        }
+
+        // Blocked before the repository is even consulted again — an attacker probing whether
+        // "alice@example.com" is taken can't retry past this, whatever the real outcome would be.
+        assertThatThrownBy(() -> authService.register(request, "203.0.113.1"))
+                .isInstanceOf(TooManyRequestsException.class);
+    }
+
+    @Test
+    void register_tooManyAttemptsFromTheSameIpAcrossDifferentEmails_throwsTooManyRequests() {
+        // Each email is distinct, so the per-email limiter never fires — only the per-IP one
+        // catches this, which is exactly the scan-many-candidates enumeration pattern it exists for.
+        when(userRepository.existsByEmail(anyString())).thenReturn(true);
+
+        for (int i = 0; i < 10; i++) {
+            RegisterRequest request =
+                    new RegisterRequest("user" + i, "User " + i, "user" + i + "@example.com", "password123");
+            assertThatThrownBy(() -> authService.register(request, "203.0.113.1"))
+                    .isInstanceOf(ConflictException.class);
+        }
+
+        RegisterRequest request = new RegisterRequest("user10", "User 10", "user10@example.com", "password123");
+        assertThatThrownBy(() -> authService.register(request, "203.0.113.1"))
+                .isInstanceOf(TooManyRequestsException.class);
+    }
+
+    @Test
+    void register_succeeds_forADifferentEmailAndIp_afterAnotherKeyIsRateLimited() {
+        RegisterRequest floodedRequest = new RegisterRequest("alice", "Alice", "alice@example.com", "password123");
+        when(userRepository.existsByEmail("alice@example.com")).thenReturn(true);
+        for (int i = 0; i < 3; i++) {
+            assertThatThrownBy(() -> authService.register(floodedRequest, "203.0.113.1"))
+                    .isInstanceOf(ConflictException.class);
+        }
+        assertThatThrownBy(() -> authService.register(floodedRequest, "203.0.113.1"))
+                .isInstanceOf(TooManyRequestsException.class);
+
+        RegisterRequest bobRequest = new RegisterRequest("bob", "Bob", "bob@example.com", "password123");
+        UUID generatedId = UUID.randomUUID();
+        when(userRepository.existsByEmail("bob@example.com")).thenReturn(false);
+        when(userRepository.existsByUsername("bob")).thenReturn(false);
+        when(passwordEncoder.encode("password123")).thenReturn("hashed-password");
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> {
+            User user = invocation.getArgument(0);
+            user.setId(generatedId);
+            return user;
+        });
+
+        AuthResponse response = authService.register(bobRequest, "198.51.100.7");
+
+        assertThat(response.userId()).isEqualTo(generatedId);
     }
 
     @Test
@@ -102,7 +179,7 @@ class AuthServiceTest {
         when(userRepository.findByEmail("alice@example.com")).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("wrong-password", "hashed-password")).thenReturn(false);
 
-        assertThatThrownBy(() -> authService.login(request))
+        assertThatThrownBy(() -> authService.login(request, "203.0.113.1"))
                 .isInstanceOf(UnauthorizedException.class)
                 .hasMessage(unknownEmailExceptionMessage());
     }
@@ -112,7 +189,7 @@ class AuthServiceTest {
         LoginRequest request = new LoginRequest("unknown@example.com", "password123");
         when(userRepository.findByEmail("unknown@example.com")).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> authService.login(request))
+        assertThatThrownBy(() -> authService.login(request, "203.0.113.1"))
                 .isInstanceOf(UnauthorizedException.class)
                 .hasMessage(unknownEmailExceptionMessage());
     }
@@ -124,7 +201,7 @@ class AuthServiceTest {
         LoginRequest request = new LoginRequest("unknown@example.com", "password123");
         when(userRepository.findByEmail("unknown@example.com")).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> authService.login(request)).isInstanceOf(UnauthorizedException.class);
+        assertThatThrownBy(() -> authService.login(request, "203.0.113.1")).isInstanceOf(UnauthorizedException.class);
 
         verify(passwordEncoder).matches(eq("password123"), anyString());
     }
@@ -143,8 +220,8 @@ class AuthServiceTest {
         LoginRequest unknownEmailRequest = new LoginRequest("unknown@example.com", "password123");
         when(userRepository.findByEmail("unknown@example.com")).thenReturn(Optional.empty());
 
-        String messageForWrongPassword = catchExceptionMessage(() -> authService.login(wrongPasswordRequest));
-        String messageForUnknownEmail = catchExceptionMessage(() -> authService.login(unknownEmailRequest));
+        String messageForWrongPassword = catchExceptionMessage(() -> authService.login(wrongPasswordRequest, "203.0.113.1"));
+        String messageForUnknownEmail = catchExceptionMessage(() -> authService.login(unknownEmailRequest, "203.0.113.1"));
 
         assertThat(messageForWrongPassword).isEqualTo(messageForUnknownEmail);
     }
@@ -162,10 +239,10 @@ class AuthServiceTest {
         when(passwordEncoder.matches("wrong-password", "hashed-password")).thenReturn(false);
 
         for (int i = 0; i < 5; i++) {
-            assertThatThrownBy(() -> authService.login(request)).isInstanceOf(UnauthorizedException.class);
+            assertThatThrownBy(() -> authService.login(request, "203.0.113.1")).isInstanceOf(UnauthorizedException.class);
         }
 
-        assertThatThrownBy(() -> authService.login(request))
+        assertThatThrownBy(() -> authService.login(request, "203.0.113.1"))
                 .isInstanceOf(UnauthorizedException.class)
                 .hasMessage(unknownEmailExceptionMessage());
         // Rate-limited, not a real credential check this time.
@@ -182,7 +259,7 @@ class AuthServiceTest {
         when(userRepository.findByEmail("alice@example.com")).thenReturn(Optional.of(alice));
         when(passwordEncoder.matches("wrong-password", "hashed-password")).thenReturn(false);
         for (int i = 0; i < 6; i++) {
-            assertThatThrownBy(() -> authService.login(floodedRequest)).isInstanceOf(UnauthorizedException.class);
+            assertThatThrownBy(() -> authService.login(floodedRequest, "203.0.113.1")).isInstanceOf(UnauthorizedException.class);
         }
 
         LoginRequest bobRequest = new LoginRequest("bob@example.com", "password123");
@@ -193,7 +270,53 @@ class AuthServiceTest {
         when(userRepository.findByEmail("bob@example.com")).thenReturn(Optional.of(bob));
         when(passwordEncoder.matches("password123", "hashed-password")).thenReturn(true);
 
-        AuthResponse response = authService.login(bobRequest);
+        AuthResponse response = authService.login(bobRequest, "203.0.113.1");
+
+        assertThat(response.userId()).isEqualTo(bob.getId());
+    }
+
+    @Test
+    void login_tooManyAttemptsFromTheSameIpAcrossDifferentEmails_throwsUnauthorized() {
+        // Each email is distinct, so the per-email limiter never fires — only the per-IP one
+        // catches this, which is exactly the credential-stuffing-sweep pattern it exists for.
+        when(userRepository.findByEmail(anyString())).thenReturn(Optional.empty());
+
+        for (int i = 0; i < 10; i++) {
+            LoginRequest request = new LoginRequest("user" + i + "@example.com", "password123");
+            assertThatThrownBy(() -> authService.login(request, "203.0.113.1"))
+                    .isInstanceOf(UnauthorizedException.class);
+        }
+
+        LoginRequest request = new LoginRequest("user10@example.com", "password123");
+        assertThatThrownBy(() -> authService.login(request, "203.0.113.1"))
+                .isInstanceOf(UnauthorizedException.class)
+                .hasMessage(unknownEmailExceptionMessage());
+        // Rate-limited, not a real credential check this time.
+        verify(userRepository, never()).findByEmail("user10@example.com");
+    }
+
+    @Test
+    void login_rateLimitIsPerIp_anotherIpIsUnaffected() {
+        LoginRequest request = new LoginRequest("unknown@example.com", "password123");
+        when(userRepository.findByEmail("unknown@example.com")).thenReturn(Optional.empty());
+
+        for (int i = 0; i < 10; i++) {
+            assertThatThrownBy(() -> authService.login(request, "203.0.113.1"))
+                    .isInstanceOf(UnauthorizedException.class);
+        }
+        assertThatThrownBy(() -> authService.login(request, "203.0.113.1"))
+                .isInstanceOf(UnauthorizedException.class)
+                .hasMessage(unknownEmailExceptionMessage());
+
+        User bob = new User();
+        bob.setId(UUID.randomUUID());
+        bob.setEmail("bob@example.com");
+        bob.setPasswordHash("hashed-password");
+        when(userRepository.findByEmail("bob@example.com")).thenReturn(Optional.of(bob));
+        when(passwordEncoder.matches("password123", "hashed-password")).thenReturn(true);
+        LoginRequest bobRequest = new LoginRequest("bob@example.com", "password123");
+
+        AuthResponse response = authService.login(bobRequest, "198.51.100.7");
 
         assertThat(response.userId()).isEqualTo(bob.getId());
     }

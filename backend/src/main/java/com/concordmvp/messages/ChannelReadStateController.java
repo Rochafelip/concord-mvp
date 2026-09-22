@@ -1,8 +1,6 @@
 package com.concordmvp.messages;
 
 import com.concordmvp.channels.ChannelService;
-import com.concordmvp.common.exception.ForbiddenException;
-import com.concordmvp.common.exception.ResourceNotFoundException;
 import com.concordmvp.messages.dto.ChannelReadStateResponse;
 import com.concordmvp.messages.dto.MarkChannelReadRequest;
 import jakarta.validation.Valid;
@@ -30,12 +28,10 @@ public class ChannelReadStateController {
             @PathVariable UUID channelId,
             @AuthenticationPrincipal UUID userId,
             @Valid @RequestBody MarkChannelReadRequest request) {
-        // Verify user is a member of the channel's server
-        try {
-            channelService.getChannel(channelId, userId);
-        } catch (ResourceNotFoundException | ForbiddenException e) {
-            throw new ForbiddenException("You don't have permission to access this channel");
-        }
+        // Same visibility check as reading messages: 404 (not 403) for a channel the requester
+        // can't see, so it doesn't confirm the channel exists — letting getChannel's exception
+        // propagate as-is is what keeps that distinction (see ChannelService.getChannel).
+        channelService.getChannel(channelId, userId);
 
         channelReadStateService.markChannelAsRead(userId, channelId, request.lastReadMessageId());
         return ResponseEntity.ok().build();
@@ -45,12 +41,7 @@ public class ChannelReadStateController {
     public ResponseEntity<ChannelReadStateResponse> getChannelReadState(
             @PathVariable UUID channelId,
             @AuthenticationPrincipal UUID userId) {
-        // Verify user is a member of the channel's server
-        try {
-            channelService.getChannel(channelId, userId);
-        } catch (ResourceNotFoundException | ForbiddenException e) {
-            throw new ForbiddenException("You don't have permission to access this channel");
-        }
+        channelService.getChannel(channelId, userId);
 
         ChannelReadState state = channelReadStateService.getReadState(userId, channelId);
         if (state == null) {

@@ -1,5 +1,6 @@
 package com.concordmvp.messages;
 
+import com.concordmvp.common.CurrentUser;
 import com.concordmvp.common.exception.ResourceNotFoundException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
@@ -17,9 +18,10 @@ import java.nio.file.Path;
 import java.util.Set;
 
 /**
- * Serves previously uploaded chat attachments from disk. Deliberately reachable without
- * authentication (see {@code SecurityConfig}'s permitAll entry for this same path) — access
- * relies on the random UUID filename being unguessable, the same trust model as a shareable link.
+ * Serves previously uploaded chat attachments from disk. Requires authentication, and the
+ * requester must be able to see the channel the attachment was posted in — same check as
+ * reading the message itself, via {@link MessageService#requireAttachmentAccess} (security audit
+ * A4; previously relied only on the UUID filename being unguessable).
  *
  * <p>Known image extensions and PDF are served inline for preview; every other file is forced to
  * download via {@code Content-Disposition: attachment} regardless of its actual content — an
@@ -32,9 +34,11 @@ public class AttachmentServingController {
             Set.of("jpg", "jpeg", "png", "gif", "webp", "bmp", "avif");
 
     private final Path uploadsDir;
+    private final MessageService messageService;
 
-    public AttachmentServingController(@Value("${app.uploads.dir}") String uploadsDir) {
+    public AttachmentServingController(@Value("${app.uploads.dir}") String uploadsDir, MessageService messageService) {
         this.uploadsDir = Path.of(uploadsDir).toAbsolutePath().normalize();
+        this.messageService = messageService;
     }
 
     @GetMapping("/api/v1/uploads/{filename:.+}")
@@ -43,6 +47,8 @@ public class AttachmentServingController {
         if (!path.startsWith(uploadsDir) || !Files.isRegularFile(path)) {
             throw new ResourceNotFoundException("File not found: " + filename);
         }
+
+        messageService.requireAttachmentAccess("/api/v1/uploads/" + filename, CurrentUser.id());
 
         Resource resource = new UrlResource(path.toUri());
         String extension = extensionOf(filename);

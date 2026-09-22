@@ -15,4 +15,6 @@ public interface ServerMemberRepository extends JpaRepository<ServerMember, UUID
     Optional<ServerMember> findByServerIdAndUserId(UUID serverId, UUID userId);
 
     boolean existsByServerIdAndUserId(UUID serverId, UUID userId);
+
+    long countByServerId(UUID serverId);
 }
