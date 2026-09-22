@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getLastScreenShareAudioPreference,
+  getLastScreenShareFrameRate,
   getLastScreenShareQuality,
   setLastScreenShareAudioPreference,
+  setLastScreenShareFrameRate,
   setLastScreenShareQuality,
 } from './screenShareQuality';
 
@@ -57,6 +59,44 @@ describe('screenShareQuality', () => {
     });
 
     expect(() => setLastScreenShareQuality('hd')).not.toThrow();
+  });
+
+  it('defaults to 30 when nothing is stored', () => {
+    expect(getLastScreenShareFrameRate()).toBe(30);
+  });
+
+  it('defaults to 30 when an invalid value is stored', () => {
+    localStorage.setItem('concord:screenShareFrameRate', 'garbage');
+
+    expect(getLastScreenShareFrameRate()).toBe(30);
+  });
+
+  it('returns the stored frame rate when it is 60', () => {
+    localStorage.setItem('concord:screenShareFrameRate', '60');
+
+    expect(getLastScreenShareFrameRate()).toBe(60);
+  });
+
+  it('defaults to 30 when localStorage.getItem throws', () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('blocked');
+    });
+
+    expect(getLastScreenShareFrameRate()).toBe(30);
+  });
+
+  it('persists the chosen frame rate', () => {
+    setLastScreenShareFrameRate(60);
+
+    expect(localStorage.getItem('concord:screenShareFrameRate')).toBe('60');
+  });
+
+  it('does not throw when persisting the frame rate and localStorage.setItem throws', () => {
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('blocked');
+    });
+
+    expect(() => setLastScreenShareFrameRate(60)).not.toThrow();
   });
 
   it('defaults the audio preference to false when nothing is stored', () => {

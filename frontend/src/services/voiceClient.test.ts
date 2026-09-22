@@ -345,7 +345,7 @@ describe('voiceClient', () => {
     await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
     const room = roomInstances[0];
 
-    voiceClient.toggleScreenShare({ quality: 'hd', withAudio: false });
+    voiceClient.toggleScreenShare({ quality: 'hd', frameRate: 30, withAudio: false });
 
     expect(room.localParticipant.setScreenShareEnabled).toHaveBeenLastCalledWith(true, {
       resolution: { width: 1280, height: 720, frameRate: 30 },
@@ -361,10 +361,21 @@ describe('voiceClient', () => {
     await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
     const room = roomInstances[0];
 
-    voiceClient.toggleScreenShare({ quality: 'fhd', withAudio: false });
+    voiceClient.toggleScreenShare({ quality: 'fhd', frameRate: 30, withAudio: false });
 
     expect(room.localParticipant.setScreenShareEnabled).toHaveBeenLastCalledWith(true, {
       resolution: { width: 1920, height: 1080, frameRate: 30 },
+    });
+  });
+
+  it('starts screen sharing with a 60fps constraint when that frame rate is given', async () => {
+    await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+    const room = roomInstances[0];
+
+    voiceClient.toggleScreenShare({ quality: 'hd', frameRate: 60, withAudio: false });
+
+    expect(room.localParticipant.setScreenShareEnabled).toHaveBeenLastCalledWith(true, {
+      resolution: { width: 1280, height: 720, frameRate: 60 },
     });
   });
 
@@ -372,7 +383,7 @@ describe('voiceClient', () => {
     await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
     const room = roomInstances[0];
 
-    voiceClient.toggleScreenShare({ quality: 'hd', withAudio: true });
+    voiceClient.toggleScreenShare({ quality: 'hd', frameRate: 30, withAudio: true });
 
     // autoGainControl/echoCancellation/noiseSuppression are mic-oriented processing that muffles
     // continuous non-speech audio (music, game/video sound) — must be explicitly disabled here
@@ -401,8 +412,8 @@ describe('voiceClient', () => {
     await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
     const room = roomInstances[0];
 
-    voiceClient.toggleScreenShare({ quality: 'hd', withAudio: true });
-    voiceClient.toggleScreenShare({ quality: 'fhd', withAudio: true });
+    voiceClient.toggleScreenShare({ quality: 'hd', frameRate: 30, withAudio: true });
+    voiceClient.toggleScreenShare({ quality: 'fhd', frameRate: 30, withAudio: true });
 
     expect(room.localParticipant.setScreenShareEnabled).toHaveBeenLastCalledWith(false);
   });
@@ -423,8 +434,8 @@ describe('voiceClient', () => {
 
   it('does not start screen share when not connected to a room', () => {
     // Don't call connect or beginConnect - just call toggleScreenShare directly
-    voiceClient.toggleScreenShare({ quality: 'hd', withAudio: true });
-    
+    voiceClient.toggleScreenShare({ quality: 'hd', frameRate: 30, withAudio: true });
+
     // Since there's no room at all, toggleScreenShare should return early
     expect(roomInstances.length).toBe(0);
   });

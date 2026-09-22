@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { Button } from '../../components/Button';
 import { Modal } from '../../components/Modal';
-import type { ScreenShareOptions, ScreenShareQuality } from '../../types/voice';
+import type { ScreenShareFrameRate, ScreenShareOptions, ScreenShareQuality } from '../../types/voice';
 import {
   getLastScreenShareAudioPreference,
+  getLastScreenShareFrameRate,
   getLastScreenShareQuality,
   setLastScreenShareAudioPreference,
+  setLastScreenShareFrameRate,
   setLastScreenShareQuality,
 } from './screenShareQuality';
 
@@ -17,18 +19,20 @@ interface ScreenShareQualityModalProps {
 
 /**
  * Shown before a screen share actually starts (see ParticipantTile), never while stopping one.
- * Mirrors CreateChannelModal's shape: shared Modal shell, a radio fieldset, Cancel/confirm
- * buttons. Both choices are read once as React state's lazy initializer and only written back to
+ * Mirrors CreateChannelModal's shape: shared Modal shell, radio fieldsets, Cancel/confirm
+ * buttons. All choices are read once as React state's lazy initializer and only written back to
  * storage on confirm, so canceling never overwrites a previously remembered preference.
  */
 export function ScreenShareQualityModal({ open, onClose, onConfirm }: ScreenShareQualityModalProps) {
   const [quality, setQuality] = useState<ScreenShareQuality>(getLastScreenShareQuality);
+  const [frameRate, setFrameRate] = useState<ScreenShareFrameRate>(getLastScreenShareFrameRate);
   const [withAudio, setWithAudio] = useState<boolean>(getLastScreenShareAudioPreference);
 
   function handleConfirm() {
     setLastScreenShareQuality(quality);
+    setLastScreenShareFrameRate(frameRate);
     setLastScreenShareAudioPreference(withAudio);
-    onConfirm({ quality, withAudio });
+    onConfirm({ quality, frameRate, withAudio });
   }
 
   return (
@@ -57,6 +61,30 @@ export function ScreenShareQualityModal({ open, onClose, onConfirm }: ScreenShar
               onChange={() => setQuality('fhd')}
             />
             FHD (1080p)
+          </label>
+        </fieldset>
+
+        <fieldset className="space-y-1">
+          <legend className="text-body font-medium text-muted">Frame rate</legend>
+          <label className="flex items-center gap-2 text-body text-muted">
+            <input
+              type="radio"
+              name="screenShareFrameRate"
+              value="30"
+              checked={frameRate === 30}
+              onChange={() => setFrameRate(30)}
+            />
+            30 fps (steadier, less bandwidth)
+          </label>
+          <label className="flex items-center gap-2 text-body text-muted">
+            <input
+              type="radio"
+              name="screenShareFrameRate"
+              value="60"
+              checked={frameRate === 60}
+              onChange={() => setFrameRate(60)}
+            />
+            60 fps (more fluid motion)
           </label>
         </fieldset>
 
