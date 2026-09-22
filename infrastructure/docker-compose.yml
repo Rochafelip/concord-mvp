@@ -2,10 +2,19 @@ services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
-    # Security audit hardening (Média finding): the official image already drops to the
-    # `postgres` user itself and needs no Linux capability beyond what a normal process has.
+    # Security audit hardening (Média finding). Wrong the first time: the entrypoint starts as
+    # root to chmod/chown the data dir and the /var/run/postgresql socket dir, then drops to the
+    # `postgres` user via gosu — cap_drop: [ALL] alone broke all of that ("Operation not
+    # permitted" on chmod, confirmed against a real deploy). CHOWN/FOWNER/DAC_OVERRIDE cover the
+    # permission-fixing step, SETUID/SETGID cover the gosu drop to the postgres user.
     cap_drop:
       - ALL
+    cap_add:
+      - CHOWN
+      - FOWNER
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
     security_opt:
       - no-new-privileges:true
     environment:
