@@ -30,7 +30,7 @@
     "linkify-react": "^4.3.3",
     "linkifyjs": "^4.3.3",
     "livekit-client": "^2.22.2",
-    "lucide-react": "^1.41.0",
+    "lucide-react": "^1.47.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-resizable-panels": "^4.12.4",
