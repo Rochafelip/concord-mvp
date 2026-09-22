@@ -29,6 +29,7 @@ import type {
   VoicePresencePayload,
   UserProfileUpdatePayload,
   ChannelReadPayload,
+  WhistlePayload,
 } from '../types/websocket';
 
 function truncate(text: string, maxLength: number): string {
@@ -327,6 +328,27 @@ export function useRealtimeSync(): void {
               useNotificationStore.getState().clear();
             }
           }, 5000);
+        }
+      }),
+
+      websocketClient.subscribe('WHISTLE_START', (payload) => {
+        const { senderId, targetUserId } = payload as WhistlePayload;
+        if (targetUserId === useAuthStore.getState().user?.id) {
+          useVoiceStore.getState().setReceivingWhistleFrom(senderId);
+        }
+      }),
+
+      // Covers both roles: I'm the target (stop showing the incoming-whistle badge) and I'm the
+      // sender (the backend force-stopped it, e.g. the target disconnected — voiceClient.stopWhistle
+      // resets the local LiveKit subscription permissions even if the hotkey is still held).
+      websocketClient.subscribe('WHISTLE_STOP', (payload) => {
+        const { senderId, targetUserId } = payload as WhistlePayload;
+        const myId = useAuthStore.getState().user?.id;
+        if (targetUserId === myId) {
+          useVoiceStore.getState().setReceivingWhistleFrom(null);
+        }
+        if (senderId === myId) {
+          voiceClient.stopWhistle();
         }
       }),
 

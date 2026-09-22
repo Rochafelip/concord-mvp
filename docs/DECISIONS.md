@@ -628,3 +628,49 @@ classificação por extensão falhar.
 **Consequences**: Nenhuma mudança de código. Documenta o que já era verdade
 no comportamento, para que a próxima leitura do `AGENTS.md` (humana ou de IA)
 não trate esse desvio como um bug não-intencional.
+
+## D24 — Assobio privado: roteamento de áudio via subscription permission do LiveKit, sem chamada à Server API
+
+**Context**: Feature aprovada pelo dono do projeto como adição de escopo (não
+estava no MVP original nem na lista de fora-de-escopo do `AGENTS.md`): um
+participante da chamada pode, ao segurar uma tecla sobre o tile de outro,
+tornar seu próprio microfone audível só para aquele alvo — os demais
+participantes da chamada deixam de ouvir o remetente enquanto dura o
+"assobio", sem mutar o microfone de fato e sem afetar câmera/screen-share.
+Ver docs/superpowers/specs/2026-09-22-private-whistle-design.md.
+
+**Decision**: O roteamento de áudio é feito inteiramente pelo cliente do
+remetente, chamando `LocalParticipant.setTrackSubscriptionPermissions` do
+`livekit-client` (já uma dependência do frontend) sobre a própria conexão —
+nenhuma chamada à Server API do LiveKit, nenhuma dependência nova. Quem
+decide se um pacote RTP é encaminhado a outro participante é o SFU do
+LiveKit, não o cliente que fez a chamada; um cliente adulterado não pode
+"escutar" um áudio que essa permissão não concede a ele, mesmo chamando a
+API diretamente. Isso mantém o LiveKit como ponto de aplicação, na mesma
+linha do D20 item 4 (`canPublishSources`), só que a concessão é alterada em
+tempo real na conexão já aberta, em vez de fixada no JWT de entrada.
+
+O backend (`WhistleService`, novos frames `WHISTLE_START`/`WHISTLE_STOP` no
+WebSocket existente) só autoriza a ação (checa `Permission.SPEAK`, presença
+do alvo no canal) e sincroniza o indicador visual entre remetente e alvo —
+nunca participa do roteamento de áudio em si. Isso reafirma, não contradiz, a
+alternativa recusada no D20 item 4 (integrar `UpdateParticipant` da Server
+API do LiveKit para mudar permissões ao vivo): aquela chamada seguiria
+desnecessária mesmo para esta feature, porque o `setTrackSubscriptionPermissions`
+do client SDK já resolve o problema sem tocar o backend.
+
+Limpeza de estado (encerrar um assobio quando remetente ou alvo saem da
+chamada, perdem a conexão, ou saem do servidor) reaproveita o único ponto por
+onde toda saída de voz já passa — `VoicePresenceService.removePresence` —
+em vez de replicar a chamada de limpeza nos quatro call sites que levam até
+ele. Isso cria uma dependência circular deliberada entre `VoicePresenceService`
+e `WhistleService` (a segunda também depende da primeira, para checar se o
+alvo está presente no canal), quebrada com `@Lazy` num dos dois lados — a
+única ocorrência desse padrão no backend hoje, usada porque o ponto único de
+saída de voz pesou mais que evitar o ciclo.
+
+**Consequences**: Nenhuma nova dependência backend↔LiveKit. Nenhum novo bit
+de permissão — assobiar exige apenas `SPEAK`, disponível a qualquer membro
+que já pode falar no canal, igual ao mute local. O único custo arquitetural
+é o ciclo `@Lazy` acima, documentado no javadoc de
+`VoicePresenceService.removePresence`.

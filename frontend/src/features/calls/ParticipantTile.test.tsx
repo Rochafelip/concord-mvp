@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { ConnectionQuality } from 'livekit-client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { voiceClient } from '../../services/voiceClient';
+import { useVoiceStore } from '../../stores/voiceStore';
 import type { VoiceParticipant } from '../../types/voice';
 import { disconnectVoiceParticipant } from './api';
 import { ParticipantTile } from './ParticipantTile';
@@ -429,6 +430,76 @@ describe('ParticipantTile', () => {
       fireEvent.contextMenu(screen.getByLabelText('Felipe'));
 
       expect(screen.queryByText('Disconnect from voice')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('private whistle', () => {
+    beforeEach(() => {
+      useVoiceStore.setState({ armedWhistleTarget: null, whisperingTo: null, receivingWhistleFrom: null });
+    });
+
+    it('arms this participant as the whistle target on hover', () => {
+      const { container } = render(<ParticipantTile participant={participant({ identity: 'bob' })} />);
+
+      fireEvent.mouseEnter(container.firstChild as Element);
+
+      expect(useVoiceStore.getState().armedWhistleTarget).toBe('bob');
+    });
+
+    it('disarms the target when the pointer leaves', () => {
+      const { container } = render(<ParticipantTile participant={participant({ identity: 'bob' })} />);
+      fireEvent.mouseEnter(container.firstChild as Element);
+
+      fireEvent.mouseLeave(container.firstChild as Element);
+
+      expect(useVoiceStore.getState().armedWhistleTarget).toBeNull();
+    });
+
+    it("does not clear a different tile's armed target on leave", () => {
+      const { container } = render(<ParticipantTile participant={participant({ identity: 'bob' })} />);
+      useVoiceStore.setState({ armedWhistleTarget: 'carol' });
+
+      fireEvent.mouseLeave(container.firstChild as Element);
+
+      expect(useVoiceStore.getState().armedWhistleTarget).toBe('carol');
+    });
+
+    it("does not arm the local participant's own tile", () => {
+      const { container } = render(<ParticipantTile participant={participant({ identity: 'u1', isLocal: true })} />);
+
+      fireEvent.mouseEnter(container.firstChild as Element);
+
+      expect(useVoiceStore.getState().armedWhistleTarget).toBeNull();
+    });
+
+    it('highlights this tile when I am whistling to it', () => {
+      useVoiceStore.setState({ whisperingTo: 'bob' });
+
+      const { container } = render(<ParticipantTile participant={participant({ identity: 'bob' })} />);
+
+      expect(container.firstChild).toHaveClass('ring-2', 'ring-danger');
+    });
+
+    it('does not highlight a tile I am not whistling to', () => {
+      useVoiceStore.setState({ whisperingTo: 'someone-else' });
+
+      const { container } = render(<ParticipantTile participant={participant({ identity: 'bob' })} />);
+
+      expect(container.firstChild).not.toHaveClass('ring-danger');
+    });
+
+    it("shows a badge when this tile's participant is whistling to me", () => {
+      useVoiceStore.setState({ receivingWhistleFrom: 'bob' });
+
+      render(<ParticipantTile participant={participant({ identity: 'bob' })} />);
+
+      expect(screen.getByTitle('Felipe is whistling to you')).toBeInTheDocument();
+    });
+
+    it('does not show the badge when nobody is whistling to me', () => {
+      render(<ParticipantTile participant={participant({ identity: 'bob' })} />);
+
+      expect(screen.queryByTitle('Felipe is whistling to you')).not.toBeInTheDocument();
     });
   });
 });

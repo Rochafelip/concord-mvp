@@ -21,6 +21,7 @@ import com.concordmvp.users.UserRepository;
 import com.concordmvp.users.UserAvatarUrls;
 import com.concordmvp.users.dto.UserSummaryResponse;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -52,6 +53,7 @@ public class VoicePresenceService {
     private final RealtimeEventPublisher realtimeEventPublisher;
     private final PermissionService permissionService;
     private final MediaService mediaService;
+    private final WhistleService whistleService;
 
         @Autowired
         public VoicePresenceService(ChannelService channelService,
@@ -60,7 +62,8 @@ public class VoicePresenceService {
                                  UserRepository userRepository,
                                  RealtimeEventPublisher realtimeEventPublisher,
                                  PermissionService permissionService,
-                                 MediaService mediaService) {
+                                 MediaService mediaService,
+                                 @Lazy WhistleService whistleService) {
         this.permissionService = permissionService;
         this.channelService = channelService;
         this.serverMemberRepository = serverMemberRepository;
@@ -68,6 +71,7 @@ public class VoicePresenceService {
         this.userRepository = userRepository;
         this.realtimeEventPublisher = realtimeEventPublisher;
         this.mediaService = mediaService;
+        this.whistleService = whistleService;
     }
 
     public void updatePresence(UUID channelId, UUID userId, boolean muted, boolean cameraOn,
@@ -95,8 +99,23 @@ public class VoicePresenceService {
                 new WsEvent(WsEventType.VOICE_PRESENCE_UPDATE, response));
     }
 
+    public boolean isConnected(UUID channelId, UUID userId) {
+        Entry entry = byUserId.get(userId);
+        return entry != null && entry.channelId().equals(channelId);
+    }
+
+    /**
+     * The single point every "this user is no longer in voice" path funnels through (WebSocket
+     * disconnect, explicit leave-voice, kick, leave-server), so it's also the single place that
+     * guarantees a private whistle ({@link WhistleService}) never survives its sender or target
+     * disappearing. Always clears whistle state, even if this user had no presence entry — a
+     * lost {@code WHISTLE_STOP} frame shouldn't require a matching presence entry to clean up.
+     * {@code whistleService} is {@code @Lazy} because {@link WhistleService} depends back on this
+     * class (to check whether a whistle's target is actually present).
+     */
     public void removePresence(UUID userId) {
         Entry removed = byUserId.remove(userId);
+        whistleService.clearForUser(userId);
         if (removed == null) return;
 
         realtimeEventPublisher.broadcast(currentMemberIds(removed.serverId()),

@@ -9,6 +9,7 @@ import { hasPermission } from '../../types/permission';
 import { CallControlBar } from './CallControlBar';
 import { ParticipantList } from './ParticipantList';
 import { useJoinVoiceChannel } from './hooks';
+import { useWhistleHotkey } from './useWhistleHotkey';
 
 interface CallViewProps {
   channel: Channel;
@@ -28,6 +29,7 @@ interface CallViewProps {
 export function CallView({ channel }: CallViewProps) {
   const joinVoiceMutation = useJoinVoiceChannel();
   const navigate = useNavigate();
+  useWhistleHotkey();
 
   useEffect(() => {
     const voiceState = useVoiceStore.getState();

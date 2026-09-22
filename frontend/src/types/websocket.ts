@@ -21,6 +21,8 @@ export type WsEventType =
   | 'VOICE_PRESENCE_UPDATE'
   | 'VOICE_PRESENCE_LEAVE'
   | 'VOICE_KICK'
+  | 'WHISTLE_START'
+  | 'WHISTLE_STOP'
   | 'USER_PROFILE_UPDATE'
   | 'PERMISSIONS_UPDATE'
   | 'FRIEND_UPDATE'
@@ -109,6 +111,13 @@ export interface ChannelReadPayload {
 }
 
 export type VoiceKickPayload = string;
+
+/** Wire shape of WHISTLE_START/WHISTLE_STOP — sent only to the sender and target. */
+export interface WhistlePayload {
+  channelId: string;
+  senderId: string;
+  targetUserId: string;
+}
 
 /**
  * Generic "something about this friendship changed, refetch" signal — same shape as

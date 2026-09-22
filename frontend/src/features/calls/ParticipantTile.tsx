@@ -5,6 +5,7 @@ import { Avatar } from '../../components/Avatar';
 import { ContextMenu } from '../../components/ContextMenu';
 import { Spinner } from '../../components/Spinner';
 import { voiceClient } from '../../services/voiceClient';
+import { useVoiceStore } from '../../stores/voiceStore';
 import { disconnectVoiceParticipant } from './api';
 import type { VoiceParticipant } from '../../types/voice';
 import { QUALITY_ICON } from './connectionQuality';
@@ -66,6 +67,10 @@ export function ParticipantTile({
   channelId = null,
 }: ParticipantTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const whisperingTo = useVoiceStore((state) => state.whisperingTo);
+  const receivingWhistleFrom = useVoiceStore((state) => state.receivingWhistleFrom);
+  const isWhistleTarget = whisperingTo === participant.identity;
+  const isWhistlingToMe = receivingWhistleFrom === participant.identity;
   const { videoTrack } = participant;
   // livekit-client mutes the camera publication rather than unpublishing it when the camera is
   // turned off, so `videoTrack` stays non-null after that — `cameraEnabled` (isMuted-aware) is
@@ -97,6 +102,23 @@ export function ParticipantTile({
     event.stopPropagation();
   }
 
+  // Arms this participant as the private-whistle target while hovered — useWhistleHotkey reads
+  // armedWhistleTarget when the hotkey is pressed. The local participant can't whistle to
+  // themselves, so their own tile never arms.
+  function handleMouseEnter() {
+    if (participant.isLocal) return;
+    useVoiceStore.getState().setArmedWhistleTarget(participant.identity);
+  }
+
+  // Only disarms the pending target — deliberately does not stop an already-active
+  // whistle if the pointer leaves mid-hold. Push-to-hold is key-driven; releasing W
+  // (or the other cleanup triggers in useWhistleHotkey) is what ends it.
+  function handleMouseLeave() {
+    if (useVoiceStore.getState().armedWhistleTarget === participant.identity) {
+      useVoiceStore.getState().setArmedWhistleTarget(null);
+    }
+  }
+
   return (
     <ContextMenu
       disabled={participant.isLocal || !canDisconnect || !channelId}
@@ -113,13 +135,17 @@ export function ParticipantTile({
       <div
         className={`group/participant-tile relative flex min-h-0 min-w-0 items-center justify-center overflow-hidden rounded ${className} ${
           showVideo ? 'bg-gray-800' : 'bg-gray-800'
-        } ${participant.speaking ? 'ring-2 ring-brand/50' : ''} ${onWatchClick ? 'cursor-pointer' : ''}`}
+        } ${participant.speaking ? 'ring-2 ring-brand/50' : ''} ${
+          isWhistleTarget ? 'ring-2 ring-danger' : ''
+        } ${onWatchClick ? 'cursor-pointer' : ''}`}
         role={onWatchClick ? 'button' : undefined}
         tabIndex={onWatchClick ? 0 : undefined}
         aria-label={onWatchClick ? `Focus on ${participant.name}'s camera` : undefined}
         title={onWatchClick ? `Focus on ${participant.name}'s camera` : undefined}
         onClick={onWatchClick}
         onKeyDown={handleKeyDown}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
       >
         {showVideo ? (
           <video ref={videoRef} muted autoPlay playsInline className="block h-full w-full object-cover" />
@@ -131,6 +157,16 @@ export function ParticipantTile({
           <div className="absolute inset-0 flex items-center justify-center bg-black/20">
             <Spinner />
           </div>
+        )}
+
+        {isWhistlingToMe && (
+          <span
+            className="absolute bottom-1 right-1 rounded bg-black/50 px-1 py-0.5 text-sm"
+            title={`${participant.name} is whistling to you`}
+            aria-label={`${participant.name} is whistling to you`}
+          >
+            🐦
+          </span>
         )}
 
         {hasConnectionIssue && (

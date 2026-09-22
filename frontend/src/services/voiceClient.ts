@@ -9,6 +9,10 @@ import {
   type RemoteTrack,
   type RemoteTrackPublication,
 } from 'livekit-client';
+
+// Derived from the real method signature rather than importing a named type, so this stays
+// correct regardless of what livekit-client happens to call/export the parameter type as.
+type TrackSubscriptionPermissions = NonNullable<Parameters<LocalParticipant['setTrackSubscriptionPermissions']>[1]>;
 import { websocketClient } from './websocketClient';
 import * as soundEffects from './soundEffects';
 import { createNoiseSuppressionProcessor, isNoiseSuppressionSupported } from './audio/noiseSuppression';
@@ -70,6 +74,9 @@ class VoiceClient {
   // seeds knownRemoteIds from whoever's already in the room, without playing any join sounds,
   // since they didn't just join, they were already there when we connected.
   private hasSeededRemoteIds = false;
+  // Identity I'm currently whistling to, or null. Mirrors useVoiceStore's whisperingTo (kept here
+  // too since production code, unlike components, can't subscribe to the store reactively).
+  private whisperingToIdentity: string | null = null;
 
   // Synchronous half of connect(): bumps the generation guard and flips the store to
   // "connecting" immediately, before any async work happens. Split out from connect() itself so
@@ -171,6 +178,11 @@ class VoiceClient {
     this.speakingIdentities = new Set();
     this.knownRemoteIds = new Set();
     this.hasSeededRemoteIds = false;
+    // No explicit WHISTLE_STOP here: the VOICE_PRESENCE_LEAVE send just below already makes the
+    // backend clear any active whistle for this user (WhistleService.clearForUser, wired through
+    // VoicePresenceService.removePresence) — the room being abandoned makes the local permission
+    // reset moot too. useVoiceStore.reset() below clears the store's whisperingTo field.
+    this.whisperingToIdentity = null;
     // Removed proactively rather than left for the room's own TrackUnsubscribed events to clean
     // up: livekit-client's real Room.disconnect() awaits a server round-trip before emitting
     // those, so relying on them here would leak these elements for the entire duration of that
@@ -367,6 +379,59 @@ class VoiceClient {
       .catch(() => useVoiceStore.getState().setError('Failed to change screen share audio state'));
   }
 
+  /**
+   * Private whistle (docs/superpowers/specs/2026-09-22-private-whistle-design.md): restricts the
+   * local participant's mic track so only `targetIdentity` may subscribe to it, leaving every
+   * other track (camera, screen share) subscribable by everyone as normal. Enforced by the
+   * LiveKit SFU itself once set — not something another client can bypass locally — so no
+   * backend/server-side LiveKit API call is involved; the backend call below is authorization +
+   * UI signaling only (WhistleService).
+   */
+  startWhistle(targetIdentity: string): void {
+    const room = this.room;
+    if (!room || !this.currentChannelId) return;
+    if (!room.localParticipant.isMicrophoneEnabled) return;
+    if (targetIdentity === room.localParticipant.identity) return;
+
+    this.applyWhistlePermissions(room, targetIdentity);
+    this.whisperingToIdentity = targetIdentity;
+    useVoiceStore.getState().setWhisperingTo(targetIdentity);
+
+    websocketClient.send({
+      type: 'WHISTLE_START',
+      payload: { channelId: this.currentChannelId, targetUserId: targetIdentity },
+    });
+  }
+
+  stopWhistle(): void {
+    if (!this.whisperingToIdentity) return;
+    this.whisperingToIdentity = null;
+    useVoiceStore.getState().setWhisperingTo(null);
+    this.room?.localParticipant.setTrackSubscriptionPermissions(true);
+    websocketClient.send({ type: 'WHISTLE_STOP', payload: {} });
+  }
+
+  // Grants targetIdentity every track (including the mic) and every other remote participant
+  // every track EXCEPT the mic — omitting the mic track SID from their entry is what makes it
+  // inaudible to them. Re-run whenever the room roster changes while a whistle is active (see the
+  // ParticipantConnected handling below) since this call replaces the full permission list rather
+  // than merging into a prior one.
+  private applyWhistlePermissions(room: Room, targetIdentity: string): void {
+    const nonMicTrackSids = this.nonMicTrackSids(room);
+    const permissions: TrackSubscriptionPermissions = [{ participantIdentity: targetIdentity, allowAll: true }];
+    for (const identity of room.remoteParticipants.keys()) {
+      if (identity === targetIdentity) continue;
+      permissions.push({ participantIdentity: identity, allowedTrackSids: nonMicTrackSids });
+    }
+    room.localParticipant.setTrackSubscriptionPermissions(false, permissions);
+  }
+
+  private nonMicTrackSids(room: Room): string[] {
+    return [Track.Source.Camera, Track.Source.ScreenShare, Track.Source.ScreenShareAudio]
+      .map((source) => room.localParticipant.getTrackPublication(source)?.trackSid)
+      .filter((sid): sid is string => sid != null);
+  }
+
   setParticipantVolume(identity: string, volume: number): void {
     const element = this.audioElements.get(audioKey(identity, Track.Source.Microphone));
     if (element) element.volume = volume;
@@ -403,7 +468,7 @@ class VoiceClient {
   }
 
   private registerListeners(room: Room): void {
-    room.on(RoomEvent.ParticipantConnected, this.syncParticipants);
+    room.on(RoomEvent.ParticipantConnected, this.handleParticipantConnected);
     room.on(RoomEvent.ParticipantDisconnected, this.syncParticipants);
     room.on(RoomEvent.TrackMuted, this.syncParticipants);
     room.on(RoomEvent.TrackUnmuted, this.syncParticipants);
@@ -424,6 +489,16 @@ class VoiceClient {
     room.on(RoomEvent.ConnectionQualityChanged, this.syncParticipants);
     room.on(RoomEvent.ActiveSpeakersChanged, this.handleActiveSpeakersChanged);
   }
+
+  // A participant joining mid-whistle must be added to the "everyone but the mic" grant, so their
+  // video/screen-share stays visible once the whistle ends — applyWhistlePermissions replaces the
+  // full list each call, so it has to be re-run with the new roster, not just for the newcomer.
+  private handleParticipantConnected = (participant: RemoteParticipant): void => {
+    this.syncParticipants();
+    if (this.whisperingToIdentity && this.room && participant.identity !== this.whisperingToIdentity) {
+      this.applyWhistlePermissions(this.room, this.whisperingToIdentity);
+    }
+  };
 
   private handleActiveSpeakersChanged = (speakers: Participant[]): void => {
     const room = this.room;

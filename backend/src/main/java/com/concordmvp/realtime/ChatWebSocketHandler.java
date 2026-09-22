@@ -6,7 +6,9 @@ import com.concordmvp.common.exception.ResourceNotFoundException;
 import com.concordmvp.dm.DmMessageService;
 import com.concordmvp.dm.dto.SendDmMessageRequest;
 import com.concordmvp.media.VoicePresenceService;
+import com.concordmvp.media.WhistleService;
 import com.concordmvp.media.dto.VoicePresenceUpdateRequest;
+import com.concordmvp.media.dto.WhistleStartRequest;
 import com.concordmvp.messages.MessageService;
 import com.concordmvp.messages.dto.SendMessageRequest;
 import com.concordmvp.realtime.dto.ErrorPayload;
@@ -47,15 +49,17 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     private final MessageService messageService;
     private final DmMessageService dmMessageService;
     private final VoicePresenceService voicePresenceService;
+    private final WhistleService whistleService;
 
     public ChatWebSocketHandler(WebSocketSessionRegistry sessionRegistry, ObjectMapper objectMapper,
                                  MessageService messageService, DmMessageService dmMessageService,
-                                 VoicePresenceService voicePresenceService) {
+                                 VoicePresenceService voicePresenceService, WhistleService whistleService) {
         this.sessionRegistry = sessionRegistry;
         this.objectMapper = objectMapper;
         this.messageService = messageService;
         this.dmMessageService = dmMessageService;
         this.voicePresenceService = voicePresenceService;
+        this.whistleService = whistleService;
     }
 
     @Override
@@ -85,6 +89,8 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 case "DM_MESSAGE_CREATE" -> handleDmMessageCreate(session, root.get("payload"));
                 case "VOICE_PRESENCE_UPDATE" -> handleVoicePresenceUpdate(session, root.get("payload"));
                 case "VOICE_PRESENCE_LEAVE" -> voicePresenceService.removePresence(userId(session));
+                case "WHISTLE_START" -> handleWhistleStart(session, root.get("payload"));
+                case "WHISTLE_STOP" -> whistleService.stop(userId(session));
                 default -> sendError(session, "Unsupported message type: " + type);
             }
         } catch (IOException e) {
@@ -133,6 +139,18 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         } catch (Exception e) {
             log.warn("Failed to handle VOICE_PRESENCE_UPDATE from session {}", session.getId(), e);
             sendError(session, "Failed to update voice presence");
+        }
+    }
+
+    private void handleWhistleStart(WebSocketSession session, JsonNode payloadNode) {
+        try {
+            WhistleStartRequest request = objectMapper.treeToValue(payloadNode, WhistleStartRequest.class);
+            whistleService.start(request.channelId(), request.targetUserId(), userId(session));
+        } catch (ResourceNotFoundException | ForbiddenException | BadRequestException e) {
+            sendError(session, e.getMessage());
+        } catch (Exception e) {
+            log.warn("Failed to handle WHISTLE_START from session {}", session.getId(), e);
+            sendError(session, "Failed to start whistle");
         }
     }
 
