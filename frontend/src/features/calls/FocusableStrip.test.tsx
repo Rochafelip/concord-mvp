@@ -9,6 +9,12 @@ vi.mock('../../services/voiceClient', () => ({
   voiceClient: { setParticipantVolume: vi.fn() },
 }));
 
+// Renders ParticipantTile, which now uses UserProfileCard — this file has no QueryClientProvider
+// for it. UserProfileCard's own behavior is covered by UserProfileCard.test.tsx.
+vi.mock('../users/UserProfileCard', () => ({
+  UserProfileCard: ({ children }: { children: React.ReactNode }) => children,
+}));
+
 function participant(overrides: Partial<VoiceParticipant> = {}): VoiceParticipant {
   return {
     identity: 'u1',
