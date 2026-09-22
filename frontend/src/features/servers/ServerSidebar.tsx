@@ -1,4 +1,4 @@
-import { Plus, Users } from 'lucide-react';
+import { AlertTriangle, Plus, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { CreateServerModal } from './CreateServerModal';
@@ -19,8 +19,13 @@ import type { Friend } from '../../types/friend';
 export function ServerSidebar() {
   const { serverId, friendUserId } = useParams<{ serverId: string; friendUserId: string }>();
   const location = useLocation();
-  const { data: servers } = useServers();
-  const { data: friends } = useFriends();
+  const serversQuery = useServers();
+  const friendsQuery = useFriends();
+  const { data: servers } = serversQuery;
+  const { data: friends } = friendsQuery;
+  // A failed fetch left `data` undefined, which otherwise renders as an empty rail —
+  // indistinguishable from genuinely having no servers/friends (security audit, Baixa finding).
+  const hasLoadError = serversQuery.isError || friendsQuery.isError;
   const [createOpen, setCreateOpen] = useState(false);
   const unreadServerIds = useNotificationStore((state) => state.unreadServerIds);
   const clearServerUnread = useNotificationStore((state) => state.clearServerUnread);
@@ -57,6 +62,21 @@ export function ServerSidebar() {
         </Link>
       </div>
       <div className="w-8 border-t" />
+
+      {hasLoadError && (
+        <button
+          type="button"
+          aria-label="Falha ao carregar servidores/amigos. Tentar novamente"
+          title="Falha ao carregar servidores/amigos. Tentar novamente"
+          onClick={() => {
+            if (serversQuery.isError) serversQuery.refetch();
+            if (friendsQuery.isError) friendsQuery.refetch();
+          }}
+          className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-danger/10 text-danger transition-colors hover:bg-danger/20 sm:h-12 sm:w-12"
+        >
+          <AlertTriangle size={18} aria-hidden="true" />
+        </button>
+      )}
 
       {(friends ?? []).map((friend) => (
         <FriendRailIcon
