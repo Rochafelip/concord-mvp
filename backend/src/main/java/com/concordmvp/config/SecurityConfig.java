@@ -1,6 +1,7 @@
 package com.concordmvp.config;
 
 import com.concordmvp.auth.JwtAuthFilter;
+import com.concordmvp.users.AvatarUploadSizeFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -17,10 +18,13 @@ public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
     private final RestAuthenticationEntryPoint restAuthenticationEntryPoint;
+    private final AvatarUploadSizeFilter avatarUploadSizeFilter;
 
-    public SecurityConfig(JwtAuthFilter jwtAuthFilter, RestAuthenticationEntryPoint restAuthenticationEntryPoint) {
+    public SecurityConfig(JwtAuthFilter jwtAuthFilter, RestAuthenticationEntryPoint restAuthenticationEntryPoint,
+                           AvatarUploadSizeFilter avatarUploadSizeFilter) {
         this.jwtAuthFilter = jwtAuthFilter;
         this.restAuthenticationEntryPoint = restAuthenticationEntryPoint;
+        this.avatarUploadSizeFilter = avatarUploadSizeFilter;
     }
 
     @Bean
@@ -57,7 +61,8 @@ public class SecurityConfig {
                         ).permitAll()
                         .anyRequest().authenticated()
                 )
-                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(avatarUploadSizeFilter, JwtAuthFilter.class);
 
         return http.build();
     }
