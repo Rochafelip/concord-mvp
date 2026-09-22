@@ -63,6 +63,7 @@ export function useRealtimeSync(): void {
   const currentChannelIdRef = useRef(currentChannelId);
   const currentFriendUserIdRef = useRef(currentFriendUserId);
   const currentPathRef = useRef(location.pathname);
+  const voiceKickNotificationTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   useLayoutEffect(() => {
     currentServerIdRef.current = currentServerId;
     currentChannelIdRef.current = currentChannelId;
@@ -318,7 +319,10 @@ export function useRealtimeSync(): void {
           voiceClient.disconnect();
           const message = 'You were disconnected from the voice channel by a server admin.';
           setNotification(message);
-          window.setTimeout(() => {
+          if (voiceKickNotificationTimeoutRef.current != null) {
+            window.clearTimeout(voiceKickNotificationTimeoutRef.current);
+          }
+          voiceKickNotificationTimeoutRef.current = window.setTimeout(() => {
             if (useNotificationStore.getState().message === message) {
               useNotificationStore.getState().clear();
             }
@@ -446,6 +450,9 @@ export function useRealtimeSync(): void {
 
     return () => {
       unsubscribers.forEach((unsubscribe) => unsubscribe());
+      if (voiceKickNotificationTimeoutRef.current != null) {
+        window.clearTimeout(voiceKickNotificationTimeoutRef.current);
+      }
     };
   }, [markServerUnread, markFriendUnread, queryClient, navigate, setNotification]);
 }

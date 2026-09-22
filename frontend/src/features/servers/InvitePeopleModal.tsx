@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '../../components/Button';
 import { ErrorBanner } from '../../components/ErrorBanner';
 import { Modal } from '../../components/Modal';
@@ -20,15 +20,27 @@ export function InvitePeopleModal({ serverId, open, onClose }: InvitePeopleModal
   const inviteQuery = useInvite(open ? serverId : undefined);
   const regenerateInviteMutation = useRegenerateInvite(serverId);
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
+  const resetCopyStateTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const inviteUrl = inviteQuery.data ? `${window.location.origin}/invite/${inviteQuery.data.code}` : null;
+
+  useEffect(() => {
+    return () => {
+      if (resetCopyStateTimeout.current != null) {
+        clearTimeout(resetCopyStateTimeout.current);
+      }
+    };
+  }, []);
 
   async function handleCopy() {
     if (!inviteUrl) return;
     try {
       await navigator.clipboard.writeText(inviteUrl);
       setCopyState('copied');
-      setTimeout(() => setCopyState('idle'), 1500);
+      if (resetCopyStateTimeout.current != null) {
+        clearTimeout(resetCopyStateTimeout.current);
+      }
+      resetCopyStateTimeout.current = setTimeout(() => setCopyState('idle'), 1500);
     } catch {
       // Clipboard API unavailable/denied — the link is still shown on screen to copy by hand.
     }
