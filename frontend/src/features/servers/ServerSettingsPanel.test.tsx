@@ -12,6 +12,11 @@ import { ServerSettingsPanel } from './ServerSettingsPanel';
 
 vi.mock('./api');
 vi.mock('../permissions/api');
+// UserProfileCard needs a `../friends/api` mock this file doesn't set up — its own behavior is
+// covered by UserProfileCard.test.tsx.
+vi.mock('../users/UserProfileCard', () => ({
+  UserProfileCard: ({ children }: { children: React.ReactNode }) => children,
+}));
 
 const server: Server = {
   id: 's1',
