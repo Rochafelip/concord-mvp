@@ -1,7 +1,9 @@
 package com.concordmvp.users;
 
+import com.concordmvp.common.RateLimiter;
 import com.concordmvp.common.exception.BadRequestException;
 import com.concordmvp.common.exception.ResourceNotFoundException;
+import com.concordmvp.common.exception.TooManyRequestsException;
 import com.concordmvp.realtime.RealtimeEventPublisher;
 import com.concordmvp.realtime.WsEvent;
 import com.concordmvp.realtime.WsEventType;
@@ -16,6 +18,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.UUID;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.Set;
@@ -29,6 +32,11 @@ public class UserService {
     private final AvatarStorageService avatarStorageService;
     private final ServerMemberRepository serverMemberRepository;
     private final RealtimeEventPublisher realtimeEventPublisher;
+    // In memory rather than Redis, per docs/DECISIONS.md D3. Avatar changes are rare, so this is
+    // stricter than the attachment-upload limiter — same tier as PasswordResetService (security
+    // audit, Baixa finding).
+    private final RateLimiter avatarRateLimiter =
+            new RateLimiter(3, Duration.ofMinutes(1), 10, Duration.ofHours(1));
 
     @Autowired
     public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder,
@@ -89,6 +97,9 @@ public class UserService {
     }
 
     public User updateAvatar(UUID userId, org.springframework.web.multipart.MultipartFile file) {
+        if (!avatarRateLimiter.tryAcquire(userId.toString(), Instant.now())) {
+            throw new TooManyRequestsException("Muitos uploads. Tente novamente mais tarde.");
+        }
         User user = getCurrentUser(userId);
         AvatarStorageService.StoredAvatar stored = avatarStorageService.store(userId, file);
         String previous = user.getAvatarStorageKey();
