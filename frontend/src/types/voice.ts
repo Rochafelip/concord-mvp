@@ -8,8 +8,11 @@ export interface VoiceTokenResponse {
 
 export type ScreenShareQuality = 'hd' | 'fhd';
 
+export type ScreenShareFrameRate = 30 | 60;
+
 export interface ScreenShareOptions {
   quality: ScreenShareQuality;
+  frameRate: ScreenShareFrameRate;
   withAudio: boolean;
 }
 

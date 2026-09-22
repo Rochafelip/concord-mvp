@@ -345,7 +345,7 @@ class VoiceClient {
           ? localParticipant.setScreenShareEnabled(
               true,
               {
-                resolution: SCREEN_SHARE_QUALITY_PRESETS[options.quality],
+                resolution: { ...SCREEN_SHARE_QUALITY_PRESETS[options.quality], frameRate: options.frameRate },
                 audio: {
                   autoGainControl: false,
                   echoCancellation: false,
@@ -356,7 +356,7 @@ class VoiceClient {
               { audioPreset: AudioPresets.musicHighQualityStereo, dtx: false, red: true, forceStereo: true },
             )
           : localParticipant.setScreenShareEnabled(true, {
-              resolution: SCREEN_SHARE_QUALITY_PRESETS[options.quality],
+              resolution: { ...SCREEN_SHARE_QUALITY_PRESETS[options.quality], frameRate: options.frameRate },
             })
         : localParticipant.setScreenShareEnabled(enabling);
     promise
