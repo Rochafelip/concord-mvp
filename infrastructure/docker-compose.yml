@@ -189,17 +189,18 @@ services:
     image: linuxserver/duckdns:latest
     restart: unless-stopped
 
-    # linuxserver.io images run their own s6-overlay init as root; no PUID/PGID or extra volume
-    # is set here for it to chown, so this container should need nothing beyond a normal
-    # process's capabilities — but that init has more moving parts than the other images here,
-    # so if it fails to start after this change, drop cap_drop/security_opt for this service
-    # first while narrowing down the missing capability.
+    # linuxserver.io images run their own s6-overlay init as root, then drop the actual duckdns
+    # process to PUID:PGID once set — same uid/gid the backend container already uses (security
+    # audit, Baixa finding). No persistent volume is mounted here for it to chown, so there's
+    # nothing else for that init to need root for.
     cap_drop:
       - ALL
     security_opt:
       - no-new-privileges:true
 
     environment:
+      PUID: "1000"
+      PGID: "1000"
       SUBDOMAINS: ${DUCKDNS_SUBDOMAIN}
       TOKEN: ${DUCKDNS_TOKEN}
       LOG_FILE: "false"
