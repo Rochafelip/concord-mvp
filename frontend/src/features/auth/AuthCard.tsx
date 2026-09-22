@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Footer } from '../../components/Footer';
 import { Logo } from '../../components/Logo';
 import { ConcordBackdrop } from '../../components/illustrations/ConcordBackdrop';
 
@@ -23,6 +24,10 @@ export function AuthCard({ title, children, footer }: AuthCardProps) {
         {children}
 
         {footer && <footer className="text-center text-body text-muted">{footer}</footer>}
+      </div>
+
+      <div className="absolute inset-x-0 bottom-2">
+        <Footer />
       </div>
     </div>
   );
