@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { voiceClient } from '../../services/voiceClient';
 import { useVoiceStore } from '../../stores/voiceStore';
 import type { VoiceParticipant } from '../../types/voice';
+import { disconnectVoiceParticipant } from './api';
 import { ScreenShareTile } from './ScreenShareTile';
 
 vi.mock('../../services/voiceClient', () => ({
@@ -14,6 +15,10 @@ vi.mock('../../services/voiceClient', () => ({
     toggleMute: vi.fn(),
     disconnect: vi.fn(),
   },
+}));
+
+vi.mock('./api', () => ({
+  disconnectVoiceParticipant: vi.fn(),
 }));
 
 beforeEach(() => {
@@ -135,16 +140,20 @@ describe('ScreenShareTile', () => {
       expect(voiceClient.setScreenShareVolume).not.toHaveBeenCalled();
     });
 
-    it('reopens the volume control at the level the listener chose', () => {
+    it('reopens the volume control at the level the listener chose', async () => {
       vi.mocked(voiceClient.getScreenShareVolume).mockReturnValue(0.6);
+      const user = userEvent.setup();
 
       render(<ScreenShareTile participant={sharingParticipant({ isLocal: false, identity: 'bob', screenShareHasAudio: true, name: 'Felipe' })} />);
+      await user.click(screen.getByRole('button', { name: "Volume for Felipe's screen" }));
 
       expect(screen.getByRole('slider', { name: "Volume for Felipe's screen" })).toHaveValue('60');
     });
 
-    it('renders the volume control muted by default', () => {
+    it('renders the volume control muted by default', async () => {
+      const user = userEvent.setup();
       render(<ScreenShareTile participant={sharingParticipant({ isLocal: false, screenShareHasAudio: true, name: 'Felipe' })} />);
+      await user.click(screen.getByRole('button', { name: "Volume for Felipe's screen" }));
 
       expect(screen.getByRole('slider', { name: "Volume for Felipe's screen" })).toHaveValue('0');
     });
@@ -158,13 +167,13 @@ describe('ScreenShareTile', () => {
     it('renders a volume control when the share has audio and the sharer is remote', () => {
       render(<ScreenShareTile participant={sharingParticipant({ isLocal: false, screenShareHasAudio: true, name: 'Felipe' })} />);
 
-      expect(screen.getByRole('slider', { name: "Volume for Felipe's screen" })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: "Volume for Felipe's screen" })).toBeInTheDocument();
     });
 
     it('does not render a volume control when the share has no audio', () => {
       render(<ScreenShareTile participant={sharingParticipant({ isLocal: false, screenShareHasAudio: false })} />);
 
-      expect(screen.queryByRole('slider')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^Volume for/ })).not.toBeInTheDocument();
     });
 
     it('does not render a volume control when the presenter has muted the shared audio', () => {
@@ -174,29 +183,32 @@ describe('ScreenShareTile', () => {
         />,
       );
 
-      expect(screen.queryByRole('slider')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^Volume for/ })).not.toBeInTheDocument();
     });
 
     it('does not render a volume control for your own screen share, even with audio', () => {
       render(<ScreenShareTile participant={sharingParticipant({ isLocal: true, screenShareHasAudio: true })} />);
 
-      expect(screen.queryByRole('slider')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^Volume for/ })).not.toBeInTheDocument();
     });
 
-    it('forwards volume changes to voiceClient.setScreenShareVolume for that identity', () => {
+    it('forwards volume changes to voiceClient.setScreenShareVolume for that identity', async () => {
+      const user = userEvent.setup();
       render(
         <ScreenShareTile
           participant={sharingParticipant({ isLocal: false, identity: 'bob', screenShareHasAudio: true, name: 'Felipe' })}
         />,
       );
 
+      await user.click(screen.getByRole('button', { name: "Volume for Felipe's screen" }));
       fireEvent.change(screen.getByRole('slider', { name: "Volume for Felipe's screen" }), { target: { value: '65' } });
 
       expect(voiceClient.setScreenShareVolume).toHaveBeenCalledWith('bob', 0.65);
     });
 
-    it('does not trigger onWatchClick when the volume slider is used', () => {
+    it('does not trigger onWatchClick when the volume slider is used', async () => {
       const onWatchClick = vi.fn();
+      const user = userEvent.setup();
       render(
         <ScreenShareTile
           participant={sharingParticipant({ isLocal: false, screenShareHasAudio: true })}
@@ -204,6 +216,7 @@ describe('ScreenShareTile', () => {
         />,
       );
 
+      await user.click(screen.getByRole('button', { name: "Volume for Felipe's screen" }));
       fireEvent.click(screen.getByRole('slider', { name: "Volume for Felipe's screen" }));
 
       expect(onWatchClick).not.toHaveBeenCalled();
@@ -221,10 +234,21 @@ describe('ScreenShareTile', () => {
       expect(button).not.toHaveClass('group-hover:opacity-100');
     });
 
+    it('gives the fullscreen button a real touch target, not just the bare 16px icon', () => {
+      // It sits at the tile's extreme corner (left-1 top-1) — without a sized, padded hit box
+      // like every other overlay button in this file has (h-9 w-9), a finger tap that's a few
+      // pixels off the icon misses it entirely and silently does nothing.
+      render(<ScreenShareTile participant={sharingParticipant()} />);
+
+      const button = screen.getByRole('button', { name: 'Enter fullscreen' });
+      expect(button).toHaveClass('h-9');
+      expect(button).toHaveClass('w-9');
+    });
+
     it('reveals the volume icon when this share tile is hovered', () => {
       render(<ScreenShareTile participant={sharingParticipant({ screenShareHasAudio: true })} />);
 
-      const wrapper = screen.getByRole('slider', { name: "Volume for Felipe's screen" }).parentElement?.parentElement;
+      const wrapper = screen.getByRole('button', { name: "Volume for Felipe's screen" }).parentElement?.parentElement;
       expect(wrapper).toHaveClass('opacity-0');
       expect(wrapper).toHaveClass('group-hover/participant-tile:opacity-100');
     });
@@ -249,10 +273,57 @@ describe('ScreenShareTile', () => {
       expect(onWatchClick).toHaveBeenCalledTimes(1);
     });
 
+    it('silences the screen-share audio when stopping watching, so it does not keep playing after the tile disappears', async () => {
+      const user = userEvent.setup();
+      // A volume already on file (not undefined) means the mount-time "silence by default" effect
+      // stays a no-op here — any setScreenShareVolume(..., 0) call must come from the stop-watching
+      // click itself, not from that unrelated effect.
+      vi.mocked(voiceClient.getScreenShareVolume).mockReturnValue(0.6);
+      vi.mocked(voiceClient.setScreenShareVolume).mockClear();
+      render(
+        <ScreenShareTile
+          participant={sharingParticipant({ isLocal: false, identity: 'bob', name: 'Felipe', screenShareHasAudio: true })}
+          onWatchClick={vi.fn()}
+        />,
+      );
+
+      await user.click(screen.getByRole('button', { name: "Stop watching Felipe's screen" }));
+
+      expect(voiceClient.setScreenShareVolume).toHaveBeenCalledWith('bob', 0);
+    });
+
     it('is never clickable for the local participant\'s own share, even if onWatchClick is passed', () => {
       const { container } = render(<ScreenShareTile participant={sharingParticipant({ isLocal: true })} onWatchClick={vi.fn()} />);
 
       expect(container.firstChild).not.toHaveAttribute('role', 'button');
+    });
+
+    it('shows a pointer cursor and a tooltip so the click-to-stop-watching affordance is discoverable', () => {
+      render(<ScreenShareTile participant={sharingParticipant({ isLocal: false, name: 'Felipe' })} onWatchClick={vi.fn()} />);
+
+      const tile = screen.getByRole('button', { name: "Stop watching Felipe's screen" });
+      expect(tile).toHaveClass('cursor-pointer');
+      expect(tile).toHaveAttribute('title', "Stop watching Felipe's screen");
+    });
+
+    it('does not show the click-to-stop-watching cursor when the tile is not clickable', () => {
+      const { container } = render(<ScreenShareTile participant={sharingParticipant()} />);
+
+      expect(container.firstChild).not.toHaveClass('cursor-pointer');
+    });
+
+    it('shows an always-visible affordance badge, not just a hover cursor, since touch has no hover', () => {
+      render(<ScreenShareTile participant={sharingParticipant({ isLocal: false })} onWatchClick={vi.fn()} />);
+
+      const badge = screen.getByTestId('watch-affordance');
+      expect(badge).not.toHaveClass('opacity-0');
+      expect(badge).toHaveClass('pointer-events-none');
+    });
+
+    it('does not show the affordance badge when the tile is not clickable', () => {
+      render(<ScreenShareTile participant={sharingParticipant()} />);
+
+      expect(screen.queryByTestId('watch-affordance')).not.toBeInTheDocument();
     });
 
     it('does not trigger onWatchClick when the fullscreen button is clicked', async () => {
@@ -310,7 +381,7 @@ describe('ScreenShareTile', () => {
 
       await user.click(screen.getByRole('button', { name: 'Enter fullscreen' }));
 
-      expect(screen.getByRole('slider', { name: "Volume for Felipe's screen" })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: "Volume for Felipe's screen" })).toBeInTheDocument();
     });
 
     it('calls document.exitFullscreen when the exit button is clicked, and reverts the layout', async () => {
@@ -323,6 +394,24 @@ describe('ScreenShareTile', () => {
       expect(document.exitFullscreen).toHaveBeenCalledTimes(1);
       expect(container.firstChild).not.toHaveClass('fixed', 'inset-0');
       expect(screen.getByRole('button', { name: 'Enter fullscreen' })).toBeInTheDocument();
+    });
+
+    it('exits fullscreen if the tile unmounts while it is still the fullscreen element', async () => {
+      const user = userEvent.setup();
+      const { unmount } = render(<ScreenShareTile participant={sharingParticipant()} />);
+
+      await user.click(screen.getByRole('button', { name: 'Enter fullscreen' }));
+      unmount();
+
+      expect(document.exitFullscreen).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not call exitFullscreen on unmount when it was never the fullscreen element', () => {
+      const { unmount } = render(<ScreenShareTile participant={sharingParticipant()} />);
+
+      unmount();
+
+      expect(document.exitFullscreen).not.toHaveBeenCalled();
     });
 
     it('falls back to the full-viewport layout when requestFullscreen() rejects', async () => {
@@ -406,6 +495,20 @@ describe('ScreenShareTile', () => {
 
         expect(voiceClient.disconnect).toHaveBeenCalledTimes(1);
       });
+
+      it('places the volume control at the leading edge of the bar, so its popover opens over empty space instead of the mute/leave buttons', async () => {
+        useVoiceStore.setState({
+          participants: [{ ...sharingParticipant({ isLocal: false }), identity: 'me', isLocal: true, micEnabled: true }],
+        });
+        const user = userEvent.setup();
+        render(<ScreenShareTile participant={sharingParticipant({ isLocal: false, screenShareHasAudio: true, name: 'Felipe' })} />);
+
+        await user.click(screen.getByRole('button', { name: 'Enter fullscreen' }));
+
+        const bar = screen.getByRole('button', { name: 'Leave call' }).parentElement;
+        const trigger = screen.getByRole('button', { name: "Volume for Felipe's screen" });
+        expect(bar?.firstElementChild).toContainElement(trigger);
+      });
     });
   });
 
@@ -420,6 +523,55 @@ describe('ScreenShareTile', () => {
       const { container } = render(<ScreenShareTile participant={sharingParticipant()} className="h-full max-h-full max-w-full" />);
 
       expect(container.firstChild).toHaveClass('w-full', 'h-full', 'max-h-full', 'max-w-full');
+    });
+  });
+
+  describe('context menu', () => {
+    it('disconnects the participant from voice when the menu item is clicked', async () => {
+      const user = userEvent.setup();
+      const { container } = render(
+        <ScreenShareTile participant={sharingParticipant({ identity: 'bob' })} canDisconnect channelId="chan-1" />,
+      );
+
+      fireEvent.contextMenu(container.firstChild as Element);
+      await user.click(await screen.findByText('Disconnect from voice'));
+
+      expect(disconnectVoiceParticipant).toHaveBeenCalledWith('chan-1', 'bob');
+    });
+
+    it('does not offer to disconnect the local participant', () => {
+      const { container } = render(
+        <ScreenShareTile participant={sharingParticipant({ isLocal: true })} canDisconnect channelId="chan-1" />,
+      );
+
+      fireEvent.contextMenu(container.firstChild as Element);
+
+      expect(screen.queryByText('Disconnect from voice')).not.toBeInTheDocument();
+    });
+
+    it('does not offer to disconnect without the canDisconnect permission', () => {
+      const { container } = render(<ScreenShareTile participant={sharingParticipant()} channelId="chan-1" />);
+
+      fireEvent.contextMenu(container.firstChild as Element);
+
+      expect(screen.queryByText('Disconnect from voice')).not.toBeInTheDocument();
+    });
+
+    it('does not offer to disconnect without a channelId', () => {
+      const { container } = render(<ScreenShareTile participant={sharingParticipant()} canDisconnect />);
+
+      fireEvent.contextMenu(container.firstChild as Element);
+
+      expect(screen.queryByText('Disconnect from voice')).not.toBeInTheDocument();
+    });
+
+    it('stays in fullscreen when entering it disables the menu, since the tile is also the Fullscreen API target and an unmount here would exit it', async () => {
+      const user = userEvent.setup();
+      render(<ScreenShareTile participant={sharingParticipant({ name: 'Felipe' })} canDisconnect channelId="chan-1" />);
+
+      await user.click(screen.getByRole('button', { name: 'Enter fullscreen' }));
+
+      expect(screen.getByRole('button', { name: 'Exit fullscreen' })).toBeInTheDocument();
     });
   });
 });

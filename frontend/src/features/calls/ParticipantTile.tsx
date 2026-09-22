@@ -1,8 +1,11 @@
 import { ConnectionQuality } from 'livekit-client';
-import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
+import { Focus } from 'lucide-react';
+import { useEffect, useRef, type KeyboardEvent, type MouseEvent } from 'react';
 import { Avatar } from '../../components/Avatar';
+import { ContextMenu } from '../../components/ContextMenu';
 import { Spinner } from '../../components/Spinner';
 import { voiceClient } from '../../services/voiceClient';
+import { useVoiceStore } from '../../stores/voiceStore';
 import { disconnectVoiceParticipant } from './api';
 import type { VoiceParticipant } from '../../types/voice';
 import { QUALITY_ICON } from './connectionQuality';
@@ -64,8 +67,10 @@ export function ParticipantTile({
   channelId = null,
 }: ParticipantTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const contextMenuRef = useRef<HTMLDivElement>(null);
-  const [contextMenuOpen, setContextMenuOpen] = useState(false);
+  const whisperingTo = useVoiceStore((state) => state.whisperingTo);
+  const receivingWhistleFrom = useVoiceStore((state) => state.receivingWhistleFrom);
+  const isWhistleTarget = whisperingTo === participant.identity;
+  const isWhistlingToMe = receivingWhistleFrom === participant.identity;
   const { videoTrack } = participant;
   // livekit-client mutes the camera publication rather than unpublishing it when the camera is
   // turned off, so `videoTrack` stays non-null after that — `cameraEnabled` (isMuted-aware) is
@@ -97,98 +102,115 @@ export function ParticipantTile({
     event.stopPropagation();
   }
 
-  function handleContextMenu(event: MouseEvent<HTMLDivElement>) {
-    if (participant.isLocal || !canDisconnect || !channelId) return;
-    event.preventDefault();
-    setContextMenuOpen(true);
+  // Arms this participant as the private-whistle target while hovered — useWhistleHotkey reads
+  // armedWhistleTarget when the hotkey is pressed. The local participant can't whistle to
+  // themselves, so their own tile never arms.
+  function handleMouseEnter() {
+    if (participant.isLocal) return;
+    useVoiceStore.getState().setArmedWhistleTarget(participant.identity);
   }
 
-  useEffect(() => {
-    if (!contextMenuOpen) return;
-
-    function handlePointerDown(event: PointerEvent) {
-      if (!contextMenuRef.current?.contains(event.target as Node)) setContextMenuOpen(false);
+  // Only disarms the pending target — deliberately does not stop an already-active
+  // whistle if the pointer leaves mid-hold. Push-to-hold is key-driven; releasing W
+  // (or the other cleanup triggers in useWhistleHotkey) is what ends it.
+  function handleMouseLeave() {
+    if (useVoiceStore.getState().armedWhistleTarget === participant.identity) {
+      useVoiceStore.getState().setArmedWhistleTarget(null);
     }
-
-    function handleKeyDown(event: globalThis.KeyboardEvent) {
-      if (event.key === 'Escape') setContextMenuOpen(false);
-    }
-
-    document.addEventListener('pointerdown', handlePointerDown);
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [contextMenuOpen]);
+  }
 
   return (
-    <div
-      className={`group/participant-tile relative flex min-h-0 min-w-0 items-center justify-center overflow-hidden rounded ${className} ${
-        showVideo ? 'bg-gray-800' : 'bg-gray-800'
-      } ${participant.speaking ? 'ring-2 ring-brand/50' : ''}`}
-      role={onWatchClick ? 'button' : undefined}
-      tabIndex={onWatchClick ? 0 : undefined}
-      aria-label={onWatchClick ? `Focus on ${participant.name}'s camera` : undefined}
-      onClick={onWatchClick}
-      onKeyDown={handleKeyDown}
-      onContextMenu={handleContextMenu}
+    <ContextMenu
+      disabled={participant.isLocal || !canDisconnect || !channelId}
+      items={[
+        {
+          label: 'Disconnect from voice',
+          variant: 'danger',
+          onSelect: () => {
+            if (channelId) void disconnectVoiceParticipant(channelId, participant.identity);
+          },
+        },
+      ]}
     >
-      {showVideo ? (
-        <video ref={videoRef} muted autoPlay playsInline className="block h-full w-full object-cover" />
-      ) : (
-        <Avatar displayName={participant.name} avatarUrl={avatarUrl} size="lg" />
-      )}
+      <div
+        className={`group/participant-tile relative flex min-h-0 min-w-0 items-center justify-center overflow-hidden rounded ${className} ${
+          showVideo ? 'bg-gray-800' : 'bg-gray-800'
+        } ${participant.speaking ? 'ring-2 ring-brand/50' : ''} ${
+          isWhistleTarget ? 'ring-2 ring-danger' : ''
+        } ${onWatchClick ? 'cursor-pointer' : ''}`}
+        role={onWatchClick ? 'button' : undefined}
+        tabIndex={onWatchClick ? 0 : undefined}
+        aria-label={onWatchClick ? `Focus on ${participant.name}'s camera` : undefined}
+        title={onWatchClick ? `Focus on ${participant.name}'s camera` : undefined}
+        onClick={onWatchClick}
+        onKeyDown={handleKeyDown}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+      >
+        {showVideo ? (
+          <video ref={videoRef} muted autoPlay playsInline className="block h-full w-full object-cover" />
+        ) : (
+          <Avatar displayName={participant.name} avatarUrl={avatarUrl} size="lg" />
+        )}
 
-      {isConnecting && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-          <Spinner />
-        </div>
-      )}
+        {isConnecting && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+            <Spinner />
+          </div>
+        )}
 
-      {hasConnectionIssue && (
-        <span
-          className="absolute left-1 top-1 rounded bg-black/50 p-1"
-          title={participant.connectionQuality}
-          aria-label={`Connection: ${participant.connectionQuality}`}
-        >
-          <quality.Icon size={12} className={quality.className} aria-hidden="true" />
-        </span>
-      )}
-
-      <span className="absolute bottom-1 left-1 flex items-center gap-1 rounded bg-black/50 px-1.5 py-0.5 text-sm text-white">
-        <MicStatusIcon micEnabled={participant.micEnabled} deafened={deafened} />
-        {participant.name}
-        {participant.isLocal ? ' (you)' : ''}
-      </span>
-
-      {!participant.isLocal && showVolumeControl && (
-        <div
-          className="pointer-events-none absolute right-1 top-1 opacity-0 transition-opacity group-hover/participant-tile:pointer-events-auto group-hover/participant-tile:opacity-100 group-focus-within/participant-tile:pointer-events-auto group-focus-within/participant-tile:opacity-100"
-          onClick={stopPropagation}
-          onKeyDown={stopPropagation}
-        >
-          <VolumeControl
-            label={participant.name}
-            initialVolume={voiceClient.getParticipantVolume(participant.identity)}
-            onVolumeChange={(volume) => voiceClient.setParticipantVolume(participant.identity, volume)}
-          />
-        </div>
-      )}
-      {contextMenuOpen && canDisconnect && !participant.isLocal && channelId && (
-        <div ref={contextMenuRef} className="absolute right-2 top-2 z-20 min-w-44 rounded border border-border bg-surface p-1 shadow-lg" onClick={stopPropagation}>
-          <button
-            type="button"
-            className="w-full rounded px-2 py-1.5 text-left text-caption text-danger hover:bg-danger/10"
-            onClick={() => {
-              void disconnectVoiceParticipant(channelId, participant.identity);
-              setContextMenuOpen(false);
-            }}
+        {isWhistlingToMe && (
+          <span
+            className="absolute bottom-1 right-1 rounded bg-black/50 px-1 py-0.5 text-sm"
+            title={`${participant.name} is whistling to you`}
+            aria-label={`${participant.name} is whistling to you`}
           >
-            Disconnect from voice
-          </button>
-        </div>
-      )}
-    </div>
+            🐦
+          </span>
+        )}
+
+        {hasConnectionIssue && (
+          <span
+            className="absolute left-1 top-1 rounded bg-black/50 p-1"
+            title={participant.connectionQuality}
+            aria-label={`Connection: ${participant.connectionQuality}`}
+          >
+            <quality.Icon size={12} className={quality.className} aria-hidden="true" />
+          </span>
+        )}
+
+        <span className="absolute bottom-1 left-1 flex items-center gap-1 rounded bg-black/50 px-1.5 py-0.5 text-sm text-white">
+          <MicStatusIcon micEnabled={participant.micEnabled} deafened={deafened} />
+          {participant.name}
+          {participant.isLocal ? ' (you)' : ''}
+        </span>
+
+        {!participant.isLocal && showVolumeControl && (
+          <div
+            className="pointer-events-none absolute right-1 top-1 opacity-0 transition-opacity group-hover/participant-tile:pointer-events-auto group-hover/participant-tile:opacity-100 group-focus-within/participant-tile:pointer-events-auto group-focus-within/participant-tile:opacity-100"
+            onClick={stopPropagation}
+            onKeyDown={stopPropagation}
+          >
+            <VolumeControl
+              label={participant.name}
+              initialVolume={voiceClient.getParticipantVolume(participant.identity)}
+              onVolumeChange={(volume) => voiceClient.setParticipantVolume(participant.identity, volume)}
+            />
+          </div>
+        )}
+        {onWatchClick && (
+          // Stays faintly visible at rest (not just on hover) since touch devices have no hover
+          // state to reveal it — this is the only cue that the tile is tappable. Decorative only:
+          // pointer-events-none so it never competes with the tile's own onClick above.
+          <span
+            aria-hidden="true"
+            data-testid="watch-affordance"
+            className="pointer-events-none absolute bottom-1 right-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/50 text-white opacity-40 transition-opacity group-hover/participant-tile:opacity-100"
+          >
+            <Focus size={14} aria-hidden="true" />
+          </span>
+        )}
+      </div>
+    </ContextMenu>
   );
 }

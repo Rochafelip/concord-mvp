@@ -62,7 +62,7 @@ export function FocusedCallView({
   } = useGridLayout(watchTargets.length);
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pb-20">
       <div
         data-testid="watched-area"
         className="group/camera-grid relative flex min-h-0 min-w-0 flex-1 overflow-hidden p-4"
@@ -110,7 +110,7 @@ export function FocusedCallView({
         {isManual && (
           <button
             type="button"
-            aria-label="Return to automatic layout"
+            aria-label="Show all participants"
             onClick={onReturnToAutomatic}
             className="absolute right-2 top-2 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80"
           >

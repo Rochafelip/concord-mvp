@@ -21,7 +21,12 @@ export type WsEventType =
   | 'VOICE_PRESENCE_UPDATE'
   | 'VOICE_PRESENCE_LEAVE'
   | 'VOICE_KICK'
+  | 'WHISTLE_START'
+  | 'WHISTLE_STOP'
   | 'USER_PROFILE_UPDATE'
+  | 'PERMISSIONS_UPDATE'
+  | 'FRIEND_UPDATE'
+  | 'DM_MESSAGE_CREATE'
   | 'ERROR';
 
 /** Generic envelope for a WebSocket frame in both directions: {"type": "...", "payload": {...}}. */
@@ -90,6 +95,14 @@ export interface UserProfileUpdatePayload {
     avatarUrl: string | null;
   };
 }
+/**
+ * Deliberately thin: the client reacts by refetching, and every GET already returns the caller's
+ * own effective permissions. A per-recipient payload would have to be computed per socket.
+ */
+export interface PermissionsUpdatePayload {
+  serverId: string;
+}
+
 export interface ChannelReadPayload {
   channelId: string;
   userId: string;
@@ -98,3 +111,20 @@ export interface ChannelReadPayload {
 }
 
 export type VoiceKickPayload = string;
+
+/** Wire shape of WHISTLE_START/WHISTLE_STOP — sent only to the sender and target. */
+export interface WhistlePayload {
+  channelId: string;
+  senderId: string;
+  targetUserId: string;
+}
+
+/**
+ * Generic "something about this friendship changed, refetch" signal — same shape as
+ * PermissionsUpdatePayload's reasoning. Covers a request being created, accepted, cancelled,
+ * declined, or a friendship being removed.
+ */
+export interface FriendUpdatePayload {
+  userId: string;
+  otherUserId: string;
+}

@@ -182,10 +182,13 @@ describe('MessageList', () => {
     render(<MessageList channelId="c1" />);
     await user.click(screen.getByRole('img'));
 
-    expect(screen.getAllByRole('img')).toHaveLength(2);
+    // Not asserted by counting every img role: the modal now marks the rest of the page
+    // aria-hidden while open (Radix Dialog's a11y behavior), which drops the thumbnail out of
+    // the accessibility tree — the lightbox image is the one that must appear.
+    expect(screen.getByRole('img', { name: 'Full-size attachment' })).toBeInTheDocument();
 
     await user.keyboard('{Escape}');
-    expect(screen.getAllByRole('img')).toHaveLength(1);
+    expect(screen.queryByRole('img', { name: 'Full-size attachment' })).not.toBeInTheDocument();
   });
 
   it('renders a PDF preview and download link (not an <img>)', () => {
@@ -199,10 +202,11 @@ describe('MessageList', () => {
     render(<MessageList channelId="c1" />);
 
     expect(screen.queryByRole('img')).not.toBeInTheDocument();
-    expect(screen.getByTitle('report.pdf')).toHaveAttribute(
-      'src',
-      '/api/v1/uploads/abc.pdf',
-    );
+    const iframe = screen.getByTitle('report.pdf');
+    expect(iframe).toHaveAttribute('src', '/api/v1/uploads/abc.pdf');
+    // Defense in depth (security audit A10): no allow-scripts, so a payload disguised as
+    // `.pdf` can't execute even if the backend's magic-byte check were ever bypassed.
+    expect(iframe).toHaveAttribute('sandbox', 'allow-same-origin');
     const link = screen.getByRole('link', { name: /report\.pdf/i });
     expect(link).toHaveAttribute('href', '/api/v1/uploads/abc.pdf');
     expect(link).toHaveAttribute('download', 'report.pdf');

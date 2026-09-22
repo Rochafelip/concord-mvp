@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -37,6 +38,22 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().message()).isEqualTo("Corpo da requisição inválido");
+        assertThat(response.getBody().path()).isEqualTo("/api/v1/auth/register");
+    }
+
+    @Test
+    void handlesDataIntegrityViolation_as409() {
+        // A unique-constraint violation reaching this far means two concurrent requests raced
+        // past an application-level check (e.g. duplicate email on register) — a business
+        // conflict, not a server failure, so it must not fall through to the generic 500 handler.
+        when(request.getRequestURI()).thenReturn("/api/v1/auth/register");
+        DataIntegrityViolationException ex =
+                new DataIntegrityViolationException("duplicate key value violates unique constraint");
+
+        ResponseEntity<ApiError> response = handler.handleDataIntegrityViolation(ex, request);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().path()).isEqualTo("/api/v1/auth/register");
     }
 

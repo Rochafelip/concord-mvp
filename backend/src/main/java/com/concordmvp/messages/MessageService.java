@@ -10,6 +10,8 @@ import com.concordmvp.messages.dto.AttachmentRequest;
 import com.concordmvp.messages.dto.AttachmentResponse;
 import com.concordmvp.messages.dto.MessageResponse;
 import com.concordmvp.messages.dto.MessageDeletedPayload;
+import com.concordmvp.permissions.Permission;
+import com.concordmvp.permissions.PermissionService;
 import com.concordmvp.realtime.RealtimeEventPublisher;
 import com.concordmvp.realtime.WsEvent;
 import com.concordmvp.realtime.WsEventType;
@@ -20,10 +22,13 @@ import com.concordmvp.users.UserRepository;
 import com.concordmvp.users.UserAvatarUrls;
 import com.concordmvp.users.dto.UserSummaryResponse;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -66,6 +71,8 @@ public class MessageService {
     private final RealtimeEventPublisher realtimeEventPublisher;
     private final AttachmentCleanupService attachmentCleanupService;
     private final ChannelReadStateService channelReadStateService;
+    private final PermissionService permissionService;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     @Autowired
     public MessageService(MessageRepository messageRepository,
@@ -75,7 +82,10 @@ public class MessageService {
                            UserRepository userRepository,
                            RealtimeEventPublisher realtimeEventPublisher,
                            AttachmentCleanupService attachmentCleanupService,
-                           ChannelReadStateService channelReadStateService) {
+                           PermissionService permissionService,
+                           ChannelReadStateService channelReadStateService,
+                           ApplicationEventPublisher applicationEventPublisher) {
+        this.permissionService = permissionService;
         this.messageRepository = messageRepository;
         this.messageAttachmentRepository = messageAttachmentRepository;
         this.channelService = channelService;
@@ -84,32 +94,28 @@ public class MessageService {
         this.realtimeEventPublisher = realtimeEventPublisher;
         this.attachmentCleanupService = attachmentCleanupService;
         this.channelReadStateService = channelReadStateService;
-    }
-
-    // Constructor for backward compatibility with tests
-    public MessageService(MessageRepository messageRepository,
-                           MessageAttachmentRepository messageAttachmentRepository,
-                           ChannelService channelService,
-                           ServerMemberRepository serverMemberRepository,
-                           UserRepository userRepository,
-                           RealtimeEventPublisher realtimeEventPublisher,
-                           AttachmentCleanupService attachmentCleanupService) {
-        this(messageRepository, messageAttachmentRepository, channelService, serverMemberRepository,
-             userRepository, realtimeEventPublisher, attachmentCleanupService, null);
+        this.applicationEventPublisher = applicationEventPublisher;
     }
 
     public static final UUID SYSTEM_USER_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
 
     @Transactional
     public Message sendMessage(UUID channelId, String content, List<AttachmentRequest> attachments, UUID authorId) {
+        // getChannel already enforces membership and VIEW_CHANNEL.
         Channel channel = channelService.getChannel(channelId, authorId);
 
         if (channel.getType() == ChannelType.ONBOARDING) {
             throw new ForbiddenException("This channel is read-only");
         }
 
+        permissionService.requireChannel(channel, authorId, Permission.SEND_MESSAGES);
+
         String trimmed = content == null ? "" : content.trim();
         List<AttachmentRequest> normalized = normalizeAttachments(attachments);
+
+        if (!normalized.isEmpty()) {
+            permissionService.requireChannel(channel, authorId, Permission.ATTACH_FILES);
+        }
 
         if (trimmed.isEmpty() && normalized.isEmpty()) {
             throw new BadRequestException("Message must contain text or an attachment");
@@ -118,7 +124,7 @@ public class MessageService {
             throw new BadRequestException("Message content is too long");
         }
 
-        return persistAndBroadcast(channelId, channel.getServerId(), authorId, trimmed, normalized);
+        return persistAndBroadcast(channel, authorId, trimmed, normalized);
     }
 
     /**
@@ -163,11 +169,19 @@ public class MessageService {
      */
     @Transactional
     public Message postSystemMessage(UUID channelId, UUID serverId, String content) {
-        return persistAndBroadcast(channelId, serverId, SYSTEM_USER_ID, content, List.of());
+        // Not fetched from the repository: the caller (server creation / join) already knows both
+        // ids, and this is only ever used to resolve VIEW_CHANNEL for the broadcast below, not
+        // persisted.
+        Channel channel = new Channel();
+        channel.setId(channelId);
+        channel.setServerId(serverId);
+        return persistAndBroadcast(channel, SYSTEM_USER_ID, content, List.of());
     }
 
-    private Message persistAndBroadcast(UUID channelId, UUID serverId, UUID authorId, String content,
+    private Message persistAndBroadcast(Channel channel, UUID authorId, String content,
                                          List<AttachmentRequest> attachments) {
+        UUID channelId = channel.getId();
+        UUID serverId = channel.getServerId();
         Message message = new Message();
         message.setChannelId(channelId);
         message.setAuthorId(authorId);
@@ -183,7 +197,10 @@ public class MessageService {
                     saved.getId(), attachment.url(), attachment.fileName(), attachment.fileSize(), i)));
         }
 
-        Set<UUID> recipients = currentMemberIds(serverId);
+        // Only members who can actually see this channel (base permissions + channel overrides)
+        // may receive the broadcast below — currentMemberIds(serverId) alone would leak private
+        // channel content to the whole server.
+        Set<UUID> recipients = permissionService.visibleMemberIds(channel, currentMemberIds(serverId));
 
         // Increment unread count for all channel members except the author
         if (!authorId.equals(SYSTEM_USER_ID)) {
@@ -201,16 +218,31 @@ public class MessageService {
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + authorId));
 
         MessageResponse payload = toResponse(saved, author, savedAttachments);
-        // WARNING: MESSAGE_CREATE is broadcast here, before this @Transactional method returns
-        // and the transaction commits (docs/DATABASE.md §34 specifies persist -> commit ->
-        // broadcast). If commit fails after this point, clients will have seen a message that
-        // was never actually persisted. Same risk class as the broadcast-before-commit warning
-        // in ServerService.deleteServer — a proper fix (e.g. deferring this to a
-        // @TransactionalEventListener(phase = AFTER_COMMIT)) is a deliberate future decision,
-        // not something to sneak in here.
-        realtimeEventPublisher.broadcast(recipients, new WsEvent(WsEventType.MESSAGE_CREATE, payload));
+        // Deferred to AFTER_COMMIT (same pattern as ServerService.deleteServer, security audit
+        // A9/Baixa follow-up): if the transaction rolls back after this point, the event is
+        // simply never published, so clients never hear about a message that doesn't exist.
+        applicationEventPublisher.publishEvent(new MessageCreatedEvent(recipients, payload));
 
         return saved;
+    }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onMessageCreated(MessageCreatedEvent event) {
+        realtimeEventPublisher.broadcast(event.recipientUserIds(), new WsEvent(WsEventType.MESSAGE_CREATE, event.payload()));
+    }
+
+    /**
+     * Authorizes a GET on a previously uploaded attachment file (used by
+     * {@link AttachmentServingController}, security audit A4). Same access rule as reading the
+     * message it belongs to: the requester must be able to see that message's channel.
+     */
+    public void requireAttachmentAccess(String url, UUID requesterId) {
+        MessageAttachment attachment = messageAttachmentRepository.findByUrl(url)
+                .orElseThrow(() -> new ResourceNotFoundException("Attachment not found"));
+        Message message = messageRepository.findById(attachment.getMessageId())
+                .orElseThrow(() -> new ResourceNotFoundException("Attachment not found"));
+        Channel channel = channelService.getChannel(message.getChannelId(), requesterId);
+        permissionService.requireChannel(channel, requesterId, Permission.READ_MESSAGE_HISTORY);
     }
 
     /**
@@ -222,7 +254,8 @@ public class MessageService {
      *                 messages created in the same instant.
      */
     public List<MessageResponse> getHistory(UUID channelId, Instant before, UUID beforeId, int limit, UUID requesterId) {
-        channelService.getChannel(channelId, requesterId);
+        Channel channel = channelService.getChannel(channelId, requesterId);
+        permissionService.requireChannel(channel, requesterId, Permission.READ_MESSAGE_HISTORY);
 
         if (before != null && beforeId == null) {
             throw new BadRequestException("beforeId is required when before is provided");
@@ -260,16 +293,23 @@ public class MessageService {
                 .orElseThrow(() -> new ResourceNotFoundException("Message not found: " + messageId));
         Channel channel = channelService.getChannel(message.getChannelId(), requesterId);
         if (!message.getAuthorId().equals(requesterId)) {
-            throw new ForbiddenException("Only the message author can delete this message");
+            // Anyone else needs moderation rights in this channel.
+            permissionService.requireChannel(channel, requesterId, Permission.MANAGE_MESSAGES);
         }
 
         // Before the delete: the message_attachments rows go with the message via ON DELETE
         // CASCADE, and the cleanup service needs them to find the files on disk.
         attachmentCleanupService.deleteForMessages(List.of(message.getId()));
         messageRepository.delete(message);
-        realtimeEventPublisher.broadcast(currentMemberIds(channel.getServerId()),
-                new WsEvent(WsEventType.MESSAGE_DELETE,
-                        new MessageDeletedPayload(message.getId(), message.getChannelId())));
+        Set<UUID> recipients = permissionService.visibleMemberIds(channel, currentMemberIds(channel.getServerId()));
+        // Deferred to AFTER_COMMIT — same reasoning as persistAndBroadcast above.
+        applicationEventPublisher.publishEvent(new MessageDeletedEvent(recipients,
+                new MessageDeletedPayload(message.getId(), message.getChannelId())));
+    }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onMessageDeleted(MessageDeletedEvent event) {
+        realtimeEventPublisher.broadcast(event.recipientUserIds(), new WsEvent(WsEventType.MESSAGE_DELETE, event.payload()));
     }
 
     private Set<UUID> currentMemberIds(UUID serverId) {

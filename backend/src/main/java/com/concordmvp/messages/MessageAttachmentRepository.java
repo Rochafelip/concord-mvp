@@ -4,6 +4,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface MessageAttachmentRepository extends JpaRepository<MessageAttachment, UUID> {
@@ -15,4 +16,7 @@ public interface MessageAttachmentRepository extends JpaRepository<MessageAttach
      * queries.
      */
     List<MessageAttachment> findByMessageIdInOrderByMessageIdAscPositionAsc(Collection<UUID> messageIds);
+
+    /** Resolves a served file's URL back to the message/channel it belongs to, for authorization. */
+    Optional<MessageAttachment> findByUrl(String url);
 }

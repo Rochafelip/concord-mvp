@@ -6,13 +6,19 @@ import com.concordmvp.channels.ChannelType;
 import com.concordmvp.common.exception.BadRequestException;
 import com.concordmvp.common.exception.ForbiddenException;
 import com.concordmvp.common.exception.ResourceNotFoundException;
+import com.concordmvp.media.VoicePresenceService;
 import com.concordmvp.messages.AttachmentCleanupService;
 import com.concordmvp.messages.MessageRepository;
 import com.concordmvp.messages.MessageService;
 import com.concordmvp.messages.ChannelReadStateService;
+import com.concordmvp.permissions.Permission;
+import com.concordmvp.permissions.PermissionService;
+import com.concordmvp.permissions.RoleRepository;
+import com.concordmvp.permissions.RoleService;
 import com.concordmvp.realtime.RealtimeEventPublisher;
 import com.concordmvp.realtime.WsEvent;
 import com.concordmvp.realtime.WsEventType;
+import com.concordmvp.servers.dto.InvitePreview;
 import com.concordmvp.servers.dto.ServerDeletedPayload;
 import com.concordmvp.servers.dto.ServerMemberEventPayload;
 import com.concordmvp.servers.dto.ServerOwnerChangePayload;
@@ -20,8 +26,11 @@ import com.concordmvp.servers.dto.ServerMemberUpdatePayload;
 import com.concordmvp.users.User;
 import com.concordmvp.users.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.security.SecureRandom;
 import java.util.List;
@@ -51,6 +60,11 @@ public class ServerService {
     private final UserRepository userRepository;
     private final RealtimeEventPublisher realtimeEventPublisher;
     private final ChannelReadStateService channelReadStateService;
+    private final PermissionService permissionService;
+    private final RoleService roleService;
+    private final RoleRepository roleRepository;
+    private final ApplicationEventPublisher applicationEventPublisher;
+    private final VoicePresenceService voicePresenceService;
     private final SecureRandom secureRandom = new SecureRandom();
 
     @Autowired
@@ -63,7 +77,17 @@ public class ServerService {
                           MessageService messageService,
                           UserRepository userRepository,
                           RealtimeEventPublisher realtimeEventPublisher,
-                          ChannelReadStateService channelReadStateService) {
+                          PermissionService permissionService,
+                          RoleService roleService,
+                          RoleRepository roleRepository,
+                          ChannelReadStateService channelReadStateService,
+                          ApplicationEventPublisher applicationEventPublisher,
+                          VoicePresenceService voicePresenceService) {
+        this.applicationEventPublisher = applicationEventPublisher;
+        this.voicePresenceService = voicePresenceService;
+        this.permissionService = permissionService;
+        this.roleService = roleService;
+        this.roleRepository = roleRepository;
         this.serverRepository = serverRepository;
         this.serverMemberRepository = serverMemberRepository;
         this.serverInviteRepository = serverInviteRepository;
@@ -74,21 +98,6 @@ public class ServerService {
         this.userRepository = userRepository;
         this.realtimeEventPublisher = realtimeEventPublisher;
         this.channelReadStateService = channelReadStateService;
-    }
-
-    // Constructor for backward compatibility with tests
-    public ServerService(ServerRepository serverRepository,
-                          ServerMemberRepository serverMemberRepository,
-                          ServerInviteRepository serverInviteRepository,
-                          ChannelRepository channelRepository,
-                          MessageRepository messageRepository,
-                          AttachmentCleanupService attachmentCleanupService,
-                          MessageService messageService,
-                          UserRepository userRepository,
-                          RealtimeEventPublisher realtimeEventPublisher) {
-        this(serverRepository, serverMemberRepository, serverInviteRepository, channelRepository,
-             messageRepository, attachmentCleanupService, messageService, userRepository,
-             realtimeEventPublisher, null);
     }
 
     @Transactional
@@ -103,6 +112,10 @@ public class ServerService {
         ownerMembership.setServerId(saved.getId());
         ownerMembership.setUserId(ownerId);
         serverMemberRepository.save(ownerMembership);
+
+        // Same transaction, so a server can never exist without the baseline role its members
+        // resolve against. V18 did this in SQL for the servers that already existed.
+        roleService.createEveryoneRole(saved.getId());
 
         Channel onboardingChannel = new Channel();
         onboardingChannel.setServerId(saved.getId());
@@ -139,6 +152,7 @@ public class ServerService {
     public List<ServerMember> listMembers(UUID serverId, UUID requesterId) {
         requireServer(serverId);
         requireMember(serverId, requesterId);
+        permissionService.requireServer(serverId, requesterId, Permission.VIEW_MEMBER_LIST);
         return serverMemberRepository.findByServerId(serverId);
     }
 
@@ -223,6 +237,11 @@ public class ServerService {
 
         serverMemberRepository.delete(membership);
 
+        // Security audit A5: the LiveKit join token stays valid for hours regardless of server
+        // membership, so leaving must actively disconnect a voice call in progress rather than
+        // relying on the token to eventually expire.
+        voicePresenceService.disconnectFromServer(serverId, userId);
+
         Set<UUID> remainingRecipients = currentMemberIds(serverId);
         realtimeEventPublisher.broadcast(remainingRecipients,
                 new WsEvent(WsEventType.SERVER_MEMBER_LEAVE, new ServerMemberEventPayload(serverId, userId)));
@@ -259,15 +278,7 @@ public class ServerService {
         }
 
         Set<UUID> recipients = currentMemberIds(serverId);
-        realtimeEventPublisher.broadcast(recipients,
-                new WsEvent(WsEventType.SERVER_DELETE, new ServerDeletedPayload(serverId)));
 
-        // WARNING: SERVER_DELETE is broadcast above BEFORE the transaction commits. If
-        // channel/message deletion added below ever fails, the transaction rolls back but
-        // clients already believe the server is gone. Keep this in mind when extending this
-        // method — a proper fix (e.g. deferring the broadcast to
-        // @TransactionalEventListener(phase = AFTER_COMMIT)) is a deliberate decision for
-        // whoever implements this, not something to sneak in incidentally.
         List<UUID> channelIds = channelRepository.findByServerId(serverId).stream()
                 .map(Channel::getId)
                 .toList();
@@ -282,14 +293,29 @@ public class ServerService {
 
         channelRepository.deleteByServerId(serverId);
 
+        // Roles go before the memberships: member_roles cascades off server_members, and the
+        // overrides cascade off both channels and roles.
+        roleRepository.deleteByServerId(serverId);
+
         serverInviteRepository.findByServerId(serverId).ifPresent(serverInviteRepository::delete);
         serverMemberRepository.deleteAll(serverMemberRepository.findByServerId(serverId));
         serverRepository.delete(server);
+
+        // Deferred to AFTER_COMMIT (audit A9): if any deletion above fails, the transaction
+        // rolls back and this event is simply never published, so clients never hear about a
+        // deletion that didn't actually happen.
+        applicationEventPublisher.publishEvent(new ServerDeletedEvent(serverId, recipients));
+    }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onServerDeleted(ServerDeletedEvent event) {
+        realtimeEventPublisher.broadcast(event.recipientUserIds(),
+                new WsEvent(WsEventType.SERVER_DELETE, new ServerDeletedPayload(event.serverId())));
     }
 
     public ServerInvite getOrCreateInvite(UUID serverId, UUID requesterId) {
-        Server server = requireServer(serverId);
-        requireOwner(server, requesterId);
+        requireServer(serverId);
+        permissionService.requireServer(serverId, requesterId, Permission.MANAGE_INVITES);
 
         return serverInviteRepository.findByServerId(serverId)
                 .orElseGet(() -> createInvite(serverId));
@@ -297,8 +323,8 @@ public class ServerService {
 
     @Transactional
     public ServerInvite regenerateInvite(UUID serverId, UUID requesterId) {
-        Server server = requireServer(serverId);
-        requireOwner(server, requesterId);
+        requireServer(serverId);
+        permissionService.requireServer(serverId, requesterId, Permission.MANAGE_INVITES);
 
         return serverInviteRepository.findByServerId(serverId)
                 .map(invite -> {
@@ -306,6 +332,15 @@ public class ServerService {
                     return serverInviteRepository.save(invite);
                 })
                 .orElseGet(() -> createInvite(serverId));
+    }
+
+    /** Public preview for the invite landing page — no auth, no permission check. */
+    public InvitePreview getInvitePreview(String code) {
+        ServerInvite invite = serverInviteRepository.findByCode(code)
+                .orElseThrow(() -> new ResourceNotFoundException("Invalid invite code"));
+        Server server = requireServer(invite.getServerId());
+        long memberCount = serverMemberRepository.countByServerId(server.getId());
+        return new InvitePreview(server.getId(), server.getName(), (int) memberCount);
     }
 
     private ServerInvite createInvite(UUID serverId) {
@@ -335,12 +370,6 @@ public class ServerService {
         User user = requireUser(userId);
         if (!user.isEmailVerified()) {
             throw new ForbiddenException("Verifique seu e-mail antes de criar ou entrar em um servidor.");
-        }
-    }
-
-    private void requireOwner(Server server, UUID requesterId) {
-        if (!server.getOwnerId().equals(requesterId)) {
-            throw new ForbiddenException("Only the server owner can perform this action");
         }
     }
 

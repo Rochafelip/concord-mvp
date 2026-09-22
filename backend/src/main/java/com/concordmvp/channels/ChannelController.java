@@ -3,6 +3,8 @@ package com.concordmvp.channels;
 import com.concordmvp.channels.dto.ChannelResponse;
 import com.concordmvp.channels.dto.CreateChannelRequest;
 import com.concordmvp.common.CurrentUser;
+import com.concordmvp.permissions.PermissionService;
+import com.concordmvp.permissions.PermissionSet;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -21,29 +23,34 @@ import java.util.UUID;
 public class ChannelController {
 
     private final ChannelService channelService;
+    private final PermissionService permissionService;
 
-    public ChannelController(ChannelService channelService) {
+    public ChannelController(ChannelService channelService, PermissionService permissionService) {
         this.channelService = channelService;
+        this.permissionService = permissionService;
     }
 
     @GetMapping("/api/v1/servers/{serverId}/channels")
     public List<ChannelResponse> listChannels(@PathVariable UUID serverId) {
-        return channelService.listChannels(serverId, CurrentUser.id()).stream()
-                .map(this::toResponse)
+        UUID requesterId = CurrentUser.id();
+        return channelService.listChannels(serverId, requesterId).stream()
+                .map(channel -> toResponse(channel, requesterId))
                 .toList();
     }
 
     @PostMapping("/api/v1/servers/{serverId}/channels")
     public ResponseEntity<ChannelResponse> createChannel(@PathVariable UUID serverId,
                                                            @Valid @RequestBody CreateChannelRequest request) {
-        Channel channel = channelService.createChannel(serverId, request.name(), request.type(), CurrentUser.id());
-        return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(channel));
+        UUID requesterId = CurrentUser.id();
+        Channel channel = channelService.createChannel(serverId, request.name(), request.type(), requesterId);
+        return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(channel, requesterId));
     }
 
     @GetMapping("/api/v1/channels/{channelId}")
     public ChannelResponse getChannel(@PathVariable UUID channelId) {
-        Channel channel = channelService.getChannel(channelId, CurrentUser.id());
-        return toResponse(channel);
+        UUID requesterId = CurrentUser.id();
+        Channel channel = channelService.getChannel(channelId, requesterId);
+        return toResponse(channel, requesterId);
     }
 
     @DeleteMapping("/api/v1/channels/{channelId}")
@@ -52,8 +59,13 @@ public class ChannelController {
         return ResponseEntity.noContent().build();
     }
 
-    private ChannelResponse toResponse(Channel channel) {
+    /**
+     * Carries the requester's own effective permissions so the UI can hide actions it would only
+     * get a 403 for. It is a convenience, never the enforcement — that lives in the services.
+     */
+    private ChannelResponse toResponse(Channel channel, UUID requesterId) {
         return new ChannelResponse(channel.getId(), channel.getServerId(), channel.getName(),
-                channel.getType(), channel.getCreatedAt(), channel.getUpdatedAt(), null);
+                channel.getType(), channel.getCreatedAt(), channel.getUpdatedAt(), null,
+                PermissionSet.toNames(permissionService.channelPermissions(channel, requesterId)));
     }
 }

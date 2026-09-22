@@ -3,6 +3,8 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../../services/apiClient';
+import { requestPermission } from '../../services/desktopNotifications';
+import { useNotificationStore } from '../../stores/notificationStore';
 import { useAuthStore } from '../auth/authStore';
 import * as api from './api';
 import { SettingsPage } from './SettingsPage';
@@ -13,6 +15,9 @@ vi.mock('../../services/deviceManager', () => ({
   getPreferred: vi.fn(() => null),
   setPreferred: vi.fn(),
   watchDeviceChanges: vi.fn(() => () => {}),
+}));
+vi.mock('../../services/desktopNotifications', () => ({
+  requestPermission: vi.fn(),
 }));
 
 function renderSettingsPage() {
@@ -32,6 +37,31 @@ describe('SettingsPage', () => {
     });
     vi.mocked(api.updateProfile).mockReset();
     vi.mocked(api.changePassword).mockReset();
+    vi.mocked(requestPermission).mockClear();
+    useNotificationStore.setState({
+      preferences: { messageNotifications: false, onboardingNotifications: true },
+    });
+  });
+
+  it('requests desktop notification permission when message notifications are turned on', async () => {
+    const user = userEvent.setup();
+    renderSettingsPage();
+
+    await user.click(screen.getByRole('checkbox', { name: /Mensagens dos canais/ }));
+
+    expect(requestPermission).toHaveBeenCalled();
+  });
+
+  it('does not request desktop notification permission when message notifications are turned off', async () => {
+    useNotificationStore.setState({
+      preferences: { messageNotifications: true, onboardingNotifications: true },
+    });
+    const user = userEvent.setup();
+    renderSettingsPage();
+
+    await user.click(screen.getByRole('checkbox', { name: /Mensagens dos canais/ }));
+
+    expect(requestPermission).not.toHaveBeenCalled();
   });
 
   it('pre-fills the profile form with the current user', () => {

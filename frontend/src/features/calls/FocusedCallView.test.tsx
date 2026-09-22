@@ -57,6 +57,27 @@ describe('FocusedCallView', () => {
     expect(screen.getByText(/Felipe/)).toBeInTheDocument();
   });
 
+  it('reserves bottom space for the floating CallControlBar so it does not cover the off-camera roster', () => {
+    render(
+      <FocusedCallView
+        participants={[
+          participant({ identity: 'u1', name: 'Felipe', screenShareTrack: { attach: vi.fn(), detach: vi.fn() } as never }),
+          participant({ identity: 'u2', name: 'Lety' }),
+        ]}
+        watchTargets={[{ type: 'share', identity: 'u1' }]}
+        isManual={false}
+        onAddWatch={vi.fn()}
+        onRemoveWatch={vi.fn()}
+        onReturnToAutomatic={vi.fn()}
+        avatarUrlByUserId={new Map()}
+        deafenedByUserId={new Map()}
+      />,
+    );
+
+    expect(screen.getByTestId('off-camera-roster')).toBeInTheDocument();
+    expect(screen.getByTestId('watched-area').parentElement).toHaveClass('pb-20');
+  });
+
   it('keeps a watched camera tile\'s volume control scoped to its own icon', () => {
     render(
       <FocusedCallView
@@ -72,9 +93,8 @@ describe('FocusedCallView', () => {
     );
 
     expect(screen.getByTestId('watched-area')).toHaveClass('group/camera-grid');
-    const control = screen.getByRole('slider', { name: 'Volume for Felipe' }).parentElement;
-    expect(control).toHaveClass('group/volume-control');
-    expect(control).not.toHaveClass('group/camera-grid');
+    const trigger = screen.getByRole('button', { name: 'Volume for Felipe' });
+    expect(trigger.parentElement).not.toHaveClass('group/camera-grid');
   });
 
   it('reveals a watched share tile\'s fullscreen button on hover over the whole watched area', () => {
@@ -200,7 +220,7 @@ describe('FocusedCallView', () => {
       />,
     );
 
-    expect(screen.queryByRole('button', { name: 'Return to automatic layout' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Show all participants' })).not.toBeInTheDocument();
 
     rerender(
       <FocusedCallView
@@ -215,7 +235,7 @@ describe('FocusedCallView', () => {
       />,
     );
 
-    expect(screen.getByRole('button', { name: 'Return to automatic layout' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Show all participants' })).toBeInTheDocument();
   });
 
   it('calls onReturnToAutomatic when the return button is clicked', async () => {
@@ -234,7 +254,7 @@ describe('FocusedCallView', () => {
       />,
     );
 
-    await user.click(screen.getByRole('button', { name: 'Return to automatic layout' }));
+    await user.click(screen.getByRole('button', { name: 'Show all participants' }));
 
     expect(onReturnToAutomatic).toHaveBeenCalledTimes(1);
   });

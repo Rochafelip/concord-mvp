@@ -7,6 +7,8 @@ import com.concordmvp.common.exception.BadRequestException;
 import com.concordmvp.common.exception.ForbiddenException;
 import com.concordmvp.messages.dto.AttachmentRequest;
 import com.concordmvp.messages.dto.MessageResponse;
+import com.concordmvp.permissions.Permission;
+import com.concordmvp.permissions.PermissionService;
 import com.concordmvp.realtime.RealtimeEventPublisher;
 import com.concordmvp.realtime.WsEvent;
 import com.concordmvp.realtime.WsEventType;
@@ -14,12 +16,16 @@ import com.concordmvp.servers.ServerMember;
 import com.concordmvp.servers.ServerMemberRepository;
 import com.concordmvp.users.User;
 import com.concordmvp.users.UserRepository;
+import com.concordmvp.users.dto.UserSummaryResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
+import org.springframework.context.ApplicationEventPublisher;
 import com.concordmvp.messages.ChannelReadStateService;
 
 import java.time.Instant;
@@ -35,6 +41,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -42,6 +51,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class MessageServiceTest {
 
     @Mock
@@ -68,12 +78,36 @@ class MessageServiceTest {
     @Mock
     private ChannelReadStateService channelReadStateService;
 
+    @Mock
+    private PermissionService permissionService;
+
+    @Mock
+    private ApplicationEventPublisher applicationEventPublisher;
+
     private MessageService messageService;
 
     @BeforeEach
     void setUp() {
         messageService = new MessageService(messageRepository, messageAttachmentRepository, channelService,
-                serverMemberRepository, userRepository, realtimeEventPublisher, attachmentCleanupService, null);
+                serverMemberRepository, userRepository, realtimeEventPublisher, attachmentCleanupService,
+                permissionService, null, applicationEventPublisher);
+        // By default, visibility matches plain server membership — individual tests narrow this
+        // down to prove a broadcast is filtered when it should be.
+        when(permissionService.visibleMemberIds(any(), any())).thenAnswer(invocation -> invocation.getArgument(1));
+        // MESSAGE_CREATE/DELETE are only actually broadcast by the AFTER_COMMIT listeners
+        // (security audit, Baixa finding) — there's no real Spring transaction in this unit test,
+        // so simulate an immediate commit by dispatching straight to the listener. Tests that
+        // care about the deferral itself (not just the end result) assert on
+        // applicationEventPublisher directly instead of relying on this.
+        doAnswer(invocation -> {
+            Object event = invocation.getArgument(0);
+            if (event instanceof MessageCreatedEvent created) {
+                messageService.onMessageCreated(created);
+            } else if (event instanceof MessageDeletedEvent deleted) {
+                messageService.onMessageDeleted(deleted);
+            }
+            return null;
+        }).when(applicationEventPublisher).publishEvent(any(Object.class));
     }
 
     private Channel channel(UUID id, UUID serverId) {
@@ -239,6 +273,73 @@ class MessageServiceTest {
         assertThat(payload.author().id()).isEqualTo(authorId);
         assertThat(payload.author().username()).isEqualTo("alice");
         assertThat(payload.author().displayName()).isEqualTo("Alice");
+    }
+
+    @Test
+    void sendMessage_neverBroadcastsDirectly_onlyPublishesAnEventForAfterCommitDelivery() {
+        // Security audit (Baixa finding): MESSAGE_CREATE must not reach clients until the
+        // transaction actually commits, otherwise a mid-send failure rolls the save back while
+        // clients already believe the message exists (same risk class as A9's SERVER_DELETE
+        // fix). sendMessage itself must never touch realtimeEventPublisher — only the
+        // AFTER_COMMIT listener (onMessageCreated, tested below) does that.
+        UUID channelId = UUID.randomUUID();
+        UUID serverId = UUID.randomUUID();
+        UUID authorId = UUID.randomUUID();
+        User author = user(authorId, "alice", "Alice");
+
+        when(channelService.getChannel(channelId, authorId)).thenReturn(channel(channelId, serverId));
+        when(serverMemberRepository.findByServerId(serverId)).thenReturn(List.of(member(serverId, authorId)));
+        when(userRepository.findById(authorId)).thenReturn(Optional.of(author));
+        stubMessageSaveAssignsId();
+        // Overrides setUp()'s auto-dispatch: this test cares what sendMessage() itself does with
+        // realtimeEventPublisher, not what the listener eventually does with the event.
+        doAnswer(invocation -> null).when(applicationEventPublisher).publishEvent(any(Object.class));
+
+        messageService.sendMessage(channelId, "hello", null, authorId);
+
+        verifyNoInteractions(realtimeEventPublisher);
+        ArgumentCaptor<MessageCreatedEvent> eventCaptor = ArgumentCaptor.forClass(MessageCreatedEvent.class);
+        verify(applicationEventPublisher).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().recipientUserIds()).isEqualTo(Set.of(authorId));
+    }
+
+    @Test
+    void onMessageCreated_broadcastsToRecipients() {
+        UUID channelId = UUID.randomUUID();
+        UUID authorId = UUID.randomUUID();
+        MessageResponse payload = new MessageResponse(UUID.randomUUID(), channelId,
+                new UserSummaryResponse(authorId, "alice", "Alice", null), "hi", List.of(), Instant.now());
+
+        messageService.onMessageCreated(new MessageCreatedEvent(Set.of(authorId), payload));
+
+        ArgumentCaptor<WsEvent> eventCaptor = ArgumentCaptor.forClass(WsEvent.class);
+        verify(realtimeEventPublisher).broadcast(eq(Set.of(authorId)), eventCaptor.capture());
+        assertThat(eventCaptor.getValue().type()).isEqualTo(WsEventType.MESSAGE_CREATE);
+        assertThat(eventCaptor.getValue().payload()).isEqualTo(payload);
+    }
+
+    @Test
+    void sendMessage_memberWithoutViewChannel_doesNotReceiveTheBroadcast() {
+        UUID channelId = UUID.randomUUID();
+        UUID serverId = UUID.randomUUID();
+        UUID authorId = UUID.randomUUID();
+        UUID hiddenMemberId = UUID.randomUUID();
+        Channel target = channel(channelId, serverId);
+        User author = user(authorId, "alice", "Alice");
+
+        when(channelService.getChannel(channelId, authorId)).thenReturn(target);
+        when(serverMemberRepository.findByServerId(serverId))
+                .thenReturn(List.of(member(serverId, authorId), member(serverId, hiddenMemberId)));
+        when(userRepository.findById(authorId)).thenReturn(Optional.of(author));
+        // hiddenMemberId has no VIEW_CHANNEL on this channel (e.g. a channel override), so the
+        // permission service excludes it from who may see the broadcast.
+        when(permissionService.visibleMemberIds(eq(target), eq(Set.of(authorId, hiddenMemberId))))
+                .thenReturn(Set.of(authorId));
+        stubMessageSaveAssignsId();
+
+        messageService.sendMessage(channelId, "hello", null, authorId);
+
+        verify(realtimeEventPublisher).broadcast(eq(Set.of(authorId)), any(WsEvent.class));
     }
 
     @Test
@@ -682,5 +783,256 @@ class MessageServiceTest {
         } catch (ReflectiveOperationException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    // --- permission enforcement ---
+
+    @Test
+    void sendMessage_withoutSendMessages_throwsForbidden_andDoesNotSave() {
+        UUID channelId = UUID.randomUUID();
+        UUID serverId = UUID.randomUUID();
+        UUID authorId = UUID.randomUUID();
+        Channel target = channel(channelId, serverId);
+        when(channelService.getChannel(channelId, authorId)).thenReturn(target);
+        doThrow(new ForbiddenException("denied")).when(permissionService)
+                .requireChannel(target, authorId, Permission.SEND_MESSAGES);
+
+        assertThatThrownBy(() -> messageService.sendMessage(channelId, "oi", List.of(), authorId))
+                .isInstanceOf(ForbiddenException.class);
+
+        verify(messageRepository, never()).save(any());
+        verifyNoInteractions(realtimeEventPublisher);
+    }
+
+    @Test
+    void sendMessage_withAttachmentsButWithoutAttachFiles_throwsForbidden_andDoesNotSave() {
+        UUID channelId = UUID.randomUUID();
+        UUID serverId = UUID.randomUUID();
+        UUID authorId = UUID.randomUUID();
+        Channel target = channel(channelId, serverId);
+        when(channelService.getChannel(channelId, authorId)).thenReturn(target);
+        doNothing().when(permissionService).requireChannel(target, authorId, Permission.SEND_MESSAGES);
+        doThrow(new ForbiddenException("denied")).when(permissionService)
+                .requireChannel(target, authorId, Permission.ATTACH_FILES);
+
+        assertThatThrownBy(() -> messageService.sendMessage(channelId, "",
+                List.of(new AttachmentRequest("/api/v1/uploads/a.png", "a.png", 1L)), authorId))
+                .isInstanceOf(ForbiddenException.class);
+
+        verify(messageRepository, never()).save(any());
+    }
+
+    @Test
+    void sendMessage_withoutAttachments_doesNotRequireAttachFiles() {
+        UUID channelId = UUID.randomUUID();
+        UUID serverId = UUID.randomUUID();
+        UUID authorId = UUID.randomUUID();
+        Channel target = channel(channelId, serverId);
+        when(channelService.getChannel(channelId, authorId)).thenReturn(target);
+        when(userRepository.findById(authorId)).thenReturn(Optional.of(user(authorId, "alice", "Alice")));
+        stubMessageSaveAssignsId();
+
+        messageService.sendMessage(channelId, "oi", List.of(), authorId);
+
+        verify(permissionService, never()).requireChannel(target, authorId, Permission.ATTACH_FILES);
+    }
+
+    @Test
+    void getHistory_withoutReadMessageHistory_throwsForbidden() {
+        UUID channelId = UUID.randomUUID();
+        UUID serverId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        Channel target = channel(channelId, serverId);
+        when(channelService.getChannel(channelId, requesterId)).thenReturn(target);
+        doThrow(new ForbiddenException("denied")).when(permissionService)
+                .requireChannel(target, requesterId, Permission.READ_MESSAGE_HISTORY);
+
+        assertThatThrownBy(() -> messageService.getHistory(channelId, null, null, 50, requesterId))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void deleteMessage_author_deletesItsOwnMessageWithoutNeedingManageMessages() {
+        UUID channelId = UUID.randomUUID();
+        UUID serverId = UUID.randomUUID();
+        UUID authorId = UUID.randomUUID();
+        Message message = new Message();
+        message.setId(UUID.randomUUID());
+        message.setChannelId(channelId);
+        message.setAuthorId(authorId);
+        when(messageRepository.findById(message.getId())).thenReturn(Optional.of(message));
+        when(channelService.getChannel(channelId, authorId)).thenReturn(channel(channelId, serverId));
+
+        messageService.deleteMessage(message.getId(), authorId);
+
+        verify(messageRepository).delete(message);
+        verify(permissionService, never()).requireChannel(any(Channel.class), any(), any());
+    }
+
+    @Test
+    void deleteMessage_moderatorWithManageMessages_deletesSomebodyElsesMessage() {
+        UUID channelId = UUID.randomUUID();
+        UUID serverId = UUID.randomUUID();
+        UUID moderatorId = UUID.randomUUID();
+        Message message = new Message();
+        message.setId(UUID.randomUUID());
+        message.setChannelId(channelId);
+        message.setAuthorId(UUID.randomUUID());
+        Channel target = channel(channelId, serverId);
+        when(messageRepository.findById(message.getId())).thenReturn(Optional.of(message));
+        when(channelService.getChannel(channelId, moderatorId)).thenReturn(target);
+
+        messageService.deleteMessage(message.getId(), moderatorId);
+
+        verify(permissionService).requireChannel(target, moderatorId, Permission.MANAGE_MESSAGES);
+        verify(messageRepository).delete(message);
+    }
+
+    @Test
+    void deleteMessage_memberWithoutViewChannel_doesNotReceiveTheBroadcast() {
+        UUID channelId = UUID.randomUUID();
+        UUID serverId = UUID.randomUUID();
+        UUID authorId = UUID.randomUUID();
+        UUID hiddenMemberId = UUID.randomUUID();
+        Message message = new Message();
+        message.setId(UUID.randomUUID());
+        message.setChannelId(channelId);
+        message.setAuthorId(authorId);
+        Channel target = channel(channelId, serverId);
+        when(messageRepository.findById(message.getId())).thenReturn(Optional.of(message));
+        when(channelService.getChannel(channelId, authorId)).thenReturn(target);
+        when(permissionService.visibleMemberIds(eq(target), any())).thenReturn(Set.of(authorId));
+
+        messageService.deleteMessage(message.getId(), authorId);
+
+        verify(realtimeEventPublisher).broadcast(eq(Set.of(authorId)), any(WsEvent.class));
+    }
+
+    @Test
+    void deleteMessage_neverBroadcastsDirectly_onlyPublishesAnEventForAfterCommitDelivery() {
+        UUID channelId = UUID.randomUUID();
+        UUID serverId = UUID.randomUUID();
+        UUID authorId = UUID.randomUUID();
+        Message message = new Message();
+        message.setId(UUID.randomUUID());
+        message.setChannelId(channelId);
+        message.setAuthorId(authorId);
+        when(messageRepository.findById(message.getId())).thenReturn(Optional.of(message));
+        Channel target = channel(channelId, serverId);
+        when(channelService.getChannel(channelId, authorId)).thenReturn(target);
+        when(serverMemberRepository.findByServerId(serverId)).thenReturn(List.of(member(serverId, authorId)));
+        // Overrides setUp()'s auto-dispatch: this test cares what deleteMessage() itself does
+        // with realtimeEventPublisher, not what the listener eventually does with the event.
+        doAnswer(invocation -> null).when(applicationEventPublisher).publishEvent(any(Object.class));
+
+        messageService.deleteMessage(message.getId(), authorId);
+
+        verifyNoInteractions(realtimeEventPublisher);
+        ArgumentCaptor<MessageDeletedEvent> eventCaptor = ArgumentCaptor.forClass(MessageDeletedEvent.class);
+        verify(applicationEventPublisher).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().recipientUserIds()).isEqualTo(Set.of(authorId));
+        assertThat(eventCaptor.getValue().payload().messageId()).isEqualTo(message.getId());
+    }
+
+    @Test
+    void onMessageDeleted_broadcastsToRecipients() {
+        UUID channelId = UUID.randomUUID();
+        UUID messageId = UUID.randomUUID();
+        UUID memberId = UUID.randomUUID();
+
+        messageService.onMessageDeleted(new MessageDeletedEvent(Set.of(memberId),
+                new com.concordmvp.messages.dto.MessageDeletedPayload(messageId, channelId)));
+
+        ArgumentCaptor<WsEvent> eventCaptor = ArgumentCaptor.forClass(WsEvent.class);
+        verify(realtimeEventPublisher).broadcast(eq(Set.of(memberId)), eventCaptor.capture());
+        assertThat(eventCaptor.getValue().type()).isEqualTo(WsEventType.MESSAGE_DELETE);
+    }
+
+    @Test
+    void deleteMessage_nonAuthorWithoutManageMessages_throwsForbidden_andDeletesNothing() {
+        UUID channelId = UUID.randomUUID();
+        UUID serverId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        Message message = new Message();
+        message.setId(UUID.randomUUID());
+        message.setChannelId(channelId);
+        message.setAuthorId(UUID.randomUUID());
+        Channel target = channel(channelId, serverId);
+        when(messageRepository.findById(message.getId())).thenReturn(Optional.of(message));
+        when(channelService.getChannel(channelId, requesterId)).thenReturn(target);
+        doThrow(new ForbiddenException("denied")).when(permissionService)
+                .requireChannel(target, requesterId, Permission.MANAGE_MESSAGES);
+
+        assertThatThrownBy(() -> messageService.deleteMessage(message.getId(), requesterId))
+                .isInstanceOf(ForbiddenException.class);
+
+        verify(messageRepository, never()).delete(any());
+        verifyNoInteractions(attachmentCleanupService);
+    }
+
+    // --- requireAttachmentAccess ---
+
+    @Test
+    void requireAttachmentAccess_unknownUrl_throwsNotFound() {
+        UUID requesterId = UUID.randomUUID();
+        when(messageAttachmentRepository.findByUrl("/api/v1/uploads/missing.png")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> messageService.requireAttachmentAccess("/api/v1/uploads/missing.png", requesterId))
+                .isInstanceOf(com.concordmvp.common.exception.ResourceNotFoundException.class);
+
+        verifyNoInteractions(channelService);
+    }
+
+    @Test
+    void requireAttachmentAccess_nonMember_propagatesForbiddenFromChannelService() {
+        UUID channelId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        UUID messageId = UUID.randomUUID();
+        MessageAttachment attachment = new MessageAttachment(messageId, "/api/v1/uploads/a.png", "a.png", 10L, 0);
+        Message message = newMessage(channelId, UUID.randomUUID(), "", Instant.now(), messageId);
+        when(messageAttachmentRepository.findByUrl("/api/v1/uploads/a.png")).thenReturn(Optional.of(attachment));
+        when(messageRepository.findById(messageId)).thenReturn(Optional.of(message));
+        when(channelService.getChannel(channelId, requesterId))
+                .thenThrow(new ForbiddenException("Not a member of this server"));
+
+        assertThatThrownBy(() -> messageService.requireAttachmentAccess("/api/v1/uploads/a.png", requesterId))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void requireAttachmentAccess_withoutReadMessageHistory_throwsForbidden() {
+        UUID channelId = UUID.randomUUID();
+        UUID serverId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        UUID messageId = UUID.randomUUID();
+        MessageAttachment attachment = new MessageAttachment(messageId, "/api/v1/uploads/a.png", "a.png", 10L, 0);
+        Message message = newMessage(channelId, UUID.randomUUID(), "", Instant.now(), messageId);
+        Channel target = channel(channelId, serverId);
+        when(messageAttachmentRepository.findByUrl("/api/v1/uploads/a.png")).thenReturn(Optional.of(attachment));
+        when(messageRepository.findById(messageId)).thenReturn(Optional.of(message));
+        when(channelService.getChannel(channelId, requesterId)).thenReturn(target);
+        doThrow(new ForbiddenException("denied")).when(permissionService)
+                .requireChannel(target, requesterId, Permission.READ_MESSAGE_HISTORY);
+
+        assertThatThrownBy(() -> messageService.requireAttachmentAccess("/api/v1/uploads/a.png", requesterId))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void requireAttachmentAccess_memberWithPermission_doesNotThrow() {
+        UUID channelId = UUID.randomUUID();
+        UUID serverId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        UUID messageId = UUID.randomUUID();
+        MessageAttachment attachment = new MessageAttachment(messageId, "/api/v1/uploads/a.png", "a.png", 10L, 0);
+        Message message = newMessage(channelId, UUID.randomUUID(), "", Instant.now(), messageId);
+        Channel target = channel(channelId, serverId);
+        when(messageAttachmentRepository.findByUrl("/api/v1/uploads/a.png")).thenReturn(Optional.of(attachment));
+        when(messageRepository.findById(messageId)).thenReturn(Optional.of(message));
+        when(channelService.getChannel(channelId, requesterId)).thenReturn(target);
+
+        messageService.requireAttachmentAccess("/api/v1/uploads/a.png", requesterId);
+
+        verify(permissionService).requireChannel(target, requesterId, Permission.READ_MESSAGE_HISTORY);
     }
 }

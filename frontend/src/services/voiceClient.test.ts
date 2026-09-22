@@ -75,8 +75,10 @@ const {
           | { isMuted: boolean; mute: () => unknown; unmute: () => unknown }
           | { audioTrack: { setProcessor: (processor: unknown) => Promise<void>; stopProcessor: () => Promise<void> } }
           | { videoTrack: { restartTrack: (options: { facingMode: string }) => Promise<void> } }
+          | { trackSid: string }
           | undefined => undefined,
       ),
+      setTrackSubscriptionPermissions: vi.fn(),
     };
 
     constructor() {
@@ -200,7 +202,16 @@ describe('voiceClient', () => {
     mockPlaySelfLeave.mockClear();
     mockPlayParticipantJoined.mockClear();
     mockPlayParticipantLeft.mockClear();
-    useVoiceStore.setState({ status: 'disconnected', channelId: null, participants: [], error: null, isDeafened: false });
+    useVoiceStore.setState({
+      status: 'disconnected',
+      channelId: null,
+      participants: [],
+      error: null,
+      isDeafened: false,
+      whisperingTo: null,
+      receivingWhistleFrom: null,
+      armedWhistleTarget: null,
+    });
   });
 
   it('connects to the room, publishes the microphone by default, and marks the store connected', async () => {
@@ -1507,6 +1518,140 @@ describe('voiceClient', () => {
       room.localParticipant.getTrackPublication = vi.fn(() => undefined);
 
       await expect(voiceClient.flipCamera()).resolves.toBeUndefined();
+    });
+  });
+
+  describe('whistle', () => {
+    it('restricts mic subscription to the target and sends WHISTLE_START', async () => {
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+      const room = roomInstances[0];
+      room.localParticipant.isMicrophoneEnabled = true;
+      room.remoteParticipants.set('bob', remoteParticipant('bob'));
+      room.remoteParticipants.set('carol', remoteParticipant('carol'));
+
+      voiceClient.startWhistle('bob');
+
+      expect(room.localParticipant.setTrackSubscriptionPermissions).toHaveBeenCalledWith(false, [
+        { participantIdentity: 'bob', allowAll: true },
+        { participantIdentity: 'carol', allowedTrackSids: [] },
+      ]);
+      expect(mockSend).toHaveBeenCalledWith({
+        type: 'WHISTLE_START',
+        payload: { channelId: 'channel-1', targetUserId: 'bob' },
+      });
+      expect(useVoiceStore.getState().whisperingTo).toBe('bob');
+    });
+
+    it('grants every other remote participant their non-mic track SIDs, not just camera', async () => {
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+      const room = roomInstances[0];
+      room.localParticipant.isMicrophoneEnabled = true;
+      room.remoteParticipants.set('bob', remoteParticipant('bob'));
+      room.remoteParticipants.set('carol', remoteParticipant('carol'));
+      room.localParticipant.getTrackPublication = vi.fn((source?: string) => {
+        if (source === 'camera') return { trackSid: 'cam-sid' };
+        if (source === 'screen_share') return { trackSid: 'screen-sid' };
+        return undefined;
+      });
+
+      voiceClient.startWhistle('bob');
+
+      expect(room.localParticipant.setTrackSubscriptionPermissions).toHaveBeenCalledWith(false, [
+        { participantIdentity: 'bob', allowAll: true },
+        { participantIdentity: 'carol', allowedTrackSids: ['cam-sid', 'screen-sid'] },
+      ]);
+    });
+
+    it('does nothing when the microphone is off', async () => {
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+      const room = roomInstances[0];
+      room.localParticipant.isMicrophoneEnabled = false;
+
+      voiceClient.startWhistle('bob');
+
+      expect(room.localParticipant.setTrackSubscriptionPermissions).not.toHaveBeenCalled();
+      expect(mockSend).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'WHISTLE_START' }));
+      expect(useVoiceStore.getState().whisperingTo).toBeNull();
+    });
+
+    it('does nothing when not connected to a call', () => {
+      voiceClient.startWhistle('bob');
+
+      expect(mockSend).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'WHISTLE_START' }));
+    });
+
+    it('does nothing when the target is the local participant', async () => {
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+      const room = roomInstances[0];
+      room.localParticipant.isMicrophoneEnabled = true;
+
+      voiceClient.startWhistle('local-user');
+
+      expect(room.localParticipant.setTrackSubscriptionPermissions).not.toHaveBeenCalled();
+      expect(mockSend).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'WHISTLE_START' }));
+    });
+
+    it('resets subscription permissions and sends WHISTLE_STOP on stop', async () => {
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+      const room = roomInstances[0];
+      room.localParticipant.isMicrophoneEnabled = true;
+      voiceClient.startWhistle('bob');
+      mockSend.mockClear();
+
+      voiceClient.stopWhistle();
+
+      expect(room.localParticipant.setTrackSubscriptionPermissions).toHaveBeenLastCalledWith(true);
+      expect(mockSend).toHaveBeenCalledWith({ type: 'WHISTLE_STOP', payload: {} });
+      expect(useVoiceStore.getState().whisperingTo).toBeNull();
+    });
+
+    it('does nothing when stop is called while not whistling', async () => {
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+
+      voiceClient.stopWhistle();
+
+      expect(mockSend).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'WHISTLE_STOP' }));
+    });
+
+    it('re-applies permissions (including the newcomer) when a participant joins mid-whistle', async () => {
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+      const room = roomInstances[0];
+      room.localParticipant.isMicrophoneEnabled = true;
+      voiceClient.startWhistle('bob');
+      vi.mocked(room.localParticipant.setTrackSubscriptionPermissions).mockClear();
+
+      const dave = remoteParticipant('dave');
+      room.remoteParticipants.set('dave', dave);
+      const onParticipantConnected = handlerFor(room, 'participantConnected');
+      onParticipantConnected(dave);
+
+      expect(room.localParticipant.setTrackSubscriptionPermissions).toHaveBeenCalledWith(false, [
+        { participantIdentity: 'bob', allowAll: true },
+        { participantIdentity: 'dave', allowedTrackSids: [] },
+      ]);
+    });
+
+    it('does not re-apply permissions on participant join when not whistling', async () => {
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+      const room = roomInstances[0];
+
+      const onParticipantConnected = handlerFor(room, 'participantConnected');
+      onParticipantConnected(remoteParticipant('dave'));
+
+      expect(room.localParticipant.setTrackSubscriptionPermissions).not.toHaveBeenCalled();
+    });
+
+    it('clears whisperingTo on disconnect without sending a redundant WHISTLE_STOP', async () => {
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+      const room = roomInstances[0];
+      room.localParticipant.isMicrophoneEnabled = true;
+      voiceClient.startWhistle('bob');
+      mockSend.mockClear();
+
+      voiceClient.disconnect();
+
+      expect(useVoiceStore.getState().whisperingTo).toBeNull();
+      expect(mockSend).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'WHISTLE_STOP' }));
     });
   });
 });

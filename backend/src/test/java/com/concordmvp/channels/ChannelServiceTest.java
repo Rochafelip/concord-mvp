@@ -8,6 +8,8 @@ import com.concordmvp.common.exception.ResourceNotFoundException;
 import com.concordmvp.messages.MessageRepository;
 import com.concordmvp.messages.AttachmentCleanupService;
 import com.concordmvp.messages.ChannelReadStateService;
+import com.concordmvp.permissions.Permission;
+import com.concordmvp.permissions.PermissionService;
 import com.concordmvp.realtime.RealtimeEventPublisher;
 import com.concordmvp.realtime.WsEvent;
 import com.concordmvp.realtime.WsEventType;
@@ -21,6 +23,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 
 import java.util.List;
 import java.util.Optional;
@@ -31,12 +35,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class ChannelServiceTest {
 
     @Mock
@@ -60,12 +66,18 @@ class ChannelServiceTest {
     @Mock
     private ChannelReadStateService channelReadStateService;
 
+    @Mock
+    private PermissionService permissionService;
+
     private ChannelService channelService;
 
     @BeforeEach
     void setUp() {
         channelService = new ChannelService(channelRepository, serverRepository, serverMemberRepository,
-                messageRepository, attachmentCleanupService, realtimeEventPublisher, null);
+                messageRepository, attachmentCleanupService, realtimeEventPublisher, permissionService, null);
+        // By default, visibility matches plain server membership — individual tests narrow this
+        // down to prove a broadcast is filtered when it should be.
+        when(permissionService.visibleMemberIds(any(), any())).thenAnswer(invocation -> invocation.getArgument(1));
     }
 
     private Server server(UUID id, UUID ownerId) {
@@ -119,11 +131,13 @@ class ChannelServiceTest {
     }
 
     @Test
-    void createChannel_nonOwner_throwsForbidden() {
+    void createChannel_withoutManageChannels_throwsForbidden() {
         UUID serverId = UUID.randomUUID();
         UUID ownerId = UUID.randomUUID();
         UUID requesterId = UUID.randomUUID();
         when(serverRepository.findById(serverId)).thenReturn(Optional.of(server(serverId, ownerId)));
+        doThrow(new ForbiddenException("denied")).when(permissionService)
+                .requireServer(serverId, requesterId, Permission.MANAGE_CHANNELS);
 
         assertThatThrownBy(() -> channelService.createChannel(serverId, "general", ChannelType.TEXT, requesterId))
                 .isInstanceOf(ForbiddenException.class);
@@ -145,7 +159,7 @@ class ChannelServiceTest {
     }
 
     @Test
-    void createChannel_owner_succeeds_savesChannel_andBroadcastsToAllMembers() {
+    void createChannel_withManageChannels_succeeds_savesChannel_andBroadcastsToAllMembers() {
         UUID serverId = UUID.randomUUID();
         UUID ownerId = UUID.randomUUID();
         UUID otherMemberId = UUID.randomUUID();
@@ -177,6 +191,25 @@ class ChannelServiceTest {
         assertThat(payload.type()).isEqualTo(ChannelType.TEXT);
     }
 
+    @Test
+    void createChannel_memberWithoutViewChannel_doesNotReceiveTheBroadcast() {
+        UUID serverId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        UUID hiddenMemberId = UUID.randomUUID();
+        when(serverRepository.findById(serverId)).thenReturn(Optional.of(server(serverId, ownerId)));
+        when(serverMemberRepository.findByServerId(serverId))
+                .thenReturn(List.of(member(serverId, ownerId), member(serverId, hiddenMemberId)));
+        // hiddenMemberId has no VIEW_CHANNEL on the new channel (e.g. a role-wide override), so
+        // the permission service excludes it from who may see the broadcast.
+        when(permissionService.visibleMemberIds(any(Channel.class), eq(Set.of(ownerId, hiddenMemberId))))
+                .thenReturn(Set.of(ownerId));
+        stubChannelSaveAssignsId();
+
+        channelService.createChannel(serverId, "restrito", ChannelType.TEXT, ownerId);
+
+        verify(realtimeEventPublisher).broadcast(eq(Set.of(ownerId)), any(WsEvent.class));
+    }
+
     // --- listChannels ---
 
     @Test
@@ -206,12 +239,29 @@ class ChannelServiceTest {
         UUID channelId = UUID.randomUUID();
         when(serverRepository.findById(serverId)).thenReturn(Optional.of(server(serverId, UUID.randomUUID())));
         when(serverMemberRepository.existsByServerIdAndUserId(serverId, requesterId)).thenReturn(true);
-        when(channelRepository.findByServerId(serverId)).thenReturn(List.of(channel(channelId, serverId)));
+        Channel visible = channel(channelId, serverId);
+        when(channelRepository.findByServerId(serverId)).thenReturn(List.of(visible));
+        when(permissionService.filterVisible(List.of(visible), serverId, requesterId)).thenReturn(List.of(visible));
 
         List<Channel> result = channelService.listChannels(serverId, requesterId);
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getId()).isEqualTo(channelId);
+    }
+
+    @Test
+    void listChannels_omitsChannelsTheRequesterCannotView() {
+        UUID serverId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        Channel visible = channel(UUID.randomUUID(), serverId);
+        Channel hidden = channel(UUID.randomUUID(), serverId);
+        when(serverRepository.findById(serverId)).thenReturn(Optional.of(server(serverId, UUID.randomUUID())));
+        when(serverMemberRepository.existsByServerIdAndUserId(serverId, requesterId)).thenReturn(true);
+        when(channelRepository.findByServerId(serverId)).thenReturn(List.of(visible, hidden));
+        when(permissionService.filterVisible(List.of(visible, hidden), serverId, requesterId))
+                .thenReturn(List.of(visible));
+
+        assertThat(channelService.listChannels(serverId, requesterId)).containsExactly(visible);
     }
 
     // --- getChannel ---
@@ -250,6 +300,23 @@ class ChannelServiceTest {
         assertThat(result.getId()).isEqualTo(channelId);
     }
 
+    @Test
+    void getChannel_withoutViewChannel_throwsNotFoundRatherThanForbidden() {
+        // A 403 would confirm the channel exists, which leaks the server's structure to someone
+        // who is not supposed to know the channel is there at all.
+        UUID serverId = UUID.randomUUID();
+        UUID channelId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        Channel hidden = channel(channelId, serverId);
+        when(channelRepository.findById(channelId)).thenReturn(Optional.of(hidden));
+        when(serverMemberRepository.existsByServerIdAndUserId(serverId, requesterId)).thenReturn(true);
+        doThrow(new ResourceNotFoundException("Channel not found: " + channelId))
+                .when(permissionService).requireVisible(hidden, requesterId);
+
+        assertThatThrownBy(() -> channelService.getChannel(channelId, requesterId))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
     // --- deleteChannel ---
 
     @Test
@@ -281,13 +348,15 @@ class ChannelServiceTest {
     }
 
     @Test
-    void deleteChannel_nonOwner_throwsForbidden() {
+    void deleteChannel_withoutManageChannels_throwsForbidden() {
         UUID serverId = UUID.randomUUID();
         UUID ownerId = UUID.randomUUID();
         UUID requesterId = UUID.randomUUID();
         UUID channelId = UUID.randomUUID();
         when(channelRepository.findById(channelId)).thenReturn(Optional.of(channel(channelId, serverId)));
         when(serverRepository.findById(serverId)).thenReturn(Optional.of(server(serverId, ownerId)));
+        doThrow(new ForbiddenException("denied")).when(permissionService)
+                .requireServer(serverId, requesterId, Permission.MANAGE_CHANNELS);
 
         assertThatThrownBy(() -> channelService.deleteChannel(channelId, requesterId))
                 .isInstanceOf(ForbiddenException.class);
@@ -297,7 +366,7 @@ class ChannelServiceTest {
     }
 
     @Test
-    void deleteChannel_owner_succeeds_deletesMessagesAndChannel_andBroadcastsToAllMembers() {
+    void deleteChannel_withManageChannels_succeeds_deletesMessagesAndChannel_andBroadcastsToAllMembers() {
         UUID serverId = UUID.randomUUID();
         UUID ownerId = UUID.randomUUID();
         UUID otherMemberId = UUID.randomUUID();
@@ -321,5 +390,25 @@ class ChannelServiceTest {
         ChannelDeletedPayload payload = (ChannelDeletedPayload) eventCaptor.getValue().payload();
         assertThat(payload.channelId()).isEqualTo(channelId);
         assertThat(payload.serverId()).isEqualTo(serverId);
+    }
+
+    @Test
+    void deleteChannel_memberWithoutViewChannel_doesNotReceiveTheBroadcast() {
+        UUID serverId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        UUID hiddenMemberId = UUID.randomUUID();
+        UUID channelId = UUID.randomUUID();
+        Channel existing = channel(channelId, serverId);
+        when(channelRepository.findById(channelId)).thenReturn(Optional.of(existing));
+        when(serverRepository.findById(serverId)).thenReturn(Optional.of(server(serverId, ownerId)));
+        when(serverMemberRepository.findByServerId(serverId))
+                .thenReturn(List.of(member(serverId, ownerId), member(serverId, hiddenMemberId)));
+        when(messageRepository.findByChannelIdIn(List.of(channelId))).thenReturn(List.of());
+        when(permissionService.visibleMemberIds(eq(existing), eq(Set.of(ownerId, hiddenMemberId))))
+                .thenReturn(Set.of(ownerId));
+
+        channelService.deleteChannel(channelId, ownerId);
+
+        verify(realtimeEventPublisher).broadcast(eq(Set.of(ownerId)), any(WsEvent.class));
     }
 }

@@ -3,11 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../auth/authStore';
 import type { ServerMember } from '../../types/server';
 import * as api from './api';
+import { hasPermission, type Permission } from '../../types/permission';
 
-export function useServers() {
+export function useServers(enabled = true) {
   return useQuery({
     queryKey: ['servers'],
     queryFn: api.listServers,
+    enabled,
   });
 }
 
@@ -24,6 +26,21 @@ export function useServer(serverId: string | undefined) {
  * gate owner-only UI (ChannelSidebar's "create channel", ServerSettingsPanel's invite/
  * transfer/delete actions, and future ones) instead of each re-deriving it from `useServer`
  * + `authStore` independently.
+ */
+/**
+ * Whether the current user holds a server-level permission. Use this to hide controls; the
+ * backend re-checks every one of them, so a stale or missing value can only cost a 403, never
+ * grant access.
+ */
+export function useHasPermission(serverId: string | undefined, permission: Permission): boolean {
+  const { data: server } = useServer(serverId);
+  return hasPermission(server?.permissions, permission);
+}
+
+/**
+ * Still here, and still correct, for the two things a permission cannot delegate: deleting the
+ * server and transferring ownership (docs/DECISIONS.md D20). Everything else now asks
+ * {@link useHasPermission}.
  */
 export function useIsServerOwner(serverId: string | undefined): boolean {
   const currentUserId = useAuthStore((state) => state.user?.id);
@@ -63,6 +80,16 @@ export function useInvite(serverId: string | undefined) {
     queryKey: ['servers', serverId, 'invite'],
     queryFn: () => api.getInvite(serverId!),
     enabled: serverId != null,
+  });
+}
+
+/** Public preview for the invite landing page — no auth required, unlike {@link useInvite}. */
+export function useInvitePreview(code: string | undefined) {
+  return useQuery({
+    queryKey: ['invites', code],
+    queryFn: () => api.getInvitePreview(code!),
+    enabled: code != null,
+    retry: false,
   });
 }
 

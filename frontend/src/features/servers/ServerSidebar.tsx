@@ -1,23 +1,36 @@
-import { Plus, UserPlus } from 'lucide-react';
+import { AlertTriangle, Plus, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import { CreateServerModal } from './CreateServerModal';
 import { useServers } from './hooks';
-import { JoinServerModal } from './JoinServerModal';
+import { useFriends } from '../friends/hooks';
 import { useNotificationStore } from '../../stores/notificationStore';
+import type { Friend } from '../../types/friend';
 
 /**
  * The persistent far-left "server rail" (Discord-style icon list). Selection is derived
- * from the URL's :serverId param, not duplicated into Zustand — see ARCHITECTURE.md's
- * URL-as-source-of-truth pattern already used by ProtectedRoute/AppRouter.
+ * from the URL's :serverId/:friendUserId params, not duplicated into Zustand — see
+ * ARCHITECTURE.md's URL-as-source-of-truth pattern already used by ProtectedRoute/AppRouter.
+ *
+ * Between the friends icon and the server list, it also renders one circle per friend —
+ * DMs reuse the friend list (there is no separate "conversations" concept on the backend) so
+ * every friend is one tap away, the same way every server is.
  */
 export function ServerSidebar() {
-  const { serverId } = useParams<{ serverId: string }>();
-  const { data: servers } = useServers();
+  const { serverId, friendUserId } = useParams<{ serverId: string; friendUserId: string }>();
+  const location = useLocation();
+  const serversQuery = useServers();
+  const friendsQuery = useFriends();
+  const { data: servers } = serversQuery;
+  const { data: friends } = friendsQuery;
+  // A failed fetch left `data` undefined, which otherwise renders as an empty rail —
+  // indistinguishable from genuinely having no servers/friends (security audit, Baixa finding).
+  const hasLoadError = serversQuery.isError || friendsQuery.isError;
   const [createOpen, setCreateOpen] = useState(false);
-  const [joinOpen, setJoinOpen] = useState(false);
   const unreadServerIds = useNotificationStore((state) => state.unreadServerIds);
   const clearServerUnread = useNotificationStore((state) => state.clearServerUnread);
+  const unreadFriendIds = useNotificationStore((state) => state.unreadFriendIds);
+  const isFriendsAreaSelected = location.pathname.startsWith('/app/friends');
 
   useEffect(() => {
     if (serverId) clearServerUnread(serverId);
@@ -28,15 +41,53 @@ export function ServerSidebar() {
       aria-label="Servers"
       className="flex w-14 flex-shrink-0 flex-col items-center gap-2 overflow-y-auto border-r bg-rail py-2 sm:w-16 sm:py-3"
     >
-      <button
-        type="button"
-        aria-label="Join server"
-        title="Join a server"
-        onClick={() => setJoinOpen(true)}
-        className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-sidebar text-muted hover:bg-brand/20 hover:text-brand"
-      >
-        <UserPlus size={17} aria-hidden="true" />
-      </button>
+      <div className="relative flex w-full items-center justify-center">
+        {isFriendsAreaSelected && <span className="absolute left-0 h-8 w-1 rounded-r bg-brand" aria-hidden="true" />}
+        <Link
+          to="/app/friends"
+          aria-label="Amigos"
+          aria-current={isFriendsAreaSelected ? 'page' : undefined}
+          title="Amigos"
+          className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full transition-colors sm:h-12 sm:w-12 ${
+            isFriendsAreaSelected ? 'bg-brand text-white' : 'bg-sidebar text-muted hover:bg-brand/20'
+          }`}
+        >
+          <Users size={20} aria-hidden="true" />
+          {unreadFriendIds.length > 0 && !isFriendsAreaSelected && (
+            <span
+              aria-label="Mensagens ou pedidos novos"
+              className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-brand ring-2 ring-rail"
+            />
+          )}
+        </Link>
+      </div>
+      <div className="w-8 border-t" />
+
+      {hasLoadError && (
+        <button
+          type="button"
+          aria-label="Falha ao carregar servidores/amigos. Tentar novamente"
+          title="Falha ao carregar servidores/amigos. Tentar novamente"
+          onClick={() => {
+            if (serversQuery.isError) serversQuery.refetch();
+            if (friendsQuery.isError) friendsQuery.refetch();
+          }}
+          className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-danger/10 text-danger transition-colors hover:bg-danger/20 sm:h-12 sm:w-12"
+        >
+          <AlertTriangle size={18} aria-hidden="true" />
+        </button>
+      )}
+
+      {(friends ?? []).map((friend) => (
+        <FriendRailIcon
+          key={friend.friendshipId}
+          friend={friend}
+          isSelected={friend.user.id === friendUserId}
+          hasUnread={unreadFriendIds.includes(friend.user.id) && friend.user.id !== friendUserId}
+        />
+      ))}
+
+      {(friends ?? []).length > 0 && (servers ?? []).length > 0 && <div className="w-8 border-t" />}
 
       {(servers ?? []).map((server) => {
         const isSelected = server.id === serverId;
@@ -81,7 +132,57 @@ export function ServerSidebar() {
       </div>
 
       <CreateServerModal open={createOpen} onClose={() => setCreateOpen(false)} />
-      <JoinServerModal open={joinOpen} onClose={() => setJoinOpen(false)} />
     </nav>
+  );
+}
+
+/**
+ * One friend's DM entry in the rail. A local `avatarFailed` flag (rather than Avatar's own,
+ * differently-sized component) mirrors Avatar.tsx's broken-image fallback so a dead avatarUrl
+ * still degrades to the initial, matching the server circles right below it.
+ */
+function FriendRailIcon({
+  friend,
+  isSelected,
+  hasUnread,
+}: {
+  friend: Friend;
+  isSelected: boolean;
+  hasUnread: boolean;
+}) {
+  const [avatarFailed, setAvatarFailed] = useState(false);
+  const initial = friend.user.displayName.trim().charAt(0).toUpperCase() || '?';
+
+  return (
+    <div className="relative flex w-full items-center justify-center">
+      {isSelected && <span className="absolute left-0 h-8 w-1 rounded-r bg-brand" aria-hidden="true" />}
+      <Link
+        to={`/app/dm/${friend.user.id}`}
+        aria-label={friend.user.displayName}
+        aria-current={isSelected ? 'page' : undefined}
+        title={friend.user.displayName}
+        className={`flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-full text-body font-semibold transition-colors sm:h-12 sm:w-12 ${
+          isSelected ? 'bg-brand text-white' : 'bg-sidebar text-muted hover:bg-brand/20'
+        }`}
+      >
+        {friend.user.avatarUrl && !avatarFailed ? (
+          <img
+            src={friend.user.avatarUrl}
+            alt=""
+            aria-hidden="true"
+            className="h-full w-full object-cover"
+            onError={() => setAvatarFailed(true)}
+          />
+        ) : (
+          initial
+        )}
+        {hasUnread && (
+          <span
+            aria-label="Novas mensagens"
+            className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-brand ring-2 ring-rail"
+          />
+        )}
+      </Link>
+    </div>
   );
 }

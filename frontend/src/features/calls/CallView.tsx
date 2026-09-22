@@ -5,9 +5,11 @@ import { voiceClient } from '../../services/voiceClient';
 import { ApiError } from '../../services/apiClient';
 import { useVoiceStore } from '../../stores/voiceStore';
 import type { Channel } from '../../types/channel';
+import { hasPermission } from '../../types/permission';
 import { CallControlBar } from './CallControlBar';
 import { ParticipantList } from './ParticipantList';
 import { useJoinVoiceChannel } from './hooks';
+import { useWhistleHotkey } from './useWhistleHotkey';
 
 interface CallViewProps {
   channel: Channel;
@@ -27,6 +29,7 @@ interface CallViewProps {
 export function CallView({ channel }: CallViewProps) {
   const joinVoiceMutation = useJoinVoiceChannel();
   const navigate = useNavigate();
+  useWhistleHotkey();
 
   useEffect(() => {
     const voiceState = useVoiceStore.getState();
@@ -56,7 +59,7 @@ export function CallView({ channel }: CallViewProps) {
           </div>
         )}
         <ParticipantList serverId={channel.serverId} />
-        <CallControlBar onLeave={handleLeave} />
+        <CallControlBar onLeave={handleLeave} canUseVideo={hasPermission(channel.permissions, 'USE_VIDEO')} />
       </div>
     </div>
   );

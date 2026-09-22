@@ -36,15 +36,26 @@ refresh endpoint) is real implementation effort and mainly pays off when
 you need short-lived access tokens for a large, semi-trusted user base.
 
 **Decision**: Use a single JWT access token with a long expiry (e.g. 30
-days). No refresh token, no refresh endpoint, no server-side revocation
-list. Logout simply discards the token client-side; the token remains
-technically valid until it expires.
+days). No refresh token, no refresh endpoint.
 
-**Consequences**: Simpler auth implementation (no token rotation/blacklist
-logic). Trade-off: a stolen token stays valid until expiry with no way to
-revoke it early. Acceptable for a small, trusted group of friends.
+**Consequences**: Simpler auth implementation (no token rotation logic).
+Acceptable for a small, trusted group of friends.
 
 Supersedes: AGENTS.md "Authentication" scope item "Refresh tokens".
+
+**Update (2026-09-19, security audit)**: The original version of this
+decision also ruled out a server-side revocation list, so logout only
+discarded the token client-side and a stolen token stayed valid until its
+30-day expiry with no way to revoke it early. The audit flagged that gap
+as Alta severity — long enough for real damage from one leaked cookie —
+and it was cheap enough to close without the rest of a refresh-token flow.
+Logout now revokes the token's `jti` in an in-memory denylist
+(`JwtDenylist`, same in-memory approach as D3, not a new service), checked
+by `JwtAuthFilter` on every request. Still no refresh token, no rotation,
+no endpoint beyond logout — the trade-off this decision was about is
+otherwise unchanged. The remaining gap: a backend restart clears the
+denylist, so a token revoked just before a restart becomes valid again
+until it naturally expires. Acceptable for a single self-hosted instance.
 
 ---
 
@@ -209,6 +220,19 @@ around. This is a deliberate, explicit cascade for the `servers` deletion
 path specifically — it does not change the general rule against automatic
 `ON DELETE CASCADE` for other relationships.
 
+**Revisitada (2026-09-21, auditoria de segurança)**: a auditoria apontou como
+achado Média que `channels.server_id`, `messages.channel_id` e
+`server_members.server_id` não têm `ON DELETE CASCADE`, deixando
+`ServerService.deleteServer` como a única coisa que garante que nada fica
+órfão — se uma tabela nova referenciando esses IDs for adicionada no futuro e
+`deleteServer` não for atualizado junto, a exclusão falha por violação de FK
+em vez de silenciosamente deixar lixo. Avaliado e mantido como está: essa
+falha (409, visível, bloqueia o delete até alguém notar e corrigir o código)
+é exatamente o comportamento que DATABASE.md §26 pede — mais seguro que a
+alternativa de um cascade automático no banco, que apagaria a tabela nova
+sem passar pela lógica revisável em `deleteServer`. Não é um achado a
+corrigir; é a decisão funcionando como projetada.
+
 ---
 
 ## D12 — No global online/offline presence system
@@ -253,6 +277,17 @@ column is added to `users` for the name shown in the UI, independent of
 **Consequences**: `DATABASE.md` users table gains a `display_name` column
 (required, no uniqueness constraint — same as `username`). No `UNIQUE`
 constraint is added on `username`, unlike `email`, which stays unique.
+
+**Atualização (2026-09-19, achado A8 da auditoria de segurança)**: esta parte
+da decisão foi revertida. `username` passou a ser usado como identidade
+pública (amizades, DMs, listagem de membros) sem nunca ter tido garantia de
+unicidade em lugar nenhum — dois usuários podiam ter o mesmo username.
+`db/migration/V21__add_username_unique_constraint.sql` normaliza duplicatas
+existentes e adiciona `ALTER TABLE users ADD CONSTRAINT uq_users_username
+UNIQUE (username)`; `AuthService.register` e `UserService.updateProfile`
+validam a unicidade antes do `save`, convertendo violação em `ConflictException`
+(409). `display_name` continua sem constraint de unicidade, como decidido
+acima. Ver `docs/security-audit-2026-09-18.md`, achado A8.
 
 ---
 
@@ -413,3 +448,229 @@ procedimento, para que a migração seja mecânica quando for decidida. Um `From
 domínio novo exige também trocar o Gmail gratuito por um serviço que assine DKIM
 com esse domínio — manter o Gmail faria o DMARC **falhar**, resultado pior que o
 atual.
+
+## D20 — Cargos e permissões: bitfield, sem cache, voz via grant do LiveKit
+
+**Context**: O `AGENTS.md` listava "Advanced roles", "Advanced permissions" e
+"Complex moderation" como fora de escopo. O dono do projeto pediu explicitamente
+o sistema completo de cargos e permissões, que é o override que aquele documento
+prevê. A autorização, até aqui, eram duas regras — "é membro" e "é
+`server.owner_id`" — replicadas à mão em oito pontos do backend.
+
+A entrega foi dividida em três specs, porque as 24 seções do pedido cobrem cinco
+subsistemas e um documento único ficaria vago demais para implementar. Esta
+decisão cobre a Spec A: o motor de permissões (Fases 1-4 e 7 do pedido). A Spec B
+traz moderação e audit log; a Spec C, a interface de gerenciamento de cargos.
+
+**Decision**:
+
+1. **Permissões são um bitfield `BIGINT`, não uma linha por permissão.** O
+   cálculo vira aritmética de bits, e resolver um membro custa duas ou três
+   queries indexadas independentemente de quantas permissões existam. O merge de
+   um override de canal são duas operações (`(base & ~deny) | allow`). Custo
+   aceito: teto de 63 permissões — 23 em uso — e a necessidade de manter
+   `Permission.java` espelhado em `frontend/src/types/permission.ts`, travada
+   por `PermissionVocabularySyncTest`. **Os índices dos bits são contrato de
+   persistência: renumerar um reinterpreta silenciosamente todas as linhas já
+   gravadas.** Um bit aposentado nunca é reaproveitado.
+
+2. **Na API as permissões trafegam como nomes, nunca como o número.** Nomes
+   sobrevivem a uma renumeração, são legíveis no DevTools e poupam o frontend de
+   qualquer aritmética de bits. O bitmask é detalhe de persistência.
+
+3. **Sem cache de permissões.** Coerente com a D3 (Redis fora do MVP) e a D1
+   (escala de grupo de amigos). Um cache exigiria invalidação distribuída —
+   exatamente o que a D3 evitou. A única otimização é `filterVisible`, que
+   resolve o membro uma vez e busca todos os overrides numa query só, para que
+   listar N canais nunca vire N consultas.
+
+4. **Permissões de voz são aplicadas pelo grant do LiveKit, com reconexão.**
+   `SPEAK`, `USE_VIDEO` e `SHARE_SCREEN` viram entradas em `canPublishSources` no
+   token, então o próprio LiveKit recusa uma track que o usuário não pode
+   publicar — um cliente adulterado não contorna. Como o grant é fixado no
+   momento em que o token é assinado, uma mudança de permissão durante a chamada
+   é aplicada buscando um token novo e reconectando (`voiceClient.connect` já
+   derruba a sala anterior), o que custa algumas centenas de milissegundos.
+
+   *Alternativa recusada*: integrar a Server API do LiveKit
+   (`UpdateParticipant`) para alterar permissões ao vivo, sem reconexão. Ela
+   introduziria uma dependência de rede backend→LiveKit e o peso transitivo que o
+   javadoc do `MediaService` já justifica evitar (Retrofit, protobuf,
+   kotlin-stdlib).
+
+5. **`ADMINISTRATOR` ignora os overrides de canal, mas não ignora a hierarquia.**
+   Sem a segunda metade, dois administradores poderiam se remover mutuamente e o
+   cargo viraria uma corrida. Só o dono do servidor ignora a hierarquia.
+
+6. **`MANAGE_ROLES` não permite conceder o que o próprio ator não possui.** Sem
+   essa regra, `MANAGE_ROLES` seria equivalente a `ADMINISTRATOR` por um caminho
+   indireto.
+
+7. **Excluir e transferir o servidor continuam exclusivos do dono**, não
+   delegáveis por permissão (mantém a D7 e a D11 como estão).
+
+8. **`VIEW_CHANNEL` negado responde 404, não 403.** Um 403 confirmaria que o
+   canal existe, vazando a estrutura do servidor para quem não deveria saber que
+   ele está lá.
+
+**Consequences**: Todo servidor tem um cargo `@everyone` não deletável na posição
+0. A migration V18 fez o backfill dele para os servidores existentes, em SQL, com
+exatamente as permissões que todo membro já tinha — ninguém perdeu acesso no
+deploy. `ServerService.createServer` faz o mesmo para servidores novos, na mesma
+transação. Se esse cargo faltar para algum servidor, seus membros resolvem para
+zero permissões; é o principal risco operacional desta mudança.
+
+Onze permissões do pedido original foram deliberadamente não implementadas por
+protegerem funcionalidades que não existem no Concord (`VIEW_SERVER`,
+`VIEW_MEMBER_PROFILE`, `SEND_MESSAGES_IN_THREADS`, `ADD_REACTIONS`,
+`USE_EXTERNAL_EMOJIS`, `EMBED_LINKS`, `USE_SOUNDBOARD`, `PIN_MESSAGES`,
+`EDIT_OTHERS_MESSAGES`, `DELETE_MESSAGES` e `VIEW_VOICE_CHANNEL`). `MANAGE_SERVER`
+existe como bit mas não protege nada ainda: não há operação de edição de servidor.
+
+O endpoint de anexos (`/api/v1/uploads/**`) **não é mais público** — ver D22,
+que reverte a decisão original documentada abaixo.
+
+## D21 — Registro mantém a mensagem "e-mail já cadastrado"; enumeration é mitigada por rate limit, não eliminada
+
+**Context**: A auditoria de segurança de 2026-09-18 apontou que `/register`
+responde 409 quando o e-mail já existe, permitindo enumerar contas registradas
+(`docs/security-audit-2026-09-18.md`, seção Média). O `login` e o
+`forgot-password` já evitam esse tipo de vazamento respondendo de forma
+genérica independente do e-mail existir. `/register`, porém, não pode replicar
+essa abordagem sem custo: ele faz auto-login na mesma resposta (seta o cookie
+de sessão e retorna o usuário recém-criado), e quando o e-mail já pertence a
+outra conta não há uma sessão real para devolver — responder de forma genérica
+"como se tivesse funcionado" exigiria trocar o fluxo por um de "verifique seu
+e-mail antes de logar", quebrando o auto-login atual.
+
+**Decision**: Manter a mensagem "Este e-mail já está cadastrado" (não é uma
+mudança de arquitetura) e, em vez disso, tornar a enumeração em massa inviável:
+`AuthService` ganhou dois `RateLimiter` para `/register`, um por e-mail
+normalizado (3/min, 10/hora — impede sondar repetidamente um único endereço) e
+um por IP do chamador (10/min, 30/hora — impede varrer muitos endereços a
+partir do mesmo atacante), resolvido via `ClientIp` (novo, em `common/`). A
+resolução de IP confia em `X-Real-IP`/`X-Forwarded-For` porque o backend não
+expõe porta própria no `docker-compose.yml` — nginx é o único que pode
+alcançá-lo diretamente, então esses headers não são forjáveis por um cliente
+externo.
+
+**Consequences**: Um atacante ainda descobre se um e-mail específico está
+cadastrado (como acontece no GitHub, Twitter etc. — trade-off aceito, não um
+bug), mas não consegue mais escanear uma lista grande de endereços rapidamente.
+Username já revelava conflito da mesma forma e não muda. Se o dono do projeto
+decidir eliminar o enumeration por completo no futuro, isso exige redesenhar o
+fluxo de registro (provavelmente para não fazer auto-login), o que é uma
+mudança de arquitetura e precisa de aprovação explícita — não é o escopo desta
+correção.
+
+## D22 — Anexos exigem autenticação; reverte a decisão original de `/api/v1/uploads/**` público
+
+**Context**: Resolve `docs/OPEN_QUESTIONS.md` Q33. `AttachmentServingController`
+era deliberadamente não autenticado (`permitAll` em `SecurityConfig`), com o
+acesso dependendo só do nome de arquivo UUID ser imprevisível — o mesmo modelo
+de confiança de um link compartilhável. Essa era uma decisão consciente,
+tomada antes de cargos/permissões existirem (D20). Com `VIEW_CHANNEL` já
+reforçado em todo o resto (D20), esse era o único ponto onde uma URL de anexo
+continuava funcionando para qualquer pessoa que a tivesse — inclusive um
+membro que perdeu `VIEW_CHANNEL` do canal depois, ou alguém que nunca esteve
+no servidor. Achado A4 da auditoria de segurança de 2026-09-18.
+
+**Decision**: Implementada a Opção 2 das três avaliadas em Q33 — autenticação
+mais `VIEW_CHANNEL` no canal dono do anexo, não URLs assinadas/expiráveis.
+`/api/v1/uploads/**` saiu do `permitAll()`; agora exige o mesmo cookie de
+sessão que qualquer outra rota. `AttachmentServingController.serve` resolve a
+URL requisitada de volta a `MessageAttachment` → `Message` → canal
+(`MessageService.requireAttachmentAccess`, novo) e aplica a mesma checagem já
+usada para ler o histórico de mensagens: `ChannelService.getChannel` (404 se o
+canal não é visível) + `PermissionService.requireChannel(...,
+READ_MESSAGE_HISTORY)` (403 se visível mas sem permissão). A autenticação é
+por cookie, então `<img src>` continuou funcionando sem mudança no frontend —
+o preview do composer (paperclip, drag & drop, colar) usa
+`URL.createObjectURL` no navegador antes do envio, e o upload real só
+acontece no envio (AGENTS.md), então não havia janela em que o cliente
+precisasse buscar a URL do servidor antes de existir um `MessageAttachment`.
+
+**Consequences**: Um usuário removido do servidor perde acesso ao anexo
+imediatamente, já que deixa de ser membro visível do canal — fechando o gap
+que a D20 deixou em aberto para este endpoint. `AttachmentServingController`,
+`MessageService` (`requireAttachmentAccess`), `MessageAttachmentRepository`
+(`findByUrl`) e `SecurityConfig` mudaram. Teste:
+`MessageServiceTest.requireAttachmentAccess_unknownUrl_throwsNotFound`,
+`_nonMember_propagatesForbiddenFromChannelService`,
+`_withoutReadMessageHistory_throwsForbidden`,
+`_memberWithPermission_doesNotThrow`.
+
+## D23 — PDF é servido inline, exceção deliberada à regra "não-imagem = download forçado" do AGENTS.md
+
+**Context**: A seção de anexos do `AGENTS.md` diz: um upload cujo magic byte bate
+com assinatura de imagem conhecida é renderizado inline; "any other file type
+is allowed and rendered as a downloadable file chip, served with a forced
+download so it can never execute in the browser". `AttachmentServingController`
+sempre tratou PDF como uma terceira categoria — `Content-Disposition: inline`
+em vez de `attachment` — e o frontend (`MessageList.tsx`) renderiza um preview
+em `<iframe>` em vez do chip de download. Isso nunca tinha sido formalizado
+fora do comentário Javadoc da própria classe; a auditoria de segurança de
+2026-09-18 (achado Baixa "PDFs servidos inline na mesma origem") apontou a
+divergência entre código e spec escrita.
+
+**Decision**: Manter o comportamento atual — PDF continua servido inline, com
+preview no frontend. A regra geral do AGENTS.md ("não-imagem = download
+forçado") ganha PDF como segunda exceção explícita, ao lado de imagem.
+Preview de PDF é um recurso real (evita alternar de app pra ler um anexo
+comum em chat), e o risco que a regra geral existe pra evitar — HTML/JS
+disfarçado de outro tipo executando na origem do app — já está coberto em
+duas camadas: o backend só marca como PDF o que a extensão declara (mesmo
+limite que as imagens têm, não há validação de magic byte adicional aqui) e o
+`<iframe>` tem `sandbox="allow-same-origin"` sem `allow-scripts` (achado A10
+da auditoria) — um payload disfarçado de `.pdf` não executa mesmo se a
+classificação por extensão falhar.
+
+**Consequences**: Nenhuma mudança de código. Documenta o que já era verdade
+no comportamento, para que a próxima leitura do `AGENTS.md` (humana ou de IA)
+não trate esse desvio como um bug não-intencional.
+
+## D24 — Assobio privado: roteamento de áudio via subscription permission do LiveKit, sem chamada à Server API
+
+**Context**: Feature aprovada pelo dono do projeto como adição de escopo (não
+estava no MVP original nem na lista de fora-de-escopo do `AGENTS.md`): um
+participante da chamada pode, ao segurar uma tecla sobre o tile de outro,
+tornar seu próprio microfone audível só para aquele alvo — os demais
+participantes da chamada deixam de ouvir o remetente enquanto dura o
+"assobio", sem mutar o microfone de fato e sem afetar câmera/screen-share.
+Ver docs/superpowers/specs/2026-09-22-private-whistle-design.md.
+
+**Decision**: O roteamento de áudio é feito inteiramente pelo cliente do
+remetente, chamando `LocalParticipant.setTrackSubscriptionPermissions` do
+`livekit-client` (já uma dependência do frontend) sobre a própria conexão —
+nenhuma chamada à Server API do LiveKit, nenhuma dependência nova. Quem
+decide se um pacote RTP é encaminhado a outro participante é o SFU do
+LiveKit, não o cliente que fez a chamada; um cliente adulterado não pode
+"escutar" um áudio que essa permissão não concede a ele, mesmo chamando a
+API diretamente. Isso mantém o LiveKit como ponto de aplicação, na mesma
+linha do D20 item 4 (`canPublishSources`), só que a concessão é alterada em
+tempo real na conexão já aberta, em vez de fixada no JWT de entrada.
+
+O backend (`WhistleService`, novos frames `WHISTLE_START`/`WHISTLE_STOP` no
+WebSocket existente) só autoriza a ação (checa `Permission.SPEAK`, presença
+do alvo no canal) e sincroniza o indicador visual entre remetente e alvo —
+nunca participa do roteamento de áudio em si. Isso reafirma, não contradiz, a
+alternativa recusada no D20 item 4 (integrar `UpdateParticipant` da Server
+API do LiveKit para mudar permissões ao vivo): aquela chamada seguiria
+desnecessária mesmo para esta feature, porque o `setTrackSubscriptionPermissions`
+do client SDK já resolve o problema sem tocar o backend.
+
+Limpeza de estado (encerrar um assobio quando remetente ou alvo saem da
+chamada, perdem a conexão, ou saem do servidor) reaproveita o único ponto por
+onde toda saída de voz já passa — `VoicePresenceService.removePresence` —
+em vez de replicar a chamada de limpeza nos quatro call sites que levam até
+ele. Isso cria uma dependência circular deliberada entre `VoicePresenceService`
+e `WhistleService` (a segunda também depende da primeira, para checar se o
+alvo está presente no canal), quebrada com `@Lazy` num dos dois lados — a
+única ocorrência desse padrão no backend hoje, usada porque o ponto único de
+saída de voz pesou mais que evitar o ciclo.
+
+**Consequences**: Nenhuma nova dependência backend↔LiveKit. Nenhum novo bit
+de permissão — assobiar exige apenas `SPEAK`, disponível a qualquer membro
+que já pode falar no canal, igual ao mute local. O único custo arquitetural
+é o ciclo `@Lazy` acima, documentado no javadoc de
+`VoicePresenceService.removePresence`.

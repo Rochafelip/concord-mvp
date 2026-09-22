@@ -1,5 +1,5 @@
 import { apiClient } from '../../services/apiClient';
-import type { InviteCode, Server, ServerMember } from '../../types/server';
+import type { InviteCode, InvitePreview, Server, ServerMember } from '../../types/server';
 
 export interface CreateServerPayload {
   name: string;
@@ -62,4 +62,8 @@ export function regenerateInvite(serverId: string): Promise<InviteCode> {
 
 export function joinServer(data: JoinServerPayload): Promise<Server> {
   return apiClient.post<Server>('servers/join', data);
+}
+
+export function getInvitePreview(code: string): Promise<InvitePreview> {
+  return apiClient.get<InvitePreview>(`invites/${code}`);
 }

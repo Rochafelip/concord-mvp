@@ -253,7 +253,7 @@ describe('ParticipantList', () => {
 
       expect(screen.getByText(/Felipe's screen/)).toBeInTheDocument();
       expect(screen.getByText(/João's screen/)).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Return to automatic layout' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Show all participants' })).toBeInTheDocument();
     });
 
     it('lets a manual camera pin persist when a screen share starts, overriding the auto-focused share', async () => {
@@ -276,10 +276,10 @@ describe('ParticipantList', () => {
         ],
       });
 
-      expect(screen.getByRole('button', { name: 'Return to automatic layout' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Show all participants' })).toBeInTheDocument();
     });
 
-    it('clicking "return to automatic" reverts to the auto-watched share', async () => {
+    it('clicking "Show all participants" drops to the plain grid, not back to the auto-watched share', async () => {
       const user = userEvent.setup();
       const track = { attach: vi.fn(), detach: vi.fn() } as never;
       useVoiceStore.setState({
@@ -291,12 +291,17 @@ describe('ParticipantList', () => {
       renderList();
 
       await user.click(screen.getByRole('button', { name: "Focus on Felipe's camera" }));
-      expect(screen.getByRole('button', { name: 'Return to automatic layout' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Show all participants' })).toBeInTheDocument();
 
-      await user.click(screen.getByRole('button', { name: 'Return to automatic layout' }));
+      await user.click(screen.getByRole('button', { name: 'Show all participants' }));
 
-      expect(screen.queryByRole('button', { name: 'Return to automatic layout' })).not.toBeInTheDocument();
-      expect(screen.getByText(/João's screen/)).toBeInTheDocument();
+      // Resetting to null here (the true "untouched" default) would re-select João's still-active
+      // share and land right back in the focused view — indistinguishable from the button doing
+      // nothing. It must land on the plain grid instead, same as clearing the last watched share
+      // directly does.
+      expect(screen.queryByRole('button', { name: 'Show all participants' })).not.toBeInTheDocument();
+      expect(screen.getByTestId('participant-grid')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: "Focus on João's screen" })).toBeInTheDocument();
     });
 
     it('reverts to the plain grid when a manual watch is cleared and nobody is sharing', async () => {
@@ -310,7 +315,7 @@ describe('ParticipantList', () => {
       renderList();
 
       await user.click(screen.getByRole('button', { name: "Focus on João's camera" }));
-      await user.click(screen.getByRole('button', { name: 'Return to automatic layout' }));
+      await user.click(screen.getByRole('button', { name: 'Show all participants' }));
 
       expect(screen.getByTestId('participant-grid')).toBeInTheDocument();
       expect(screen.queryByTestId('focusable-strip')).not.toBeInTheDocument();
@@ -335,7 +340,49 @@ describe('ParticipantList', () => {
       expect(screen.queryByRole('button', { name: "Stop watching Felipe's screen" })).not.toBeInTheDocument();
       expect(screen.getByRole('button', { name: "Focus on Felipe's screen" })).toBeInTheDocument();
       expect(screen.getByText(/João's screen/)).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Return to automatic layout' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Show all participants' })).toBeInTheDocument();
+    });
+
+    // The reported dead end: removing the only watched share drops the whole view back to the
+    // plain grid, which lists participants but never their shares — leaving the share the user
+    // just stopped watching with no way back, since useWatchTargets deliberately keeps a cleared
+    // set cleared. Rejoining the channel was the only escape (it remounts the hook).
+    it('keeps an active share reachable from the plain grid after the last watch is cleared', async () => {
+      const user = userEvent.setup();
+      const track = { attach: vi.fn(), detach: vi.fn() } as never;
+      useVoiceStore.setState({
+        participants: [
+          participant({ identity: 'u1', name: 'Felipe', isLocal: true, cameraEnabled: true }),
+          participant({ identity: 'u2', name: 'João', isLocal: false, screenShareTrack: track }),
+        ],
+      });
+      renderList();
+
+      await user.click(screen.getByRole('button', { name: "Stop watching João's screen" }));
+      expect(screen.getByTestId('participant-grid')).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: "Focus on João's screen" }));
+
+      expect(screen.getByText(/João's screen/)).toBeInTheDocument();
+    });
+
+    // 502de0e hoisted the whole strip out of FocusedCallView and had to be reverted: in grid mode
+    // every camera-on participant already is its own "Focus on X's camera" button, so listing
+    // cameras again produced two buttons sharing one accessible name. Only shares belong here.
+    it('does not list cameras twice while the plain grid is showing', async () => {
+      const user = userEvent.setup();
+      const track = { attach: vi.fn(), detach: vi.fn() } as never;
+      useVoiceStore.setState({
+        participants: [
+          participant({ identity: 'u1', name: 'Felipe', isLocal: false, cameraEnabled: true }),
+          participant({ identity: 'u2', name: 'João', isLocal: false, screenShareTrack: track }),
+        ],
+      });
+      renderList();
+
+      await user.click(screen.getByRole('button', { name: "Stop watching João's screen" }));
+
+      expect(screen.getAllByRole('button', { name: "Focus on Felipe's camera" })).toHaveLength(1);
     });
   });
 
@@ -360,6 +407,7 @@ describe('ParticipantList', () => {
       });
       renderList();
 
+      fireEvent.click(screen.getByRole('button', { name: 'Volume for Bob' }));
       fireEvent.change(screen.getByRole('slider', { name: 'Volume for Bob' }), { target: { value: '30' } });
       expect(voiceClient.setParticipantVolume).toHaveBeenCalledWith('bob', 0.3);
 
@@ -374,6 +422,7 @@ describe('ParticipantList', () => {
       });
 
       expect(screen.getByTestId('watched-area')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Volume for Bob' }));
       expect(screen.getByRole('slider', { name: 'Volume for Bob' })).toHaveValue('30');
     });
 
@@ -386,6 +435,7 @@ describe('ParticipantList', () => {
       });
       renderList();
 
+      fireEvent.click(screen.getByRole('button', { name: 'Volume for Bob' }));
       fireEvent.change(screen.getByRole('slider', { name: 'Volume for Bob' }), { target: { value: '30' } });
       act(() => {
         useVoiceStore.setState({
@@ -405,6 +455,7 @@ describe('ParticipantList', () => {
         });
       });
 
+      fireEvent.click(screen.getByRole('button', { name: 'Volume for Bob' }));
       expect(screen.getByRole('slider', { name: 'Volume for Bob' })).toHaveValue('30');
       // Nothing re-sent a level on the way through: the audio was never actually reset.
       expect(vi.mocked(voiceClient.setParticipantVolume).mock.calls).toEqual([['bob', 0.3]]);
@@ -422,6 +473,7 @@ describe('ParticipantList', () => {
       });
       renderList();
 
+      fireEvent.click(screen.getByRole('button', { name: 'Volume for Bob' }));
       fireEvent.change(screen.getByRole('slider', { name: 'Volume for Bob' }), { target: { value: '30' } });
 
       act(() => {
@@ -434,6 +486,7 @@ describe('ParticipantList', () => {
       // Bob is reached by focusing his camera — the level is what must survive, not the widget.
       fireEvent.click(screen.getByRole('button', { name: "Focus on Bob's camera" }));
 
+      fireEvent.click(screen.getByRole('button', { name: 'Volume for Bob' }));
       expect(screen.getByRole('slider', { name: 'Volume for Bob' })).toHaveValue('30');
     });
   });

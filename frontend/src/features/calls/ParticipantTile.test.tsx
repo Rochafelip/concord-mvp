@@ -3,7 +3,9 @@ import userEvent from '@testing-library/user-event';
 import { ConnectionQuality } from 'livekit-client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { voiceClient } from '../../services/voiceClient';
+import { useVoiceStore } from '../../stores/voiceStore';
 import type { VoiceParticipant } from '../../types/voice';
+import { disconnectVoiceParticipant } from './api';
 import { ParticipantTile } from './ParticipantTile';
 
 vi.mock('../../services/voiceClient', () => ({
@@ -11,6 +13,10 @@ vi.mock('../../services/voiceClient', () => ({
     setParticipantVolume: vi.fn(),
     getParticipantVolume: vi.fn().mockReturnValue(1),
   },
+}));
+
+vi.mock('./api', () => ({
+  disconnectVoiceParticipant: vi.fn(),
 }));
 
 function participant(overrides: Partial<VoiceParticipant> = {}): VoiceParticipant {
@@ -39,10 +45,12 @@ describe('ParticipantTile', () => {
   // The tile remounts whenever the call layout changes — most visibly when a screen share
   // starts and ParticipantList swaps the grid for FocusedCallView — so the slider has to come
   // back up showing the level this listener already picked, not 100% over quieter audio.
-  it("opens its volume slider at the level already chosen for that participant", () => {
+  it("opens its volume slider at the level already chosen for that participant", async () => {
     vi.mocked(voiceClient.getParticipantVolume).mockReturnValue(0.3);
+    const user = userEvent.setup();
 
     render(<ParticipantTile participant={participant({ identity: 'bob', name: 'Bob' })} />);
+    await user.click(screen.getByRole('button', { name: 'Volume for Bob' }));
 
     expect(voiceClient.getParticipantVolume).toHaveBeenCalledWith('bob');
     expect(screen.getByRole('slider', { name: 'Volume for Bob' })).toHaveValue('30');
@@ -196,18 +204,20 @@ describe('ParticipantTile', () => {
     it('renders a volume control for a remote participant', () => {
       render(<ParticipantTile participant={participant({ isLocal: false, identity: 'bob' })} />);
 
-      expect(screen.getByRole('slider', { name: 'Volume for Felipe' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Volume for Felipe' })).toBeInTheDocument();
     });
 
     it('does not render a volume control for the local participant', () => {
       render(<ParticipantTile participant={participant({ isLocal: true })} />);
 
-      expect(screen.queryByRole('slider')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^Volume for/ })).not.toBeInTheDocument();
     });
 
-    it('forwards volume changes to voiceClient.setParticipantVolume for that identity', () => {
+    it('forwards volume changes to voiceClient.setParticipantVolume for that identity', async () => {
+      const user = userEvent.setup();
       render(<ParticipantTile participant={participant({ isLocal: false, identity: 'bob' })} />);
 
+      await user.click(screen.getByRole('button', { name: 'Volume for Felipe' }));
       fireEvent.change(screen.getByRole('slider', { name: 'Volume for Felipe' }), { target: { value: '30' } });
 
       expect(voiceClient.setParticipantVolume).toHaveBeenCalledWith('bob', 0.3);
@@ -216,18 +226,16 @@ describe('ParticipantTile', () => {
     it('hides the volume control when showVolumeControl is false, even for a remote participant', () => {
       render(<ParticipantTile participant={participant({ isLocal: false, identity: 'bob' })} showVolumeControl={false} />);
 
-      expect(screen.queryByRole('slider')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^Volume for/ })).not.toBeInTheDocument();
     });
 
     it('reveals the volume icon when its participant tile is hovered', () => {
       render(<ParticipantTile participant={participant({ isLocal: false, identity: 'bob' })} />);
 
-      const control = screen.getByRole('slider', { name: 'Volume for Felipe' }).parentElement;
-      expect(control).toHaveClass('group/volume-control');
-      expect(control?.parentElement).toHaveClass('group-hover/participant-tile:opacity-100');
-      expect(screen.getByRole('slider', { name: 'Volume for Felipe' })).toHaveClass(
-        'group-hover/volume-control:opacity-100',
-      );
+      const trigger = screen.getByRole('button', { name: 'Volume for Felipe' });
+      const wrapper = trigger.parentElement?.parentElement;
+      expect(wrapper).toHaveClass('opacity-0');
+      expect(wrapper).toHaveClass('group-hover/participant-tile:opacity-100');
     });
   });
 
@@ -254,6 +262,44 @@ describe('ParticipantTile', () => {
       expect(onWatchClick).toHaveBeenCalledTimes(1);
     });
 
+    it('shows a pointer cursor and a tooltip when the whole tile is clickable', () => {
+      render(
+        <ParticipantTile
+          participant={participant({ name: 'Felipe', isLocal: false, identity: 'bob' })}
+          onWatchClick={vi.fn()}
+        />,
+      );
+
+      const tile = screen.getByRole('button', { name: "Focus on Felipe's camera" });
+      expect(tile).toHaveClass('cursor-pointer');
+      expect(tile).toHaveAttribute('title', "Focus on Felipe's camera");
+    });
+
+    it('does not show the pointer cursor when the tile is not clickable', () => {
+      const { container } = render(<ParticipantTile participant={participant({ name: 'Felipe' })} />);
+
+      expect(container.firstChild).not.toHaveClass('cursor-pointer');
+    });
+
+    it('shows an always-visible affordance badge, not just a hover cursor, since touch has no hover', () => {
+      render(
+        <ParticipantTile
+          participant={participant({ name: 'Felipe', isLocal: false, identity: 'bob' })}
+          onWatchClick={vi.fn()}
+        />,
+      );
+
+      const badge = screen.getByTestId('watch-affordance');
+      expect(badge).not.toHaveClass('opacity-0');
+      expect(badge).toHaveClass('pointer-events-none');
+    });
+
+    it('does not show the affordance badge when the tile is not clickable', () => {
+      render(<ParticipantTile participant={participant({ name: 'Felipe' })} />);
+
+      expect(screen.queryByTestId('watch-affordance')).not.toBeInTheDocument();
+    });
+
     it('activates on Enter and Space from the keyboard', async () => {
       const user = userEvent.setup();
       const onWatchClick = vi.fn();
@@ -271,8 +317,9 @@ describe('ParticipantTile', () => {
       expect(onWatchClick).toHaveBeenCalledTimes(2);
     });
 
-    it('does not trigger onWatchClick when the volume slider is used', () => {
+    it('does not trigger onWatchClick when the volume slider is used', async () => {
       const onWatchClick = vi.fn();
+      const user = userEvent.setup();
       render(
         <ParticipantTile
           participant={participant({ name: 'Felipe', isLocal: false, identity: 'bob' })}
@@ -280,6 +327,7 @@ describe('ParticipantTile', () => {
         />,
       );
 
+      await user.click(screen.getByRole('button', { name: 'Volume for Felipe' }));
       fireEvent.click(screen.getByRole('slider', { name: 'Volume for Felipe' }));
 
       expect(onWatchClick).not.toHaveBeenCalled();
@@ -344,6 +392,114 @@ describe('ParticipantTile', () => {
       const { container } = render(<ParticipantTile participant={participant()} />);
 
       expect(container.firstChild).toHaveClass('min-h-0', 'min-w-0');
+    });
+  });
+
+  describe('context menu', () => {
+    it('disconnects the participant from voice when the menu item is clicked', async () => {
+      const user = userEvent.setup();
+      render(
+        <ParticipantTile participant={participant({ identity: 'bob' })} canDisconnect channelId="chan-1" />,
+      );
+
+      fireEvent.contextMenu(screen.getByLabelText('Felipe'));
+      await user.click(await screen.findByText('Disconnect from voice'));
+
+      expect(disconnectVoiceParticipant).toHaveBeenCalledWith('chan-1', 'bob');
+    });
+
+    it('does not offer to disconnect the local participant', () => {
+      render(<ParticipantTile participant={participant({ isLocal: true })} canDisconnect channelId="chan-1" />);
+
+      fireEvent.contextMenu(screen.getByLabelText('Felipe'));
+
+      expect(screen.queryByText('Disconnect from voice')).not.toBeInTheDocument();
+    });
+
+    it('does not offer to disconnect without the canDisconnect permission', () => {
+      render(<ParticipantTile participant={participant()} channelId="chan-1" />);
+
+      fireEvent.contextMenu(screen.getByLabelText('Felipe'));
+
+      expect(screen.queryByText('Disconnect from voice')).not.toBeInTheDocument();
+    });
+
+    it('does not offer to disconnect without a channelId', () => {
+      render(<ParticipantTile participant={participant()} canDisconnect />);
+
+      fireEvent.contextMenu(screen.getByLabelText('Felipe'));
+
+      expect(screen.queryByText('Disconnect from voice')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('private whistle', () => {
+    beforeEach(() => {
+      useVoiceStore.setState({ armedWhistleTarget: null, whisperingTo: null, receivingWhistleFrom: null });
+    });
+
+    it('arms this participant as the whistle target on hover', () => {
+      const { container } = render(<ParticipantTile participant={participant({ identity: 'bob' })} />);
+
+      fireEvent.mouseEnter(container.firstChild as Element);
+
+      expect(useVoiceStore.getState().armedWhistleTarget).toBe('bob');
+    });
+
+    it('disarms the target when the pointer leaves', () => {
+      const { container } = render(<ParticipantTile participant={participant({ identity: 'bob' })} />);
+      fireEvent.mouseEnter(container.firstChild as Element);
+
+      fireEvent.mouseLeave(container.firstChild as Element);
+
+      expect(useVoiceStore.getState().armedWhistleTarget).toBeNull();
+    });
+
+    it("does not clear a different tile's armed target on leave", () => {
+      const { container } = render(<ParticipantTile participant={participant({ identity: 'bob' })} />);
+      useVoiceStore.setState({ armedWhistleTarget: 'carol' });
+
+      fireEvent.mouseLeave(container.firstChild as Element);
+
+      expect(useVoiceStore.getState().armedWhistleTarget).toBe('carol');
+    });
+
+    it("does not arm the local participant's own tile", () => {
+      const { container } = render(<ParticipantTile participant={participant({ identity: 'u1', isLocal: true })} />);
+
+      fireEvent.mouseEnter(container.firstChild as Element);
+
+      expect(useVoiceStore.getState().armedWhistleTarget).toBeNull();
+    });
+
+    it('highlights this tile when I am whistling to it', () => {
+      useVoiceStore.setState({ whisperingTo: 'bob' });
+
+      const { container } = render(<ParticipantTile participant={participant({ identity: 'bob' })} />);
+
+      expect(container.firstChild).toHaveClass('ring-2', 'ring-danger');
+    });
+
+    it('does not highlight a tile I am not whistling to', () => {
+      useVoiceStore.setState({ whisperingTo: 'someone-else' });
+
+      const { container } = render(<ParticipantTile participant={participant({ identity: 'bob' })} />);
+
+      expect(container.firstChild).not.toHaveClass('ring-danger');
+    });
+
+    it("shows a badge when this tile's participant is whistling to me", () => {
+      useVoiceStore.setState({ receivingWhistleFrom: 'bob' });
+
+      render(<ParticipantTile participant={participant({ identity: 'bob' })} />);
+
+      expect(screen.getByTitle('Felipe is whistling to you')).toBeInTheDocument();
+    });
+
+    it('does not show the badge when nobody is whistling to me', () => {
+      render(<ParticipantTile participant={participant({ identity: 'bob' })} />);
+
+      expect(screen.queryByTitle('Felipe is whistling to you')).not.toBeInTheDocument();
     });
   });
 });

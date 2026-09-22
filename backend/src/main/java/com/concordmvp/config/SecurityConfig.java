@@ -1,6 +1,7 @@
 package com.concordmvp.config;
 
 import com.concordmvp.auth.JwtAuthFilter;
+import com.concordmvp.users.AvatarUploadSizeFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -17,10 +18,13 @@ public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
     private final RestAuthenticationEntryPoint restAuthenticationEntryPoint;
+    private final AvatarUploadSizeFilter avatarUploadSizeFilter;
 
-    public SecurityConfig(JwtAuthFilter jwtAuthFilter, RestAuthenticationEntryPoint restAuthenticationEntryPoint) {
+    public SecurityConfig(JwtAuthFilter jwtAuthFilter, RestAuthenticationEntryPoint restAuthenticationEntryPoint,
+                           AvatarUploadSizeFilter avatarUploadSizeFilter) {
         this.jwtAuthFilter = jwtAuthFilter;
         this.restAuthenticationEntryPoint = restAuthenticationEntryPoint;
+        this.avatarUploadSizeFilter = avatarUploadSizeFilter;
     }
 
     @Bean
@@ -45,13 +49,20 @@ public class SecurityConfig {
                                 "/api/v1/auth/forgot-password",
                                 "/api/v1/auth/reset-password/verify",
                                 "/api/v1/auth/reset-password",
+                                // Spring Boot forwards here internally whenever a request handler throws —
+                                // that forward re-enters this filter chain as its own dispatch. Without this,
+                                // an unauthenticated caller who hits any error sees this filter's generic 401
+                                // instead of the real status/body BasicErrorController would have rendered,
+                                // masking the actual failure.
+                                "/error",
                                 "/actuator/health",
                                 "/ws",
-                                "/api/v1/uploads/**"
+                                "/api/v1/invites/**"
                         ).permitAll()
                         .anyRequest().authenticated()
                 )
-                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(avatarUploadSizeFilter, JwtAuthFilter.class);
 
         return http.build();
     }

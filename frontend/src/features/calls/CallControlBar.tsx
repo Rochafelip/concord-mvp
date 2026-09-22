@@ -2,6 +2,7 @@ import { AudioLines, AudioLinesOff, Mic, MicOff, PhoneOff, RefreshCw, Settings, 
 import { useEffect, useState } from 'react';
 import { voiceClient } from '../../services/voiceClient';
 import { useDeviceStore } from '../../stores/deviceStore';
+import { useVoiceStore } from '../../stores/voiceStore';
 import { getNoiseSuppressionPreference, setNoiseSuppressionPreference } from '../settings/audio/noiseSuppressionPreference';
 import { DeviceSettingsPanel } from './DeviceSettingsPanel';
 import { useVoiceParticipants } from './hooks';
@@ -26,6 +27,11 @@ function useIsMobile(): boolean {
 
 interface CallControlBarProps {
   onLeave: () => void;
+  /**
+   * USE_VIDEO in this voice channel, resolved by CallView. Cosmetic: without it the LiveKit token
+   * omits the camera source, so LiveKit rejects the track regardless of what this bar shows.
+   */
+  canUseVideo?: boolean;
 }
 
 /**
@@ -33,13 +39,19 @@ interface CallControlBarProps {
  * by CallView, replacing the local tile's former in-tile control bar. See
  * docs/superpowers/specs/2026-09-08-call-view-control-bar-redesign-design.md §5.
  */
-export function CallControlBar({ onLeave }: CallControlBarProps) {
-  const localParticipant = useVoiceParticipants().find((participant) => participant.isLocal);
+export function CallControlBar({ onLeave, canUseVideo = false }: CallControlBarProps) {
+  const participants = useVoiceParticipants();
+  const localParticipant = participants.find((participant) => participant.isLocal);
+  const whisperingTo = useVoiceStore((state) => state.whisperingTo);
   const [suppressionEnabled, setSuppressionEnabled] = useState(getNoiseSuppressionPreference);
   const [showDeviceSelector, setShowDeviceSelector] = useState(false);
   const isMobile = useIsMobile();
 
   if (!localParticipant) return null;
+
+  const whisperingToName = whisperingTo
+    ? participants.find((participant) => participant.identity === whisperingTo)?.name
+    : null;
 
   function handleToggleNoiseSuppression() {
     const next = !suppressionEnabled;
@@ -55,6 +67,11 @@ export function CallControlBar({ onLeave }: CallControlBarProps) {
 
   return (
     <>
+      {whisperingToName && (
+        <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-black/70 px-3 py-1 text-body text-white">
+          🐦 Whispering to {whisperingToName}
+        </div>
+      )}
       <div className="pointer-events-none absolute inset-x-2 bottom-[max(0.75rem,env(safe-area-inset-bottom))] flex flex-wrap items-center justify-center gap-1.5 rounded-2xl bg-black/70 px-2 py-1.5 opacity-0 transition-opacity group-hover/call-area:pointer-events-auto group-hover/call-area:opacity-100 group-focus-within/call-area:pointer-events-auto group-focus-within/call-area:opacity-100 sm:inset-x-0 sm:bottom-4 sm:rounded-full">
       <button
         type="button"
@@ -91,20 +108,22 @@ export function CallControlBar({ onLeave }: CallControlBarProps) {
       >
         <Settings size={16} aria-hidden="true" />
       </button>
-      <button
-        type="button"
-        aria-label={localParticipant.cameraEnabled ? 'Camera off' : 'Camera on'}
-        title={localParticipant.cameraEnabled ? 'Turn camera off' : 'Turn camera on'}
-        onClick={() => voiceClient.toggleCamera()}
-        className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
-      >
-        {localParticipant.cameraEnabled ? (
-          <Video size={16} aria-hidden="true" />
-        ) : (
-          <VideoOff size={16} aria-hidden="true" />
-        )}
-      </button>
-      {isMobile && localParticipant.cameraEnabled && (
+      {canUseVideo && (
+        <button
+          type="button"
+          aria-label={localParticipant.cameraEnabled ? 'Camera off' : 'Camera on'}
+          title={localParticipant.cameraEnabled ? 'Turn camera off' : 'Turn camera on'}
+          onClick={() => voiceClient.toggleCamera()}
+          className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
+        >
+          {localParticipant.cameraEnabled ? (
+            <Video size={16} aria-hidden="true" />
+          ) : (
+            <VideoOff size={16} aria-hidden="true" />
+          )}
+        </button>
+      )}
+      {canUseVideo && isMobile && localParticipant.cameraEnabled && (
         <button
           type="button"
           aria-label="Flip camera"

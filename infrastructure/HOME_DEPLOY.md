@@ -232,8 +232,14 @@ value back.
 
 ## 9. Bring up the stack
 
+Build `backend` and `frontend` one at a time rather than with `up -d --build`
+— on a low-memory PC, building both concurrently (Maven + Node/rolldown) can
+exhaust RAM/swap and kill the frontend build with an opaque error:
+
 ```bash
-docker compose up -d --build
+docker compose build backend
+docker compose build frontend
+docker compose up -d
 ```
 
 Just the base `docker-compose.yml` — no `-f docker-compose.prod.yml`
@@ -305,10 +311,12 @@ to prevent.
 cd /path/to/concord-mvp
 git pull
 cd infrastructure
-docker compose up -d --build
+docker compose build backend
+docker compose build frontend
+docker compose up -d
 ```
 
-Same update pattern `DEPLOY.md` and `VM_REVIEW.md` already use.
+Built one at a time for the same low-memory reason as step 9 above.
 
 ## Out of scope
 

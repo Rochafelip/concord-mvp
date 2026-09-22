@@ -7,17 +7,28 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
+import javax.imageio.ImageReader;
+import javax.imageio.stream.ImageInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.Iterator;
 import java.util.Locale;
 import java.util.UUID;
 
 @Service
 public class AvatarStorageService {
+    /**
+     * A compressed file well under {@code maxSize} can still declare pixel dimensions that
+     * decode to gigabytes of memory (a "decompression bomb") — checked against the header via
+     * {@link ImageReader#getWidth}/{@link ImageReader#getHeight}, never against a fully decoded
+     * {@link java.awt.image.BufferedImage}, so an oversized image is rejected before that
+     * decode ever happens. 4096px is far beyond anything an avatar needs.
+     */
+    private static final int MAX_AVATAR_DIMENSION_PX = 4096;
+
     private final Path root;
     private final long maxSize;
 
@@ -78,8 +89,27 @@ public class AvatarStorageService {
             return header.length >= 16 && ascii(header, 0, "RIFF") && ascii(header, 8, "WEBP")
                     && (ascii(header, 12, "VP8 ") || ascii(header, 12, "VP8L") || ascii(header, 12, "VP8X"));
         }
-        BufferedImage image = ImageIO.read(file.getInputStream());
-        return image != null && image.getWidth() > 0 && image.getHeight() > 0;
+        try (ImageInputStream iis = ImageIO.createImageInputStream(file.getInputStream())) {
+            if (iis == null) return false;
+            Iterator<ImageReader> readers = ImageIO.getImageReaders(iis);
+            if (!readers.hasNext()) return false;
+            ImageReader reader = readers.next();
+            try {
+                reader.setInput(iis, true, true);
+                int width = reader.getWidth(0);
+                int height = reader.getHeight(0);
+                if (width <= 0 || height <= 0) return false;
+                if (width > MAX_AVATAR_DIMENSION_PX || height > MAX_AVATAR_DIMENSION_PX) {
+                    throw new BadRequestException(
+                            "Avatar dimensions exceed the " + MAX_AVATAR_DIMENSION_PX + "px limit");
+                }
+                return true;
+            } finally {
+                reader.dispose();
+            }
+        } catch (IOException ex) {
+            return false;
+        }
     }
 
     private String extension(String filename) {

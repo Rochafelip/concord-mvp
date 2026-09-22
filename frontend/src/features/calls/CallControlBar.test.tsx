@@ -67,7 +67,7 @@ describe('CallControlBar', () => {
   });
 
   it('renders nothing when there is no local participant yet', () => {
-    render(<CallControlBar onLeave={vi.fn()} />);
+    render(<CallControlBar canUseVideo onLeave={vi.fn()} />);
 
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
@@ -75,7 +75,7 @@ describe('CallControlBar', () => {
   it('clicking Mute/Unmute calls voiceClient.toggleMute', async () => {
     const user = userEvent.setup();
     useVoiceStore.setState({ participants: [localParticipant({ micEnabled: true })] });
-    render(<CallControlBar onLeave={vi.fn()} />);
+    render(<CallControlBar canUseVideo onLeave={vi.fn()} />);
 
     await user.click(screen.getByRole('button', { name: 'Mute' }));
 
@@ -84,7 +84,7 @@ describe('CallControlBar', () => {
 
   it('shows Unmute when the mic is off', () => {
     useVoiceStore.setState({ participants: [localParticipant({ micEnabled: false })] });
-    render(<CallControlBar onLeave={vi.fn()} />);
+    render(<CallControlBar canUseVideo onLeave={vi.fn()} />);
 
     expect(screen.getByRole('button', { name: 'Unmute' })).toBeInTheDocument();
   });
@@ -92,7 +92,7 @@ describe('CallControlBar', () => {
   it('clicking the camera button calls voiceClient.toggleCamera', async () => {
     const user = userEvent.setup();
     useVoiceStore.setState({ participants: [localParticipant({ cameraEnabled: false })] });
-    render(<CallControlBar onLeave={vi.fn()} />);
+    render(<CallControlBar canUseVideo onLeave={vi.fn()} />);
 
     await user.click(screen.getByRole('button', { name: 'Camera on' }));
 
@@ -101,7 +101,7 @@ describe('CallControlBar', () => {
 
   it('shows "Camera off" as the label when the camera is already on', () => {
     useVoiceStore.setState({ participants: [localParticipant({ cameraEnabled: true })] });
-    render(<CallControlBar onLeave={vi.fn()} />);
+    render(<CallControlBar canUseVideo onLeave={vi.fn()} />);
 
     expect(screen.getByRole('button', { name: 'Camera off' })).toBeInTheDocument();
   });
@@ -109,7 +109,7 @@ describe('CallControlBar', () => {
   it('renders the noise suppression button as enabled when the stored preference is enabled', () => {
     vi.mocked(preference.getNoiseSuppressionPreference).mockReturnValue(true);
     useVoiceStore.setState({ participants: [localParticipant()] });
-    render(<CallControlBar onLeave={vi.fn()} />);
+    render(<CallControlBar canUseVideo onLeave={vi.fn()} />);
 
     expect(screen.getByRole('button', { name: 'Disable noise suppression' })).toBeInTheDocument();
   });
@@ -117,7 +117,7 @@ describe('CallControlBar', () => {
   it('renders the noise suppression button as disabled when the stored preference is disabled', () => {
     vi.mocked(preference.getNoiseSuppressionPreference).mockReturnValue(false);
     useVoiceStore.setState({ participants: [localParticipant()] });
-    render(<CallControlBar onLeave={vi.fn()} />);
+    render(<CallControlBar canUseVideo onLeave={vi.fn()} />);
 
     expect(screen.getByRole('button', { name: 'Enable noise suppression' })).toBeInTheDocument();
   });
@@ -126,7 +126,7 @@ describe('CallControlBar', () => {
     const user = userEvent.setup();
     vi.mocked(preference.getNoiseSuppressionPreference).mockReturnValue(true);
     useVoiceStore.setState({ participants: [localParticipant()] });
-    render(<CallControlBar onLeave={vi.fn()} />);
+    render(<CallControlBar canUseVideo onLeave={vi.fn()} />);
 
     await user.click(screen.getByRole('button', { name: 'Disable noise suppression' }));
 
@@ -137,7 +137,7 @@ describe('CallControlBar', () => {
 
   it('does not render a screen-share-audio button when not screen sharing', () => {
     useVoiceStore.setState({ participants: [localParticipant({ screenShareEnabled: false })] });
-    render(<CallControlBar onLeave={vi.fn()} />);
+    render(<CallControlBar canUseVideo onLeave={vi.fn()} />);
 
     expect(screen.queryByRole('button', { name: /shared screen audio/ })).not.toBeInTheDocument();
   });
@@ -146,7 +146,7 @@ describe('CallControlBar', () => {
     useVoiceStore.setState({
       participants: [localParticipant({ screenShareEnabled: true, screenShareHasAudio: false })],
     });
-    render(<CallControlBar onLeave={vi.fn()} />);
+    render(<CallControlBar canUseVideo onLeave={vi.fn()} />);
 
     expect(screen.queryByRole('button', { name: /shared screen audio/ })).not.toBeInTheDocument();
   });
@@ -158,7 +158,7 @@ describe('CallControlBar', () => {
         localParticipant({ screenShareEnabled: true, screenShareHasAudio: true, screenShareAudioEnabled: true }),
       ],
     });
-    render(<CallControlBar onLeave={vi.fn()} />);
+    render(<CallControlBar canUseVideo onLeave={vi.fn()} />);
 
     await user.click(screen.getByRole('button', { name: 'Mute shared screen audio' }));
 
@@ -168,7 +168,7 @@ describe('CallControlBar', () => {
   it('does not render the flip-camera button on desktop widths, even with the camera on', () => {
     mockMatchMedia(false);
     useVoiceStore.setState({ participants: [localParticipant({ cameraEnabled: true })] });
-    render(<CallControlBar onLeave={vi.fn()} />);
+    render(<CallControlBar canUseVideo onLeave={vi.fn()} />);
 
     expect(screen.queryByRole('button', { name: 'Flip camera' })).not.toBeInTheDocument();
   });
@@ -176,7 +176,7 @@ describe('CallControlBar', () => {
   it('does not render the flip-camera button on mobile when the camera is off', () => {
     mockMatchMedia(true);
     useVoiceStore.setState({ participants: [localParticipant({ cameraEnabled: false })] });
-    render(<CallControlBar onLeave={vi.fn()} />);
+    render(<CallControlBar canUseVideo onLeave={vi.fn()} />);
 
     expect(screen.queryByRole('button', { name: 'Flip camera' })).not.toBeInTheDocument();
   });
@@ -185,7 +185,7 @@ describe('CallControlBar', () => {
     const user = userEvent.setup();
     mockMatchMedia(true);
     useVoiceStore.setState({ participants: [localParticipant({ cameraEnabled: true })] });
-    render(<CallControlBar onLeave={vi.fn()} />);
+    render(<CallControlBar canUseVideo onLeave={vi.fn()} />);
 
     await user.click(screen.getByRole('button', { name: 'Flip camera' }));
 
@@ -197,7 +197,7 @@ describe('CallControlBar', () => {
     mockMatchMedia(true);
     vi.mocked(voiceClient.flipCamera).mockResolvedValue('front-cam');
     useVoiceStore.setState({ participants: [localParticipant({ cameraEnabled: true })] });
-    render(<CallControlBar onLeave={vi.fn()} />);
+    render(<CallControlBar canUseVideo onLeave={vi.fn()} />);
 
     await user.click(screen.getByRole('button', { name: 'Flip camera' }));
 
@@ -208,10 +208,34 @@ describe('CallControlBar', () => {
     const user = userEvent.setup();
     const onLeave = vi.fn();
     useVoiceStore.setState({ participants: [localParticipant()] });
-    render(<CallControlBar onLeave={onLeave} />);
+    render(<CallControlBar onLeave={onLeave} canUseVideo />);
 
     await user.click(screen.getByRole('button', { name: 'Leave call' }));
 
     expect(onLeave).toHaveBeenCalledTimes(1);
+  });
+
+  describe('private whistle badge', () => {
+    it('shows who I am whistling to', () => {
+      useVoiceStore.setState({
+        participants: [localParticipant(), { ...localParticipant(), identity: 'bob', isLocal: false, name: 'Bob' }],
+        whisperingTo: 'bob',
+      });
+
+      render(<CallControlBar onLeave={vi.fn()} />);
+
+      expect(screen.getByText(/Whispering to Bob/)).toBeInTheDocument();
+    });
+
+    it('shows nothing when not whistling', () => {
+      useVoiceStore.setState({
+        participants: [localParticipant()],
+        whisperingTo: null,
+      });
+
+      render(<CallControlBar onLeave={vi.fn()} />);
+
+      expect(screen.queryByText(/Whispering to/)).not.toBeInTheDocument();
+    });
   });
 });

@@ -1,22 +1,27 @@
 import type { InfiniteData } from '@tanstack/react-query';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useLayoutEffect, useRef } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { toVoicePresenceEntry } from '../features/calls/api';
 import { useAuthStore } from '../features/auth/authStore';
 import { getWsTicket } from '../features/auth/api';
+import { notify, playChime } from '../services/desktopNotifications';
 import { websocketClient } from '../services/websocketClient';
+import { getVoiceToken } from '../features/calls/api';
 import { voiceClient } from '../services/voiceClient';
 import { useNotificationStore } from '../stores/notificationStore';
 import { useVoiceStore } from '../stores/voiceStore';
 import type { Channel } from '../types/channel';
+import type { DmMessage } from '../types/dm';
 import type { Message } from '../types/message';
 import type { Server } from '../types/server';
 import type { VoicePresenceEntry } from '../types/voice';
 import type {
   ChannelDeletedPayload,
   ErrorPayload,
+  FriendUpdatePayload,
   MessageDeletedPayload,
+  PermissionsUpdatePayload,
   ServerDeletedPayload,
   ServerMemberEventPayload,
   ServerMemberUpdatePayload,
@@ -24,7 +29,12 @@ import type {
   VoicePresencePayload,
   UserProfileUpdatePayload,
   ChannelReadPayload,
+  WhistlePayload,
 } from '../types/websocket';
+
+function truncate(text: string, maxLength: number): string {
+  return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
+}
 
 /**
  * Mounted ONCE in AppShell (which only renders once authenticated, per ProtectedRoute — the
@@ -35,13 +45,16 @@ import type {
 export function useRealtimeSync(): void {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const { serverId: currentServerId, channelId: currentChannelId } = useParams<{
+  const location = useLocation();
+  const { serverId: currentServerId, channelId: currentChannelId, friendUserId: currentFriendUserId } = useParams<{
     serverId?: string;
     channelId?: string;
+    friendUserId?: string;
   }>();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const setNotification = useNotificationStore((state) => state.setMessage);
   const markServerUnread = useNotificationStore((state) => state.markServerUnread);
+  const markFriendUnread = useNotificationStore((state) => state.markFriendUnread);
 
   // The SERVER_DELETE and CHANNEL_DELETE subscribers below are set up once (empty-ish dep
   // effect) but need the *current* route's serverId/channelId at the moment the event arrives,
@@ -49,10 +62,15 @@ export function useRealtimeSync(): void {
   // every navigation.
   const currentServerIdRef = useRef(currentServerId);
   const currentChannelIdRef = useRef(currentChannelId);
+  const currentFriendUserIdRef = useRef(currentFriendUserId);
+  const currentPathRef = useRef(location.pathname);
+  const voiceKickNotificationTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   useLayoutEffect(() => {
     currentServerIdRef.current = currentServerId;
     currentChannelIdRef.current = currentChannelId;
-  }, [currentServerId, currentChannelId]);
+    currentFriendUserIdRef.current = currentFriendUserId;
+    currentPathRef.current = location.pathname;
+  }, [currentServerId, currentChannelId, currentFriendUserId, location.pathname]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -101,10 +119,27 @@ export function useRealtimeSync(): void {
           const isOnboarding = channel?.name?.toLowerCase() === 'onboarding';
           const { messageNotifications, onboardingNotifications } =
             useNotificationStore.getState().preferences;
-          if ((!isOnboarding && messageNotifications) || (isOnboarding && onboardingNotifications)) {
+          const notificationsEnabled =
+            (!isOnboarding && messageNotifications) || (isOnboarding && onboardingNotifications);
+          if (notificationsEnabled) {
             const serverId = channel?.serverId;
             if (serverId && serverId !== currentServerIdRef.current) {
               markServerUnread(serverId);
+            }
+
+            // Discord-style: a desktop (Chrome) notification only fires when the window itself
+            // is backgrounded, regardless of which channel the user has open — being on a
+            // different channel while the window has focus is covered by the unread badges above.
+            if (serverId && (document.hidden || !document.hasFocus())) {
+              const serverName = queryClient
+                .getQueryData<Server[]>(['servers'])
+                ?.find((server) => server.id === serverId)?.name;
+              playChime();
+              notify({
+                title: message.author.displayName,
+                body: truncate(`#${channel?.name} · ${serverName}\n${message.content}`, 120),
+                onClick: () => navigate(`/app/servers/${serverId}/channels/${message.channelId}`),
+              });
             }
           }
 
@@ -186,6 +221,40 @@ export function useRealtimeSync(): void {
         );
       }),
 
+      websocketClient.subscribe('PERMISSIONS_UPDATE', (payload) => {
+        const { serverId } = payload as PermissionsUpdatePayload;
+
+        // TanStack matches query keys by prefix, so this one call covers the server itself plus
+        // its channels, members and roles. The per-channel queries are keyed by channel id
+        // rather than by server, so they need their own prefix.
+        queryClient.invalidateQueries({ queryKey: ['servers', serverId] });
+        queryClient.invalidateQueries({ queryKey: ['channels'] });
+
+        // A LiveKit grant is fixed when the token is minted (docs/DECISIONS.md D20), so a call
+        // already in progress keeps the permissions it started with until it reconnects with a
+        // fresh token. voiceClient.connect() tears down the existing room itself, which keeps
+        // the gap to a few hundred milliseconds instead of a visible leave-then-join.
+        const voiceState = useVoiceStore.getState();
+        const voiceChannelId = voiceState.channelId;
+        if (voiceState.status !== 'connected' || !voiceChannelId) return;
+
+        const voiceChannel = queryClient.getQueryData<Channel>(['channels', voiceChannelId]);
+        if (voiceChannel != null && voiceChannel.serverId !== serverId) return;
+
+        void (async () => {
+          try {
+            const generation = voiceClient.beginConnect(voiceChannelId);
+            const { token, url } = await getVoiceToken(voiceChannelId);
+            await voiceClient.connect(voiceChannelId, token, url, generation);
+          } catch {
+            // Most likely the permission change is exactly what revoked CONNECT. Dropping the
+            // call is the correct outcome then, and the channel list refetch above already
+            // removes the channel from view.
+            voiceClient.disconnect();
+          }
+        })();
+      }),
+
       websocketClient.subscribe('SERVER_OWNER_CHANGE', () => {
         // ownerId also lives on the list-shaped Server objects (same reasoning as
         // useTransferOwnership in features/servers/hooks.ts), so invalidate the whole
@@ -251,11 +320,35 @@ export function useRealtimeSync(): void {
           voiceClient.disconnect();
           const message = 'You were disconnected from the voice channel by a server admin.';
           setNotification(message);
-          window.setTimeout(() => {
+          if (voiceKickNotificationTimeoutRef.current != null) {
+            window.clearTimeout(voiceKickNotificationTimeoutRef.current);
+          }
+          voiceKickNotificationTimeoutRef.current = window.setTimeout(() => {
             if (useNotificationStore.getState().message === message) {
               useNotificationStore.getState().clear();
             }
           }, 5000);
+        }
+      }),
+
+      websocketClient.subscribe('WHISTLE_START', (payload) => {
+        const { senderId, targetUserId } = payload as WhistlePayload;
+        if (targetUserId === useAuthStore.getState().user?.id) {
+          useVoiceStore.getState().setReceivingWhistleFrom(senderId);
+        }
+      }),
+
+      // Covers both roles: I'm the target (stop showing the incoming-whistle badge) and I'm the
+      // sender (the backend force-stopped it, e.g. the target disconnected — voiceClient.stopWhistle
+      // resets the local LiveKit subscription permissions even if the hotkey is still held).
+      websocketClient.subscribe('WHISTLE_STOP', (payload) => {
+        const { senderId, targetUserId } = payload as WhistlePayload;
+        const myId = useAuthStore.getState().user?.id;
+        if (targetUserId === myId) {
+          useVoiceStore.getState().setReceivingWhistleFrom(null);
+        }
+        if (senderId === myId) {
+          voiceClient.stopWhistle();
         }
       }),
 
@@ -310,6 +403,53 @@ export function useRealtimeSync(): void {
         });
       }),
 
+      websocketClient.subscribe('DM_MESSAGE_CREATE', (payload) => {
+        const message = payload as DmMessage;
+        const currentUserId = useAuthStore.getState().user?.id;
+        const otherUserId = message.author.id === currentUserId ? message.recipientId : message.author.id;
+
+        queryClient.setQueryData<InfiniteData<DmMessage[]>>(['dm', otherUserId, 'messages'], (old) => {
+          // Same guards as MESSAGE_CREATE above: don't force-create a cache entry for a
+          // conversation nobody has opened, and never insert a redelivered message twice.
+          if (!old || old.pages.length === 0) return old;
+          if (old.pages.some((page) => page.some((existing) => existing.id === message.id))) {
+            return old;
+          }
+          const pages = old.pages.map((page, index) => (index === 0 ? [...page, message] : page));
+          return { ...old, pages };
+        });
+
+        if (message.author.id !== currentUserId) {
+          if (otherUserId !== currentFriendUserIdRef.current) {
+            markFriendUnread(otherUserId);
+          }
+
+          const { messageNotifications } = useNotificationStore.getState().preferences;
+          if (messageNotifications && (document.hidden || !document.hasFocus())) {
+            playChime();
+            notify({
+              title: message.author.displayName,
+              body: truncate(message.content, 120),
+              onClick: () => navigate(`/app/dm/${otherUserId}`),
+            });
+          }
+        }
+      }),
+
+      websocketClient.subscribe('FRIEND_UPDATE', (payload) => {
+        const { userId, otherUserId } = payload as FriendUpdatePayload;
+        const currentUserId = useAuthStore.getState().user?.id;
+
+        // Prefix match: also covers ['friends', 'requests'] — same reasoning as
+        // PERMISSIONS_UPDATE's invalidation above.
+        queryClient.invalidateQueries({ queryKey: ['friends'] });
+
+        const relevantOtherId = userId === currentUserId ? otherUserId : userId;
+        if (!currentPathRef.current.startsWith('/app/friends')) {
+          markFriendUnread(relevantOtherId);
+        }
+      }),
+
       websocketClient.subscribe('CHANNEL_READ', (payload) => {
         const { channelId, userId, unreadCount } = payload as ChannelReadPayload;
         if (userId !== useAuthStore.getState().user?.id) return;
@@ -332,6 +472,9 @@ export function useRealtimeSync(): void {
 
     return () => {
       unsubscribers.forEach((unsubscribe) => unsubscribe());
+      if (voiceKickNotificationTimeoutRef.current != null) {
+        window.clearTimeout(voiceKickNotificationTimeoutRef.current);
+      }
     };
-  }, [markServerUnread, queryClient, navigate, setNotification]);
+  }, [markServerUnread, markFriendUnread, queryClient, navigate, setNotification]);
 }

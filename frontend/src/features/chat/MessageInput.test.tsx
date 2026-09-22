@@ -44,7 +44,7 @@ describe('MessageInput', () => {
 
   it('blocks submitting empty content (send button stays disabled)', async () => {
     const user = userEvent.setup();
-    render(<MessageInput channelId="c1" />);
+    render(<MessageInput channelId="c1" canAttachFiles />);
 
     const sendButton = screen.getByRole('button', { name: /send/i });
     expect(sendButton).toBeDisabled();
@@ -55,7 +55,7 @@ describe('MessageInput', () => {
 
   it('blocks submitting whitespace-only content', async () => {
     const user = userEvent.setup();
-    render(<MessageInput channelId="c1" />);
+    render(<MessageInput channelId="c1" canAttachFiles />);
 
     const input = screen.getByLabelText(/message/i);
     await user.type(input, '   ');
@@ -67,7 +67,7 @@ describe('MessageInput', () => {
 
   it('calls sendMessage with trimmed content on valid submit and clears the input', async () => {
     const user = userEvent.setup();
-    render(<MessageInput channelId="c1" />);
+    render(<MessageInput channelId="c1" canAttachFiles />);
 
     const input = screen.getByLabelText(/message/i) as HTMLInputElement;
     await user.type(input, '  hello world  ');
@@ -80,7 +80,7 @@ describe('MessageInput', () => {
   it('disables the send button and shows a note when not connected', async () => {
     useWsConnectionStore.setState({ status: 'disconnected' });
     const user = userEvent.setup();
-    render(<MessageInput channelId="c1" />);
+    render(<MessageInput channelId="c1" canAttachFiles />);
 
     const input = screen.getByLabelText(/message/i);
     await user.type(input, 'hello');
@@ -91,7 +91,7 @@ describe('MessageInput', () => {
 
   it('does not silently drop a send attempt while disconnected (guards even a direct form submit)', async () => {
     useWsConnectionStore.setState({ status: 'connecting' });
-    render(<MessageInput channelId="c1" />);
+    render(<MessageInput channelId="c1" canAttachFiles />);
 
     const input = screen.getByLabelText(/message/i) as HTMLInputElement;
     const user = userEvent.setup();
@@ -107,7 +107,7 @@ describe('MessageInput', () => {
   it('re-enables the send button once the connection is restored', async () => {
     useWsConnectionStore.setState({ status: 'disconnected' });
     const user = userEvent.setup();
-    render(<MessageInput channelId="c1" />);
+    render(<MessageInput channelId="c1" canAttachFiles />);
 
     const input = screen.getByLabelText(/message/i);
     await user.type(input, 'hello');
@@ -122,14 +122,32 @@ describe('MessageInput', () => {
 
   it('disables the attach-file input when not connected', () => {
     useWsConnectionStore.setState({ status: 'disconnected' });
-    render(<MessageInput channelId="c1" />);
+    render(<MessageInput channelId="c1" canAttachFiles />);
 
     expect(screen.getByLabelText(/attach file/i, { selector: 'input' })).toBeDisabled();
   });
 
+  it(
+    'appends a picked emoji to the message text',
+    async () => {
+      const user = userEvent.setup();
+      render(<MessageInput channelId="c1" />);
+
+      const input = screen.getByLabelText(/message/i);
+      await user.type(input, 'hi');
+      await user.click(screen.getByRole('button', { name: 'Add emoji' }));
+      await user.click(await screen.findByRole('button', { name: 'grinning face' }));
+
+      expect(input).toHaveValue('hi😀');
+    },
+    // See the same timeout note in EmojiPickerButton.test.tsx — rendering the full emoji grid is
+    // slow under a contended full-suite run.
+    20000,
+  );
+
   it('stages a picked file as a preview without uploading it yet', async () => {
     const user = userEvent.setup();
-    render(<MessageInput channelId="c1" />);
+    render(<MessageInput channelId="c1" canAttachFiles />);
 
     const file = new File(['fake-image-bytes'], 'photo.png', { type: 'image/png' });
     await user.upload(screen.getByLabelText(/attach file/i, { selector: 'input' }), file);
@@ -148,7 +166,7 @@ describe('MessageInput', () => {
       fileSize: 2048,
     });
     const user = userEvent.setup();
-    render(<MessageInput channelId="c1" />);
+    render(<MessageInput channelId="c1" canAttachFiles />);
 
     const file = new File(['fake-image-bytes'], 'photo.png', { type: 'image/png' });
     await user.upload(screen.getByLabelText(/attach file/i, { selector: 'input' }), file);
@@ -169,7 +187,7 @@ describe('MessageInput', () => {
       fileSize: file.size,
     }));
     const user = userEvent.setup();
-    render(<MessageInput channelId="c1" />);
+    render(<MessageInput channelId="c1" canAttachFiles />);
 
     const input = screen.getByLabelText(/attach file/i, { selector: 'input' });
     await user.upload(input, [
@@ -186,6 +204,54 @@ describe('MessageInput', () => {
     ]);
   });
 
+  it('reorders pending attachments by dragging, sending them in the new order', async () => {
+    vi.mocked(apiModule.uploadAttachment).mockImplementation(async (_channelId, file) => ({
+      url: `/api/v1/uploads/${file.name}`,
+      fileName: file.name,
+      fileSize: file.size,
+    }));
+    const user = userEvent.setup();
+    render(<MessageInput channelId="c1" canAttachFiles />);
+
+    const input = screen.getByLabelText(/attach file/i, { selector: 'input' });
+    await user.upload(input, [
+      new File(['a'], 'a.png', { type: 'image/png' }),
+      new File(['b'], 'b.png', { type: 'image/png' }),
+    ]);
+
+    // dnd-kit's keyboard sensor picks the next slot by comparing each item's
+    // getBoundingClientRect() — jsdom always reports that as all-zero, so the items are stacked
+    // at distinct, increasing `left` offsets (matching their rendered horizontal order) to give
+    // the coordinate getter real geometry to compare, the same way a real layout would.
+    screen.getAllByRole('listitem').forEach((item, index) => {
+      vi.spyOn(item, 'getBoundingClientRect').mockReturnValue({
+        top: 0,
+        bottom: 88,
+        left: index * 90,
+        right: index * 90 + 88,
+        width: 88,
+        height: 88,
+        x: index * 90,
+        y: 0,
+        toJSON: () => {},
+      } as DOMRect);
+    });
+
+    screen.getByRole('button', { name: 'Reorder a.png' }).focus();
+    await user.keyboard('[Space]');
+    await user.keyboard('[ArrowRight]');
+    await user.keyboard('[Space]');
+
+    await user.click(screen.getByRole('button', { name: /send/i }));
+
+    await waitFor(() => expect(hooksModule.sendMessage).toHaveBeenCalled());
+    const [, , attachments] = vi.mocked(hooksModule.sendMessage).mock.calls[0];
+    expect(attachments?.map((attachment) => attachment.url)).toEqual([
+      '/api/v1/uploads/b.png',
+      '/api/v1/uploads/a.png',
+    ]);
+  });
+
   it('uses the currently typed text as the caption when sending an attachment', async () => {
     vi.mocked(apiModule.uploadAttachment).mockResolvedValue({
       url: '/api/v1/uploads/abc.png',
@@ -193,7 +259,7 @@ describe('MessageInput', () => {
       fileSize: 2048,
     });
     const user = userEvent.setup();
-    render(<MessageInput channelId="c1" />);
+    render(<MessageInput channelId="c1" canAttachFiles />);
 
     await user.type(screen.getByLabelText(/message/i), 'check this out');
     const file = new File(['fake-image-bytes'], 'photo.png', { type: 'image/png' });
@@ -209,7 +275,7 @@ describe('MessageInput', () => {
 
   it('enables the send button for an attachment with no text at all', async () => {
     const user = userEvent.setup();
-    render(<MessageInput channelId="c1" />);
+    render(<MessageInput channelId="c1" canAttachFiles />);
 
     expect(screen.getByRole('button', { name: /send/i })).toBeDisabled();
 
@@ -222,7 +288,7 @@ describe('MessageInput', () => {
   });
 
   it('stages an image pasted from the clipboard (Win + Shift + S screenshot)', async () => {
-    render(<MessageInput channelId="c1" />);
+    render(<MessageInput channelId="c1" canAttachFiles />);
 
     // A fresh screenshot arrives as a nameless/generic image file with no filename of its own.
     pasteFiles(screen.getByLabelText(/message/i), [
@@ -235,7 +301,7 @@ describe('MessageInput', () => {
   });
 
   it('keeps a pasted image file name when the clipboard provides a real one', async () => {
-    render(<MessageInput channelId="c1" />);
+    render(<MessageInput channelId="c1" canAttachFiles />);
 
     pasteFiles(screen.getByLabelText(/message/i), [
       new File(['bytes'], 'diagram.webp', { type: 'image/webp' }),
@@ -245,7 +311,7 @@ describe('MessageInput', () => {
   });
 
   it('does not intercept a plain text paste', async () => {
-    render(<MessageInput channelId="c1" />);
+    render(<MessageInput channelId="c1" canAttachFiles />);
     const input = screen.getByLabelText(/message/i);
 
     const event = pasteFiles(input, []);
@@ -256,7 +322,7 @@ describe('MessageInput', () => {
   });
 
   it('stages files dropped onto the composer', async () => {
-    render(<MessageInput channelId="c1" />);
+    render(<MessageInput channelId="c1" canAttachFiles />);
 
     const file = new File(['bytes'], 'dropped.png', { type: 'image/png' });
     fireEvent.drop(screen.getByTestId('message-composer'), {
@@ -269,7 +335,7 @@ describe('MessageInput', () => {
 
   it('removes a single pending attachment without touching the others', async () => {
     const user = userEvent.setup();
-    render(<MessageInput channelId="c1" />);
+    render(<MessageInput channelId="c1" canAttachFiles />);
 
     await user.upload(screen.getByLabelText(/attach file/i, { selector: 'input' }), [
       new File(['a'], 'a.png', { type: 'image/png' }),
@@ -283,7 +349,7 @@ describe('MessageInput', () => {
 
   it('leaves the composer sendable-by-text-only after the last attachment is removed', async () => {
     const user = userEvent.setup();
-    render(<MessageInput channelId="c1" />);
+    render(<MessageInput channelId="c1" canAttachFiles />);
 
     await user.upload(
       screen.getByLabelText(/attach file/i, { selector: 'input' }),
@@ -297,7 +363,7 @@ describe('MessageInput', () => {
 
   it('caps the composer at ten attachments and says so', async () => {
     const user = userEvent.setup();
-    render(<MessageInput channelId="c1" />);
+    render(<MessageInput channelId="c1" canAttachFiles />);
 
     const eleven = Array.from({ length: 11 }, (_unused, index) =>
       new File(['bytes'], `file${index}.png`, { type: 'image/png' }),
@@ -311,7 +377,7 @@ describe('MessageInput', () => {
 
   it('rejects an oversized image client-side without staging or uploading it', async () => {
     const user = userEvent.setup();
-    render(<MessageInput channelId="c1" />);
+    render(<MessageInput channelId="c1" canAttachFiles />);
 
     const oversizedImage = new File([new Uint8Array(150 * 1024 * 1024 + 1)], 'huge.png', { type: 'image/png' });
     await user.upload(screen.getByLabelText(/attach file/i, { selector: 'input' }), oversizedImage);
@@ -324,7 +390,7 @@ describe('MessageInput', () => {
 
   it('rejects a non-image file over 150MB client-side without uploading', async () => {
     const user = userEvent.setup();
-    render(<MessageInput channelId="c1" />);
+    render(<MessageInput channelId="c1" canAttachFiles />);
 
     const oversizedFile = new File([new Uint8Array(150 * 1024 * 1024 + 1)], 'huge.zip', { type: 'application/zip' });
     await user.upload(screen.getByLabelText(/attach file/i, { selector: 'input' }), oversizedFile);
@@ -341,7 +407,7 @@ describe('MessageInput', () => {
       fileSize: 100 * 1024 * 1024,
     });
     const user = userEvent.setup();
-    render(<MessageInput channelId="c1" />);
+    render(<MessageInput channelId="c1" canAttachFiles />);
 
     const file = new File([new Uint8Array(100 * 1024 * 1024)], 'report.pdf', { type: 'application/pdf' });
     await user.upload(screen.getByLabelText(/attach file/i, { selector: 'input' }), file);
@@ -363,7 +429,7 @@ describe('MessageInput', () => {
   it('keeps the previews and the typed text when the upload fails, so the user can retry', async () => {
     vi.mocked(apiModule.uploadAttachment).mockRejectedValue(new Error('Network error'));
     const user = userEvent.setup();
-    render(<MessageInput channelId="c1" />);
+    render(<MessageInput channelId="c1" canAttachFiles />);
 
     await user.type(screen.getByLabelText(/message/i), 'here you go');
     await user.upload(
@@ -384,7 +450,7 @@ describe('MessageInput', () => {
       return { url: `/api/v1/uploads/${file.name}`, fileName: file.name, fileSize: file.size };
     });
     const user = userEvent.setup();
-    render(<MessageInput channelId="c1" />);
+    render(<MessageInput channelId="c1" canAttachFiles />);
 
     await user.upload(screen.getByLabelText(/attach file/i, { selector: 'input' }), [
       new File(['a'], 'a.png', { type: 'image/png' }),
@@ -406,7 +472,7 @@ describe('MessageInput', () => {
       }),
     );
     const user = userEvent.setup();
-    render(<MessageInput channelId="c1" />);
+    render(<MessageInput channelId="c1" canAttachFiles />);
 
     await user.upload(
       screen.getByLabelText(/attach file/i, { selector: 'input' }),

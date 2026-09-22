@@ -1,9 +1,13 @@
+import type { Permission } from './permission';
+
 export interface Server {
   id: string;
   name: string;
   ownerId: string;
   createdAt: string;
   updatedAt: string;
+  /** The current user's effective permissions on this server. Absent on pre-roles cached responses. */
+  permissions?: Permission[];
 }
 
 export interface ServerMember {
@@ -20,4 +24,10 @@ export interface ServerMember {
 
 export interface InviteCode {
   code: string;
+}
+
+export interface InvitePreview {
+  serverId: string;
+  serverName: string;
+  memberCount: number;
 }
