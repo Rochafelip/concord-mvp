@@ -242,7 +242,7 @@ describe('VoiceConnectionBar', () => {
       await user.click(screen.getByLabelText('Share system/tab audio'));
       await user.click(screen.getByRole('button', { name: 'Share' }));
 
-      expect(voiceClient.toggleScreenShare).toHaveBeenCalledWith({ quality: 'hd', withAudio: true });
+      expect(voiceClient.toggleScreenShare).toHaveBeenCalledWith({ quality: 'hd', frameRate: 30, withAudio: true });
       expect(screen.queryByText('Share your screen')).not.toBeInTheDocument();
     });
 
