@@ -52,6 +52,24 @@ class JwtServiceTest {
                 .isInstanceOf(UnauthorizedException.class);
     }
 
+    // A session cookie issued before `jti` was added to generateToken() has no id claim at all
+    // (not merely blank) — UUID.fromString(null) throws NullPointerException rather than
+    // IllegalArgumentException, which JwtAuthFilter runs into on every request from a browser
+    // still holding such a cookie, including on public endpoints.
+    @Test
+    void parseJti_throwsUnauthorized_whenTokenHasNoIdClaim() {
+        SecretKey key = Keys.hmacShaKeyFor(TEST_SECRET.getBytes(StandardCharsets.UTF_8));
+        String legacyToken = Jwts.builder()
+                .subject(UUID.randomUUID().toString())
+                .issuedAt(Date.from(Instant.now()))
+                .expiration(Date.from(Instant.now().plusSeconds(3600)))
+                .signWith(key)
+                .compact();
+
+        assertThatThrownBy(() -> jwtService.parseJti(legacyToken))
+                .isInstanceOf(UnauthorizedException.class);
+    }
+
     @Test
     void parseExpiration_returnsWhenTheTokenStopsBeingValid() {
         UUID userId = UUID.randomUUID();
