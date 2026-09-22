@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Role } from '../../types/permission';
@@ -22,7 +22,8 @@ const everyone: Role = {
   updatedAt: '2026-01-01T00:00:00Z',
 };
 const trusted: Role = { ...everyone, id: 'role-trusted', name: 'Trusted', position: 1, isEveryone: false };
-const roles = [trusted, everyone];
+const verified: Role = { ...everyone, id: 'role-verified', name: 'Verified', position: 2, isEveryone: false };
+const roles = [trusted, verified, everyone];
 
 function renderEditor() {
   const queryClient = new QueryClient({
@@ -92,6 +93,34 @@ describe('MemberRoleEditor', () => {
     await user.click(checkbox);
 
     expect(api.unassignRole).toHaveBeenCalledWith('s1', 'u1', 'role-trusted');
+  });
+
+  it('disables every role checkbox while an assign/unassign is pending, and re-enables them once it settles', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.listMemberRoles).mockResolvedValue([]);
+    let resolveAssign: () => void = () => {};
+    vi.mocked(api.assignRole).mockReturnValue(
+      new Promise((resolve) => {
+        resolveAssign = () => resolve(undefined);
+      }),
+    );
+    renderEditor();
+
+    await user.click(screen.getByRole('button', { name: 'Manage roles' }));
+    const trustedCheckbox = await screen.findByRole('checkbox', { name: 'Trusted' });
+    const verifiedCheckbox = await screen.findByRole('checkbox', { name: 'Verified' });
+
+    await user.click(trustedCheckbox);
+
+    // A second click on the same (or another) checkbox must not fire a race against the
+    // assign/unassign already in flight.
+    await waitFor(() => expect(trustedCheckbox).toBeDisabled());
+    expect(verifiedCheckbox).toBeDisabled();
+
+    resolveAssign();
+
+    await waitFor(() => expect(trustedCheckbox).not.toBeDisabled());
+    expect(verifiedCheckbox).not.toBeDisabled();
   });
 
   it('shows the backend error when assigning a role is rejected', async () => {

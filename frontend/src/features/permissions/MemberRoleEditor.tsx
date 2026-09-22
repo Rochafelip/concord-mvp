@@ -27,6 +27,10 @@ export function MemberRoleEditor({ serverId, userId, roles }: MemberRoleEditorPr
 
   const mutationError = assignMutation.error ?? unassignMutation.error;
   const errorMessage = mutationError instanceof ApiError ? mutationError.message : null;
+  // Both mutations are shared across every role's checkbox, so this is deliberately not
+  // per-role: a pending assign/unassign disables all of them, closing the window for a second
+  // click (on the same or another role) to fire a race against the one already in flight.
+  const isMutating = assignMutation.isPending || unassignMutation.isPending;
 
   function toggle(roleId: string, checked: boolean) {
     if (checked) {
@@ -51,6 +55,7 @@ export function MemberRoleEditor({ serverId, userId, roles }: MemberRoleEditorPr
                   type="checkbox"
                   aria-label={role.name}
                   checked={memberRoleIds.has(role.id)}
+                  disabled={isMutating}
                   onChange={(event) => toggle(role.id, event.target.checked)}
                 />
                 {role.name}

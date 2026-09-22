@@ -4,7 +4,9 @@ import com.concordmvp.channels.Channel;
 import com.concordmvp.channels.ChannelService;
 import com.concordmvp.permissions.Permission;
 import com.concordmvp.permissions.PermissionService;
+import com.concordmvp.common.RateLimiter;
 import com.concordmvp.common.exception.BadRequestException;
+import com.concordmvp.common.exception.TooManyRequestsException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -13,6 +15,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.Set;
 import java.util.UUID;
@@ -48,6 +52,13 @@ public class AttachmentUploadService {
     private final ChannelService channelService;
     private final PermissionService permissionService;
     private final Path uploadsDir;
+    // In memory rather than Redis, per docs/DECISIONS.md D3. Keyed per user (authenticated
+    // endpoint, unlike the login/register limiters) — bounds how fast one account can hammer
+    // disk with uploads, whether from a client bug or deliberate abuse (security audit, Baixa
+    // finding). 20/min stays well above the 10-attachments-per-message cap for a burst of
+    // several quick messages; 100/hour is the sustained ceiling.
+    private final RateLimiter uploadRateLimiter =
+            new RateLimiter(20, Duration.ofMinutes(1), 100, Duration.ofHours(1));
 
     public AttachmentUploadService(ChannelService channelService,
                                     PermissionService permissionService,
@@ -63,6 +74,10 @@ public class AttachmentUploadService {
         // checked before a single byte is written to disk.
         Channel channel = channelService.getChannel(channelId, requesterId);
         permissionService.requireChannel(channel, requesterId, Permission.ATTACH_FILES);
+
+        if (!uploadRateLimiter.tryAcquire(requesterId.toString(), Instant.now())) {
+            throw new TooManyRequestsException("Muitos uploads. Tente novamente mais tarde.");
+        }
 
         if (file.isEmpty()) {
             throw new BadRequestException("File is empty");

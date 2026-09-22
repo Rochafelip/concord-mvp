@@ -668,6 +668,22 @@ describe('useRealtimeSync', () => {
     expect(cached).toEqual([existing[1]]);
   });
 
+  it('VOICE_KICK clears its notification-reset timeout on unmount (security audit, Baixa finding)', () => {
+    const queryClient = newQueryClient();
+    const { unmount } = renderHarness(queryClient, '/app');
+
+    emit('VOICE_KICK', { serverId: 's1', channelId: 'c1', userId: 'u1' });
+
+    expect(useNotificationStore.getState().message).toBe(
+      'You were disconnected from the voice channel by a server admin.',
+    );
+
+    const clearTimeoutSpy = vi.spyOn(window, 'clearTimeout');
+    unmount();
+
+    expect(clearTimeoutSpy).toHaveBeenCalled();
+  });
+
   it('USER_PROFILE_UPDATE refreshes the display name in the auth and voice presence caches', () => {
     const queryClient = newQueryClient();
     queryClient.setQueryData(['servers', 's1', 'voice-presence'], [

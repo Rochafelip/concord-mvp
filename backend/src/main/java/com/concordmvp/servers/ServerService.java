@@ -6,6 +6,7 @@ import com.concordmvp.channels.ChannelType;
 import com.concordmvp.common.exception.BadRequestException;
 import com.concordmvp.common.exception.ForbiddenException;
 import com.concordmvp.common.exception.ResourceNotFoundException;
+import com.concordmvp.media.VoicePresenceService;
 import com.concordmvp.messages.AttachmentCleanupService;
 import com.concordmvp.messages.MessageRepository;
 import com.concordmvp.messages.MessageService;
@@ -25,8 +26,11 @@ import com.concordmvp.servers.dto.ServerMemberUpdatePayload;
 import com.concordmvp.users.User;
 import com.concordmvp.users.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.security.SecureRandom;
 import java.util.List;
@@ -59,6 +63,8 @@ public class ServerService {
     private final PermissionService permissionService;
     private final RoleService roleService;
     private final RoleRepository roleRepository;
+    private final ApplicationEventPublisher applicationEventPublisher;
+    private final VoicePresenceService voicePresenceService;
     private final SecureRandom secureRandom = new SecureRandom();
 
     @Autowired
@@ -74,7 +80,11 @@ public class ServerService {
                           PermissionService permissionService,
                           RoleService roleService,
                           RoleRepository roleRepository,
-                          ChannelReadStateService channelReadStateService) {
+                          ChannelReadStateService channelReadStateService,
+                          ApplicationEventPublisher applicationEventPublisher,
+                          VoicePresenceService voicePresenceService) {
+        this.applicationEventPublisher = applicationEventPublisher;
+        this.voicePresenceService = voicePresenceService;
         this.permissionService = permissionService;
         this.roleService = roleService;
         this.roleRepository = roleRepository;
@@ -227,6 +237,11 @@ public class ServerService {
 
         serverMemberRepository.delete(membership);
 
+        // Security audit A5: the LiveKit join token stays valid for hours regardless of server
+        // membership, so leaving must actively disconnect a voice call in progress rather than
+        // relying on the token to eventually expire.
+        voicePresenceService.disconnectFromServer(serverId, userId);
+
         Set<UUID> remainingRecipients = currentMemberIds(serverId);
         realtimeEventPublisher.broadcast(remainingRecipients,
                 new WsEvent(WsEventType.SERVER_MEMBER_LEAVE, new ServerMemberEventPayload(serverId, userId)));
@@ -263,15 +278,7 @@ public class ServerService {
         }
 
         Set<UUID> recipients = currentMemberIds(serverId);
-        realtimeEventPublisher.broadcast(recipients,
-                new WsEvent(WsEventType.SERVER_DELETE, new ServerDeletedPayload(serverId)));
 
-        // WARNING: SERVER_DELETE is broadcast above BEFORE the transaction commits. If
-        // channel/message deletion added below ever fails, the transaction rolls back but
-        // clients already believe the server is gone. Keep this in mind when extending this
-        // method — a proper fix (e.g. deferring the broadcast to
-        // @TransactionalEventListener(phase = AFTER_COMMIT)) is a deliberate decision for
-        // whoever implements this, not something to sneak in incidentally.
         List<UUID> channelIds = channelRepository.findByServerId(serverId).stream()
                 .map(Channel::getId)
                 .toList();
@@ -293,6 +300,17 @@ public class ServerService {
         serverInviteRepository.findByServerId(serverId).ifPresent(serverInviteRepository::delete);
         serverMemberRepository.deleteAll(serverMemberRepository.findByServerId(serverId));
         serverRepository.delete(server);
+
+        // Deferred to AFTER_COMMIT (audit A9): if any deletion above fails, the transaction
+        // rolls back and this event is simply never published, so clients never hear about a
+        // deletion that didn't actually happen.
+        applicationEventPublisher.publishEvent(new ServerDeletedEvent(serverId, recipients));
+    }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onServerDeleted(ServerDeletedEvent event) {
+        realtimeEventPublisher.broadcast(event.recipientUserIds(),
+                new WsEvent(WsEventType.SERVER_DELETE, new ServerDeletedPayload(event.serverId())));
     }
 
     public ServerInvite getOrCreateInvite(UUID serverId, UUID requesterId) {
@@ -321,8 +339,8 @@ public class ServerService {
         ServerInvite invite = serverInviteRepository.findByCode(code)
                 .orElseThrow(() -> new ResourceNotFoundException("Invalid invite code"));
         Server server = requireServer(invite.getServerId());
-        int memberCount = serverMemberRepository.findByServerId(server.getId()).size();
-        return new InvitePreview(server.getId(), server.getName(), memberCount);
+        long memberCount = serverMemberRepository.countByServerId(server.getId());
+        return new InvitePreview(server.getId(), server.getName(), (int) memberCount);
     }
 
     private ServerInvite createInvite(UUID serverId) {

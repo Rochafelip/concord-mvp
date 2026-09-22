@@ -202,10 +202,11 @@ describe('MessageList', () => {
     render(<MessageList channelId="c1" />);
 
     expect(screen.queryByRole('img')).not.toBeInTheDocument();
-    expect(screen.getByTitle('report.pdf')).toHaveAttribute(
-      'src',
-      '/api/v1/uploads/abc.pdf',
-    );
+    const iframe = screen.getByTitle('report.pdf');
+    expect(iframe).toHaveAttribute('src', '/api/v1/uploads/abc.pdf');
+    // Defense in depth (security audit A10): no allow-scripts, so a payload disguised as
+    // `.pdf` can't execute even if the backend's magic-byte check were ever bypassed.
+    expect(iframe).toHaveAttribute('sandbox', 'allow-same-origin');
     const link = screen.getByRole('link', { name: /report\.pdf/i });
     expect(link).toHaveAttribute('href', '/api/v1/uploads/abc.pdf');
     expect(link).toHaveAttribute('download', 'report.pdf');

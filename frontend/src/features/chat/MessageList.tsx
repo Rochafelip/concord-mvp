@@ -298,6 +298,11 @@ function MessageAttachment({
         <iframe
           src={attachment.url}
           title={attachment.fileName ?? 'PDF attachment'}
+          // Defense in depth: the backend already validates real file content by magic bytes
+          // (AGENTS.md), so this URL should never actually be anything but a PDF — but if that
+          // check ever failed, no `allow-scripts` here means an HTML/JS payload disguised as
+          // `.pdf` still can't execute in this origin.
+          sandbox="allow-same-origin"
           className={`w-full rounded border border-line bg-white ${isGrouped ? 'h-40' : 'h-96'}`}
         />
         <div className="mt-2 flex items-center gap-2">

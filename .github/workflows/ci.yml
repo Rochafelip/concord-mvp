@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [dev, master]
 
+# Least privilege for the GITHUB_TOKEN (security audit, Baixa finding) — none of these jobs
+# call back to the GitHub API (no PR comments, no status updates beyond the check itself).
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
