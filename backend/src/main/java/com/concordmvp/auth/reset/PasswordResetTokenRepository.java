@@ -13,6 +13,8 @@ public interface PasswordResetTokenRepository extends JpaRepository<PasswordRese
 
     Optional<PasswordResetToken> findByTokenHash(String tokenHash);
 
+    boolean existsByUserIdAndCreatedAtAfter(UUID userId, Instant createdAt);
+
     @Modifying
     @Query("UPDATE PasswordResetToken t SET t.usedAt = :now WHERE t.userId = :userId AND t.usedAt IS NULL")
     void markAllUsedForUser(@Param("userId") UUID userId, @Param("now") Instant now);
