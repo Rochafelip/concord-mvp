@@ -133,8 +133,10 @@ class WebSocketClient {
       this.socket.send(JSON.stringify(event));
     } else {
       // Fail silently (per design): a send attempt while disconnected shouldn't throw. Callers
-      // that care (e.g. MessageInput) can check wsConnectionStore's status themselves.
-      console.warn('Cannot send over WebSocket: not connected', event);
+      // that care (e.g. MessageInput) can check wsConnectionStore's status themselves. Log only
+      // the event type, not the payload — it can carry message content or other user input that
+      // has no reason to sit in the production console.
+      console.warn('Cannot send over WebSocket: not connected', event.type);
     }
   }
 
