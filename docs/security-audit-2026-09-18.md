@@ -20,10 +20,10 @@ Resumo: **1 Crítica, 12 Alta, ~15 Média, ~25 Baixa/informativa**. A base está
 
 ## 🟠 ALTA
 
-### A1. Login sem rate limiting/lockout — ✅ CORRIGIDO (parcial)
-- **Status:** Corrigido só por e-mail, não por IP. `AuthService.loginRateLimiter` (`RateLimiter`, mesmo já usado em reset/verificação de e-mail) bloqueia por e-mail normalizado antes de qualquer checagem de credencial, com a mesma mensagem genérica de credencial inválida (não distingue rate-limit de senha errada). A correção original pedia "por IP+email" — o componente IP nunca foi implementado aqui, só depois no `/register` (D21, achado Média). Reaproveitar o `ClientIp` já existente para adicionar a dimensão IP ao login é o trabalho que falta.
-- **Arquivos:** `auth/AuthService.java` (`loginRateLimiter`, `login`).
-- **Teste:** `AuthServiceTest.login_tooManyAttemptsInAShortWindow_throwsUnauthorized_withTheSameGenericMessage`, `login_rateLimitIsPerEmail_anotherEmailIsUnaffected`.
+### A1. Login sem rate limiting/lockout — ✅ CORRIGIDO
+- **Status:** Corrigido, agora por e-mail **e** por IP. `AuthService.loginRateLimiter` (por e-mail normalizado) já existia; ganhou um `loginIpRateLimiter` irmão (mesmos limites do `registerIpRateLimiter` do `/register`, via `ClientIp`), bloqueando antes de qualquer checagem de credencial e com a mesma mensagem genérica de credencial inválida nos dois casos — um rate-limit nunca se distingue de senha errada. Fecha o componente IP que faltava desde a correção original desse achado.
+- **Arquivos:** `auth/AuthService.java` (`loginIpRateLimiter`, `login`), `auth/AuthController.java` (`login`, resolve `ClientIp`).
+- **Teste:** `AuthServiceTest.login_tooManyAttemptsInAShortWindow_throwsUnauthorized_withTheSameGenericMessage`, `login_rateLimitIsPerEmail_anotherEmailIsUnaffected`, `login_tooManyAttemptsFromTheSameIpAcrossDifferentEmails_throwsUnauthorized`, `login_rateLimitIsPerIp_anotherIpIsUnaffected`.
 
 ### A2. Logout não revoga o JWT (token de 30 dias sem denylist) — ✅ CORRIGIDO
 - **Status:** Corrigido. `JwtDenylist` (em memória, mesmo padrão da D3) guarda o `jti` revogado; `AuthController.logout` insere o `jti` do token atual nela, e `JwtAuthFilter` rejeita qualquer requisição cujo `jti` esteja na denylist. Documentado em `docs/DECISIONS.md` D2 ("Update 2026-09-19, security audit"). Ainda sem refresh token/rotação — fora do escopo, D2 continua valendo para o resto da decisão. Gap residual aceito: reinício do backend limpa a denylist em memória.

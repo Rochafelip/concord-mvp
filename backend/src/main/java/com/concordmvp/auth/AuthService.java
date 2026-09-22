@@ -38,6 +38,11 @@ public class AuthService {
     // failed ones, so it also caps how fast a valid password can be brute-forced.
     private final RateLimiter loginRateLimiter =
             new RateLimiter(5, Duration.ofMinutes(1), 20, Duration.ofHours(1));
+    // A1 (security audit): the email-keyed limiter alone doesn't stop credential stuffing that
+    // sweeps many different email addresses from one attacker — this bounds that by IP instead.
+    // Same thresholds as /register's IP limiter (ClientIp, D21).
+    private final RateLimiter loginIpRateLimiter =
+            new RateLimiter(10, Duration.ofMinutes(1), 30, Duration.ofHours(1));
     // Registration keeps the "este e-mail já está cadastrado" message — removing that signal
     // would mean no longer auto-logging the caller in on register, an architecture change (see
     // docs/DECISIONS.md D21). These two limiters make mass email-enumeration against /register
@@ -88,9 +93,11 @@ public class AuthService {
                 saved.getId(), saved.getUsername(), saved.getDisplayName(), saved.getEmail(), saved.isEmailVerified());
     }
 
-    public AuthResponse login(LoginRequest request) {
+    public AuthResponse login(LoginRequest request, String clientIp) {
         String normalizedEmail = request.email() == null ? "" : request.email().trim().toLowerCase();
-        if (!loginRateLimiter.tryAcquire(normalizedEmail, Instant.now())) {
+        Instant now = Instant.now();
+        if (!loginRateLimiter.tryAcquire(normalizedEmail, now)
+                || !loginIpRateLimiter.tryAcquire(clientIp == null ? "" : clientIp, now)) {
             // Same generic message as a wrong password/email below — a rate-limited response
             // must not be distinguishable from an ordinary failed login attempt.
             throw new UnauthorizedException(INVALID_CREDENTIALS_MESSAGE);

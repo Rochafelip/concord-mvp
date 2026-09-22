@@ -91,12 +91,14 @@ class AuthControllerTest {
         UUID userId = UUID.randomUUID();
         AuthResponse response = new AuthResponse(userId, "alice", "Alice", "alice@example.com", false);
         LoginRequest request = new LoginRequest("alice@example.com", "password123");
+        MockHttpServletRequest httpRequest = new MockHttpServletRequest();
+        httpRequest.addHeader("X-Real-IP", "203.0.113.1");
 
-        when(authService.login(request)).thenReturn(response);
+        when(authService.login(request, "203.0.113.1")).thenReturn(response);
         when(jwtService.generateToken(userId)).thenReturn("signed-token");
         when(jwtService.tokenTtl()).thenReturn(Duration.ofDays(30));
 
-        ResponseEntity<AuthResponse> result = authController.login(request);
+        ResponseEntity<AuthResponse> result = authController.login(request, httpRequest);
 
         assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(result.getBody()).isEqualTo(response);
