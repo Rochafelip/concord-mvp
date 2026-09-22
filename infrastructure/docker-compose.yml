@@ -113,12 +113,18 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
 
-    # Runtime image is nginx:alpine (see frontend/Dockerfile), which runs its master process as
-    # root to bind port 80 — NET_BIND_SERVICE is the one capability that needs to survive the drop.
+    # Runtime image is nginx:alpine (see frontend/Dockerfile). Its master process starts as root
+    # to bind port 80 (NET_BIND_SERVICE), then does its own setup before forking workers: chown the
+    # /var/cache/nginx/* dirs to the `nginx` worker user (CHOWN) and setuid/setgid into it for the
+    # workers (SETUID/SETGID). cap_drop: ALL alone broke all three ("Operation not permitted" on
+    # chown, confirmed against a real deploy) — same class of bug as postgres's entrypoint below.
     cap_drop:
       - ALL
     cap_add:
       - NET_BIND_SERVICE
+      - CHOWN
+      - SETUID
+      - SETGID
     security_opt:
       - no-new-privileges:true
 
@@ -135,10 +141,16 @@ services:
     restart: unless-stopped
     command: --config /etc/livekit.yaml
 
-    # Every port it binds (7881, 3478, 5349, the RTC UDP ranges) is unprivileged (>1024), so no
-    # capability is needed beyond what's left after dropping all of them.
+    # Every port it binds (7881, 3478, 5349, the RTC UDP ranges) is unprivileged (>1024). But the
+    # process runs as root inside the container while ./nginx/certs/selfsigned.key on the host is
+    # mode 600 owned by the deploying user, not uid 0 — cap_drop: ALL strips DAC_OVERRIDE, so root
+    # can't read a file it doesn't numerically own ("permission denied", confirmed against a real
+    # deploy). DAC_READ_SEARCH is the narrower, read-only fix (no write-permission bypass, unlike
+    # DAC_OVERRIDE) since livekit only ever reads this key.
     cap_drop:
       - ALL
+    cap_add:
+      - DAC_READ_SEARCH
     security_opt:
       - no-new-privileges:true
 
@@ -162,12 +174,19 @@ services:
     image: nginx:alpine
     restart: unless-stopped
 
-    # nginx's master process runs as root to bind ports 80/443 — NET_BIND_SERVICE is the one
-    # capability that needs to survive the drop.
+    # Same reasoning as the frontend service above: NET_BIND_SERVICE to bind 80/443/45678, plus
+    # CHOWN/SETUID/SETGID for the master's own cache-dir chown and worker privilege drop. It also
+    # loads ./nginx/certs/selfsigned.key directly (TLS listener) — same DAC_READ_SEARCH need as
+    # livekit below, for the same reason (root without DAC_OVERRIDE can't read a mode-600 file it
+    # doesn't numerically own).
     cap_drop:
       - ALL
     cap_add:
       - NET_BIND_SERVICE
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_READ_SEARCH
     security_opt:
       - no-new-privileges:true
 
