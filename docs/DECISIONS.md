@@ -599,3 +599,32 @@ que a D20 deixou em aberto para este endpoint. `AttachmentServingController`,
 `_nonMember_propagatesForbiddenFromChannelService`,
 `_withoutReadMessageHistory_throwsForbidden`,
 `_memberWithPermission_doesNotThrow`.
+
+## D23 — PDF é servido inline, exceção deliberada à regra "não-imagem = download forçado" do AGENTS.md
+
+**Context**: A seção de anexos do `AGENTS.md` diz: um upload cujo magic byte bate
+com assinatura de imagem conhecida é renderizado inline; "any other file type
+is allowed and rendered as a downloadable file chip, served with a forced
+download so it can never execute in the browser". `AttachmentServingController`
+sempre tratou PDF como uma terceira categoria — `Content-Disposition: inline`
+em vez de `attachment` — e o frontend (`MessageList.tsx`) renderiza um preview
+em `<iframe>` em vez do chip de download. Isso nunca tinha sido formalizado
+fora do comentário Javadoc da própria classe; a auditoria de segurança de
+2026-09-18 (achado Baixa "PDFs servidos inline na mesma origem") apontou a
+divergência entre código e spec escrita.
+
+**Decision**: Manter o comportamento atual — PDF continua servido inline, com
+preview no frontend. A regra geral do AGENTS.md ("não-imagem = download
+forçado") ganha PDF como segunda exceção explícita, ao lado de imagem.
+Preview de PDF é um recurso real (evita alternar de app pra ler um anexo
+comum em chat), e o risco que a regra geral existe pra evitar — HTML/JS
+disfarçado de outro tipo executando na origem do app — já está coberto em
+duas camadas: o backend só marca como PDF o que a extensão declara (mesmo
+limite que as imagens têm, não há validação de magic byte adicional aqui) e o
+`<iframe>` tem `sandbox="allow-same-origin"` sem `allow-scripts` (achado A10
+da auditoria) — um payload disfarçado de `.pdf` não executa mesmo se a
+classificação por extensão falhar.
+
+**Consequences**: Nenhuma mudança de código. Documenta o que já era verdade
+no comportamento, para que a próxima leitura do `AGENTS.md` (humana ou de IA)
+não trate esse desvio como um bug não-intencional.
