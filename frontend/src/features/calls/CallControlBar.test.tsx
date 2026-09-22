@@ -214,4 +214,28 @@ describe('CallControlBar', () => {
 
     expect(onLeave).toHaveBeenCalledTimes(1);
   });
+
+  describe('private whistle badge', () => {
+    it('shows who I am whistling to', () => {
+      useVoiceStore.setState({
+        participants: [localParticipant(), { ...localParticipant(), identity: 'bob', isLocal: false, name: 'Bob' }],
+        whisperingTo: 'bob',
+      });
+
+      render(<CallControlBar onLeave={vi.fn()} />);
+
+      expect(screen.getByText(/Whispering to Bob/)).toBeInTheDocument();
+    });
+
+    it('shows nothing when not whistling', () => {
+      useVoiceStore.setState({
+        participants: [localParticipant()],
+        whisperingTo: null,
+      });
+
+      render(<CallControlBar onLeave={vi.fn()} />);
+
+      expect(screen.queryByText(/Whispering to/)).not.toBeInTheDocument();
+    });
+  });
 });

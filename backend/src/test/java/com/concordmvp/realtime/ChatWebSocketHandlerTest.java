@@ -3,6 +3,7 @@ package com.concordmvp.realtime;
 import com.concordmvp.common.exception.ForbiddenException;
 import com.concordmvp.dm.DmMessageService;
 import com.concordmvp.media.VoicePresenceService;
+import com.concordmvp.media.WhistleService;
 import com.concordmvp.messages.MessageService;
 import com.concordmvp.messages.dto.AttachmentRequest;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -50,6 +51,9 @@ class ChatWebSocketHandlerTest {
     @Mock
     private VoicePresenceService voicePresenceService;
 
+    @Mock
+    private WhistleService whistleService;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private ChatWebSocketHandler handler;
@@ -57,7 +61,7 @@ class ChatWebSocketHandlerTest {
     @BeforeEach
     void setUp() {
         handler = new ChatWebSocketHandler(sessionRegistry, objectMapper, messageService, dmMessageService,
-                voicePresenceService);
+                voicePresenceService, whistleService);
     }
 
     @Test
@@ -265,6 +269,51 @@ class ChatWebSocketHandlerTest {
         handler.handleMessage(session, new TextMessage("{\"type\":\"VOICE_PRESENCE_LEAVE\",\"payload\":{}}"));
 
         verify(voicePresenceService).removePresence(userId);
+        verify(session, never()).sendMessage(any());
+    }
+
+    @Test
+    void handleTextMessage_whistleStart_valid_callsServiceWithParsedFields() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID channelId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        WebSocketSession session = sessionWithUserId(userId);
+
+        handler.handleMessage(session, new TextMessage(
+                "{\"type\":\"WHISTLE_START\",\"payload\":{"
+                        + "\"channelId\":\"" + channelId + "\",\"targetUserId\":\"" + targetId + "\"}}"));
+
+        verify(whistleService).start(channelId, targetId, userId);
+        verify(session, never()).sendMessage(any());
+    }
+
+    @Test
+    void handleTextMessage_whistleStart_serviceThrows_sendsErrorFrameToSendingSessionOnly() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID channelId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        WebSocketSession session = sessionWithUserId(userId);
+        doThrow(new ForbiddenException("Not allowed to speak"))
+                .when(whistleService).start(channelId, targetId, userId);
+
+        handler.handleMessage(session, new TextMessage(
+                "{\"type\":\"WHISTLE_START\",\"payload\":{"
+                        + "\"channelId\":\"" + channelId + "\",\"targetUserId\":\"" + targetId + "\"}}"));
+
+        WsEvent event = capturedEvent(session);
+        assertThat(event.type()).isEqualTo(WsEventType.ERROR);
+        JsonNode payload = objectMapper.valueToTree(event.payload());
+        assertThat(payload.get("message").asText()).isEqualTo("Not allowed to speak");
+    }
+
+    @Test
+    void handleTextMessage_whistleStop_callsStopForSender() throws Exception {
+        UUID userId = UUID.randomUUID();
+        WebSocketSession session = sessionWithUserId(userId);
+
+        handler.handleMessage(session, new TextMessage("{\"type\":\"WHISTLE_STOP\",\"payload\":{}}"));
+
+        verify(whistleService).stop(userId);
         verify(session, never()).sendMessage(any());
     }
 
