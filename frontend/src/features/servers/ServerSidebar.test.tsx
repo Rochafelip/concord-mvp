@@ -88,4 +88,32 @@ describe('ServerSidebar', () => {
     const selected = await screen.findByRole('link', { name: 'Lety' });
     expect(selected).toHaveAttribute('aria-current', 'page');
   });
+
+  it('shows a retry indicator when the server list fails to load, instead of silently rendering as empty', async () => {
+    vi.mocked(api.listServers).mockRejectedValue(new Error('network error'));
+    renderSidebar();
+    await screen.findByRole('link', { name: 'Lety' });
+
+    expect(
+      screen.getByRole('button', { name: 'Falha ao carregar servidores/amigos. Tentar novamente' }),
+    ).toBeInTheDocument();
+  });
+
+  it('retries the failed query when the retry indicator is clicked', async () => {
+    vi.mocked(api.listServers).mockRejectedValueOnce(new Error('network error'));
+    const user = userEvent.setup();
+    renderSidebar();
+    const retryButton = await screen.findByRole(
+      'button',
+      { name: 'Falha ao carregar servidores/amigos. Tentar novamente' },
+    );
+
+    vi.mocked(api.listServers).mockResolvedValue(servers);
+    await user.click(retryButton);
+
+    expect(await screen.findByRole('link', { name: 'Alpha' })).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Falha ao carregar servidores/amigos. Tentar novamente' }),
+    ).not.toBeInTheDocument();
+  });
 });

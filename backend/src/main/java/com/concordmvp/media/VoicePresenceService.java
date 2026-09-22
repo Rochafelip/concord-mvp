@@ -51,6 +51,7 @@ public class VoicePresenceService {
     private final UserRepository userRepository;
     private final RealtimeEventPublisher realtimeEventPublisher;
     private final PermissionService permissionService;
+    private final MediaService mediaService;
 
         @Autowired
         public VoicePresenceService(ChannelService channelService,
@@ -58,13 +59,15 @@ public class VoicePresenceService {
                                  ServerRepository serverRepository,
                                  UserRepository userRepository,
                                  RealtimeEventPublisher realtimeEventPublisher,
-                                 PermissionService permissionService) {
+                                 PermissionService permissionService,
+                                 MediaService mediaService) {
         this.permissionService = permissionService;
         this.channelService = channelService;
         this.serverMemberRepository = serverMemberRepository;
         this.serverRepository = serverRepository;
         this.userRepository = userRepository;
         this.realtimeEventPublisher = realtimeEventPublisher;
+        this.mediaService = mediaService;
     }
 
     public void updatePresence(UUID channelId, UUID userId, boolean muted, boolean cameraOn,
@@ -99,6 +102,20 @@ public class VoicePresenceService {
         realtimeEventPublisher.broadcast(currentMemberIds(removed.serverId()),
                 new WsEvent(WsEventType.VOICE_PRESENCE_LEAVE,
                         new VoicePresenceLeavePayload(removed.serverId(), removed.channelId(), userId)));
+    }
+
+    /**
+     * Disconnects a user from whatever voice channel they're currently in within this server —
+     * both the LiveKit room itself (security audit A5) and this service's own presence tracking
+     * — called when their server membership ends (see {@code ServerService#leaveServer}). No-op
+     * if they aren't currently in voice here.
+     */
+    public void disconnectFromServer(UUID serverId, UUID userId) {
+        Entry entry = byUserId.get(userId);
+        if (entry == null || !entry.serverId().equals(serverId)) return;
+
+        mediaService.removeParticipant(entry.channelId(), userId);
+        removePresence(userId);
     }
 
     public List<VoicePresenceResponse> getPresence(UUID serverId, UUID requesterId) {

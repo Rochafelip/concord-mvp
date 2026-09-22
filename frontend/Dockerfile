@@ -1,5 +1,5 @@
 # --- Stage 1: build ----------------------------------------------------------
-FROM node:20-alpine AS build
+FROM node:26-alpine AS build
 WORKDIR /app
 
 # Copy only the manifest files first so `npm ci` is cached in its own layer

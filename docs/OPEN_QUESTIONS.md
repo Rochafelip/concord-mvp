@@ -1134,7 +1134,10 @@ Once a question is answered:
 
 ## Q33 — Should `/api/v1/uploads/**` stay publicly reachable?
 
-`AttachmentServingController` is deliberately unauthenticated
+**Status:** ✅ Resolved — see `DECISIONS.md` D22. Option 2 below was chosen and
+implemented as security-audit finding A4.
+
+`AttachmentServingController` was deliberately unauthenticated
 (`SecurityConfig` has a `permitAll` entry for the path). Access relies on the
 random UUID filename being unguessable — the same trust model as a shareable
 link. That was a conscious decision, taken before roles existed.

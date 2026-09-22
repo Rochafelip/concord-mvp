@@ -115,6 +115,30 @@ class PasswordResetServiceTest {
     }
 
     @Test
+    void explainsThatALinkWasSupersededByANewerRequest() {
+        storedToken.setUsedAt(Instant.now().minusSeconds(60));
+        when(tokenRepository.existsByUserIdAndCreatedAtAfter(user.getId(), storedToken.getCreatedAt()))
+                .thenReturn(true);
+
+        assertThatThrownBy(() -> service.verifyToken("raw-token"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Este link foi substituído por um pedido de redefinição mais recente. "
+                        + "Use o e-mail mais novo que você recebeu ou solicite outro link");
+    }
+
+    @Test
+    void explainsThatALinkWasAlreadyUsedToResetThePassword() {
+        storedToken.setUsedAt(Instant.now().minusSeconds(60));
+        when(tokenRepository.existsByUserIdAndCreatedAtAfter(user.getId(), storedToken.getCreatedAt()))
+                .thenReturn(false);
+
+        assertThatThrownBy(() -> service.verifyToken("raw-token"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Este link já foi usado para redefinir a senha. "
+                        + "Solicite um novo link se ainda precisar trocar a senha");
+    }
+
+    @Test
     void storesOnlyTheHashOfIssuedTokens() {
         service.requestReset("alice@example.com");
 

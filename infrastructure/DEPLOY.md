@@ -39,7 +39,12 @@ cd concord-mvp/infrastructure
 
 ```bash
 cp .env.example .env
+chmod 600 .env
 ```
+
+`.env` holds `POSTGRES_PASSWORD`, `JWT_SECRET` and `LIVEKIT_API_SECRET` in
+plaintext — `chmod 600` keeps it readable only by whichever user runs
+`docker compose`, instead of world-readable (security audit, Média finding).
 
 Edit `.env` and fill in **real** values — never reuse `.env.example`'s
 placeholders for anything reachable from the internet:

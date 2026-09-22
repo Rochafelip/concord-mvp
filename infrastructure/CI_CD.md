@@ -31,6 +31,23 @@ secrets are needed. The runner already has local Docker access and can read
 `infrastructure/.env` directly, so `cd-production.yml` and `rollback-production.yml`
 need **zero** GitHub Secrets.
 
+## Self-hosted runner safety
+
+This repository is public. The self-hosted runner in `cd-production.yml`/
+`rollback-production.yml` executes on this same PC with local Docker access and
+a checkout of `infrastructure/.env` — a workflow run on it is effectively code
+execution on production. **No workflow triggered by `pull_request` or
+`pull_request_target` may use `runs-on: [self-hosted]`**, since either trigger
+lets an external contributor's PR run its own workflow YAML. Today that's true
+by construction: `ci.yml` (the only workflow with a `pull_request` trigger) runs
+on `ubuntu-latest`, and both self-hosted workflows only trigger on `push` to
+`master` (already protected, PR + approval required) or manual
+`workflow_dispatch`. Keep it that way — before adding any new self-hosted job,
+confirm its trigger can't be reached from a PR, and consider a GitHub
+Environment protection rule (required reviewer before the job runs) as an
+extra gate if that job's trigger is anything less restrictive than `push` to
+`master` (security audit A11).
+
 ## One-time runner setup
 
 1. GitHub repo → Settings → Actions → Runners → "New self-hosted runner", choose

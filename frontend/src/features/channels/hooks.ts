@@ -68,6 +68,12 @@ export function useMarkChannelAsRead() {
   return useMutation({
     mutationFn: ({ channelId, lastReadMessageId }: { channelId: string; lastReadMessageId?: string }) =>
       api.markChannelAsRead(channelId, lastReadMessageId || null),
+    // Optimistic-only: onMutate is the single place that zeroes the cache. A matching onSuccess
+    // that zeroed it again used to double as a race — a MESSAGE_CREATE bumping unreadCount back
+    // up while this mutation was still in flight (e.g. the user switched to another channel right
+    // after marking this one read) got silently wiped back to 0 once the request resolved, losing
+    // track of a genuinely unread message. No onError rollback: a failed request leaving the
+    // optimistic 0 in place is the same "already read" state the user asked for.
     onMutate: ({ channelId }) => {
       queryClient.setQueryData<Channel[]>(['servers', serverId, 'channels'], (old) => {
         if (!old) return old;
@@ -76,23 +82,6 @@ export function useMarkChannelAsRead() {
       queryClient.setQueryData<Channel>(['channels', channelId], (old) =>
         old ? { ...old, unreadCount: 0 } : old,
       );
-    },
-    onSuccess: (_, variables) => {
-      const { channelId } = variables;
-      
-      // Update the channel's unread count to 0 immediately in the cache
-      queryClient.setQueryData<Channel[]>(['servers', serverId, 'channels'], (old) => {
-        if (!old) return old;
-        return old.map((ch) =>
-          ch.id === channelId ? { ...ch, unreadCount: 0 } : ch
-        );
-      });
-
-      // Also update the single channel cache if it exists
-      queryClient.setQueryData<Channel>(['channels', channelId], (old) => {
-        if (!old) return old;
-        return { ...old, unreadCount: 0 };
-      });
     },
   });
 }
