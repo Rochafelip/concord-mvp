@@ -1,5 +1,5 @@
 # --- Stage 1: build --------------------------------------------------------
-FROM eclipse-temurin:21-jdk-alpine AS build
+FROM eclipse-temurin:25-jdk-alpine AS build
 WORKDIR /workspace
 
 COPY mvnw pom.xml ./
@@ -11,7 +11,7 @@ RUN ./mvnw -B package -DskipTests
 
 
 # --- Stage 2: runtime ------------------------------------------------------
-FROM eclipse-temurin:21-jre-alpine AS runtime
+FROM eclipse-temurin:25-jre-alpine AS runtime
 WORKDIR /app
 
 # Create non-root user. UID/GID are pinned to 1000 to match the chown done by
