@@ -106,7 +106,26 @@ Resumo: **1 Crítica, 12 Alta, ~15 Média, ~25 Baixa/informativa**. A base está
 
 ## 🟢 BAIXA / informativo
 
-Diferença de tempo de resposta no login (timing side-channel), `RateLimiter` em memória (não distribuído), JWT secret de fallback hardcoded no perfil dev, `sendRequest` de amizade sem tratamento de constraint (500 em vez de 409), inconsistência 403 vs 404 em `ChannelReadStateController`, broadcast de mensagem antes do commit, sem deduplicação de mensagens por `clientMessageId`, backfill de migração sem lote, índices sub-ótimos em `friendships`/`roles`, avatar sem limite de multipart dedicado (aceita até 150MB antes de rejeitar em 5MB), sem rate limit em uploads de anexo/avatar, PDFs servidos inline na mesma origem, timeouts não limpos em `InvitePeopleModal`/`useRealtimeSync`, `ServerSidebar` sem estado de erro, reconexão WS sem backoff exponencial, workflows CI sem bloco `permissions:` explícito, credenciais triviais no Postgres de CI (efêmero, risco nulo), certificado de produção sob nome "selfsigned" (risco de downgrade silencioso), serviços nginx/livekit/duckdns rodando como root, sem Dependabot/scanner de dependências.
+- Diferença de tempo de resposta no login (timing side-channel) — **sem ação**: a mitigação que importa (custo de CPU do bcrypt constante entre e-mail inexistente e senha errada, via `DUMMY_PASSWORD_HASH`) já existe; o resíduo é só jitter de rede/DB, não um achado corrigível.
+- `RateLimiter` em memória (não distribuído) — **sem ação**, decisão documentada em `docs/DECISIONS.md` D3 (instância única).
+- JWT secret de fallback hardcoded no perfil dev — **sem ação**: só existe em `application-dev.yml` (prod não tem fallback, falha ao subir sem a env var), nome já avisa "do-not-use-in-production".
+- ~~`sendRequest` de amizade sem tratamento de constraint (500 em vez de 409)~~ — ✅ já resolvido incidentalmente pelo handler genérico de `DataIntegrityViolationException` (achados A6/A7 acima).
+- ~~Inconsistência 403 vs 404 em `ChannelReadStateController`~~ — ✅ corrigido: removido o try/catch que convertia tudo em 403; agora propaga a mesma distinção 404-se-invisível/403-se-não-membro que o resto do código usa.
+- ~~Broadcast de mensagem antes do commit (`MessageService.persistAndBroadcast`)~~ — ✅ corrigido: mesmo padrão do A9 (`@TransactionalEventListener(phase = AFTER_COMMIT)`), agora também para `MESSAGE_CREATE`/`MESSAGE_DELETE`.
+- Sem deduplicação de mensagens por `clientMessageId` — **não corrigido, mudança maior**: exige protocolo WS novo, coluna/índice de dedup e lógica no frontend para gerar e rastrear o id. Fora do escopo desta leva.
+- Backfill de migração sem lote (`V21`) — **sem ação**: tabela pequena o bastante (D1, grupo de amigos) para o `UPDATE` em massa ser trivial; revisitar se a escala mudar.
+- Índices sub-ótimos em `friendships` (`findByPair` não usa o índice `LEAST/GREATEST`) — **não corrigido, baixo retorno**: impacto real desprezível na escala do projeto. `roles`/`member_roles` foram checados e estão corretos, não é um achado ali.
+- ~~Avatar sem limite de multipart dedicado~~ — ✅ corrigido: `AvatarUploadSizeFilter` rejeita por `Content-Length` antes do multipart parsing, escopado à rota do avatar.
+- ~~Sem rate limit em uploads de anexo/avatar~~ — ✅ corrigido: `RateLimiter` por usuário em `AttachmentUploadService`/`UserService.updateAvatar`.
+- ~~PDFs servidos inline na mesma origem~~ — mantido como está, formalizado como exceção deliberada em `AGENTS.md`/`docs/DECISIONS.md` D23 (decisão do dono do projeto), não é mais uma divergência não-intencional entre spec e código.
+- ~~Timeouts não limpos em `InvitePeopleModal`/`useRealtimeSync`~~ — ✅ corrigido: ambos guardam o id do timeout numa ref e limpam no unmount/antes de reagendar.
+- ~~`ServerSidebar` sem estado de erro~~ — ✅ corrigido: indicador de erro com retry quando `useServers`/`useFriends` falha.
+- Reconexão WS sem backoff exponencial — **sem ação**: decisão deliberada, documentada no próprio `websocketClient.ts` (app pequeno, não precisa sobreviver a thundering herd).
+- ~~Workflows CI sem bloco `permissions:` explícito~~ — ✅ corrigido: `permissions: contents: read` nos três workflows.
+- Credenciais triviais no Postgres de CI — **sem ação**: container efêmero, nunca exposto fora do job, risco nulo (mesma leitura da auditoria original).
+- Certificado de produção sob nome "selfsigned" — **sem ação**: já documentado e mitigado em `infrastructure/DUCKDNS.md` (comando de verificação do emissor real).
+- ~~Serviços nginx/livekit/duckdns rodando como root~~ — ✅ corrigido (parcial, junto com o achado Média equivalente): `cap_drop`/`no-new-privileges` em todos; `duckdns` também ganhou `PUID`/`PGID`. O root do master process do nginx/frontend é como a imagem oficial funciona (bind privilegiado + workers não-root) e não é removível sem trocar de imagem.
+- ~~Sem Dependabot/scanner de dependências~~ — ✅ corrigido: `.github/dependabot.yml` cobrindo npm, Maven, Docker e GitHub Actions.
 
 ## ✅ Verificado e correto (não são achados)
 
