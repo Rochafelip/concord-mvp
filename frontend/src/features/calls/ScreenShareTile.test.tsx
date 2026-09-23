@@ -170,26 +170,44 @@ describe('ScreenShareTile', () => {
       expect(screen.getByRole('button', { name: "Volume for Felipe's screen" })).toBeInTheDocument();
     });
 
-    it('does not render a volume control when the share has no audio', () => {
-      render(<ScreenShareTile participant={sharingParticipant({ isLocal: false, screenShareHasAudio: false })} />);
-
-      expect(screen.queryByRole('button', { name: /^Volume for/ })).not.toBeInTheDocument();
-    });
-
-    it('does not render a volume control when the presenter has muted the shared audio', () => {
+    it('does not render a volume control when the share has no audio, and shows a static no-audio badge instead', () => {
       render(
         <ScreenShareTile
-          participant={sharingParticipant({ isLocal: false, screenShareHasAudio: true, screenShareAudioEnabled: false })}
+          participant={sharingParticipant({ isLocal: false, screenShareHasAudio: false, name: 'Felipe' })}
         />,
       );
 
       expect(screen.queryByRole('button', { name: /^Volume for/ })).not.toBeInTheDocument();
+      expect(screen.getByRole('img', { name: "Felipe's screen has no audio" })).toBeInTheDocument();
     });
 
-    it('does not render a volume control for your own screen share, even with audio', () => {
+    it('does not render a volume control when the presenter has muted the shared audio, and shows the no-audio badge instead', () => {
+      render(
+        <ScreenShareTile
+          participant={sharingParticipant({
+            isLocal: false,
+            screenShareHasAudio: true,
+            screenShareAudioEnabled: false,
+            name: 'Felipe',
+          })}
+        />,
+      );
+
+      expect(screen.queryByRole('button', { name: /^Volume for/ })).not.toBeInTheDocument();
+      expect(screen.getByRole('img', { name: "Felipe's screen has no audio" })).toBeInTheDocument();
+    });
+
+    it('does not render a volume control for your own screen share, even with audio — shows a static confirmation badge instead', () => {
       render(<ScreenShareTile participant={sharingParticipant({ isLocal: true, screenShareHasAudio: true })} />);
 
       expect(screen.queryByRole('button', { name: /^Volume for/ })).not.toBeInTheDocument();
+      expect(screen.getByRole('img', { name: 'Your screen audio is on' })).toBeInTheDocument();
+    });
+
+    it('shows a static no-audio badge for your own screen share when it has no audio', () => {
+      render(<ScreenShareTile participant={sharingParticipant({ isLocal: true, screenShareHasAudio: false })} />);
+
+      expect(screen.getByRole('img', { name: 'Your screen has no audio' })).toBeInTheDocument();
     });
 
     it('forwards volume changes to voiceClient.setScreenShareVolume for that identity', async () => {
@@ -251,12 +269,12 @@ describe('ScreenShareTile', () => {
       expect(screen.queryByRole('button', { name: 'Enter fullscreen' })).not.toBeInTheDocument();
     });
 
-    it('reveals the volume icon when this share tile is hovered', () => {
+    it('keeps the volume icon visible without needing hover, so a viewer without audio can see there is nothing to raise', () => {
       render(<ScreenShareTile participant={sharingParticipant({ screenShareHasAudio: true })} />);
 
       const wrapper = screen.getByRole('button', { name: "Volume for Felipe's screen" }).parentElement?.parentElement;
-      expect(wrapper).toHaveClass('opacity-0');
-      expect(wrapper).toHaveClass('group-hover/participant-tile:opacity-100');
+      expect(wrapper).not.toHaveClass('opacity-0');
+      expect(wrapper).not.toHaveClass('group-hover/participant-tile:opacity-100');
     });
   });
 

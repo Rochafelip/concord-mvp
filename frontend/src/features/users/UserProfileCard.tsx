@@ -1,5 +1,5 @@
 import * as Popover from '@radix-ui/react-popover';
-import type { ReactElement } from 'react';
+import { useState, type ReactElement } from 'react';
 import { Link } from 'react-router-dom';
 import { Avatar } from '../../components/Avatar';
 import { ContextMenu, type ContextMenuEntry, type ContextMenuItem } from '../../components/ContextMenu';
@@ -34,15 +34,14 @@ export function UserProfileCard({ user, children, contextMenuExtraItems = [] }: 
   const currentUserId = useAuthStore((state) => state.user?.id);
   const isFriend = useIsFriend(user.id);
   const isSelf = user.id === currentUserId;
+  const [popoverOpen, setPopoverOpen] = useState(false);
   // Always called (rules of hooks) even for the viewer's own id; the result is simply unused
   // below since `menuItems` short-circuits to `contextMenuExtraItems` for `isSelf`.
   const friendMenuItems = useFriendContextMenuItems(user.id);
 
   const menuItems: ContextMenuEntry[] = isSelf
     ? contextMenuExtraItems
-    : friendMenuItems.length > 0 && contextMenuExtraItems.length > 0
-      ? [...friendMenuItems, { separator: true }, ...contextMenuExtraItems]
-      : [...friendMenuItems, ...contextMenuExtraItems];
+    : [{ label: 'Perfil', onSelect: () => setPopoverOpen(true) }, ...friendMenuItems, ...(contextMenuExtraItems.length > 0 ? [{ separator: true } as const, ...contextMenuExtraItems] : [])];
 
   if (isSelf) {
     return <ContextMenu items={menuItems}>{children}</ContextMenu>;
@@ -55,7 +54,9 @@ export function UserProfileCard({ user, children, contextMenuExtraItems = [] }: 
           a ref, so it can't be that node directly (same constraint noted where ChannelSidebar
           used to wrap its own ContextMenu around a plain div for this reason). */}
       <span className="contents">
-        <Popover.Root>
+        {/* Controlled (not just left-click-uncontrolled) so the right-click menu's "Perfil"
+            item can open the same popover programmatically. */}
+        <Popover.Root open={popoverOpen} onOpenChange={setPopoverOpen}>
           <Popover.Trigger asChild>{children}</Popover.Trigger>
           <Popover.Portal>
             <Popover.Content

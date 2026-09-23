@@ -3,6 +3,7 @@ import { voiceClient } from '../../services/voiceClient';
 import { UserProfileCard } from '../users/UserProfileCard';
 import type { VoiceParticipant } from '../../types/voice';
 import { MicStatusIcon } from './MicStatusIcon';
+import { muteParticipantMenuItem } from './muteParticipantMenuItem';
 import { VolumeControl } from './VolumeControl';
 
 interface OffCameraRosterProps {
@@ -39,12 +40,13 @@ export function OffCameraRoster({ participants, avatarUrlByUserId, deafenedByUse
           displayName: participant.name,
           avatarUrl: avatarUrlByUserId.get(participant.identity),
         };
+        const contextMenuExtraItems = participant.isLocal ? [] : [muteParticipantMenuItem(participant.identity)];
         return (
           <div
             key={participant.identity}
             className="group/roster-entry flex flex-shrink-0 items-center gap-2"
           >
-            <UserProfileCard user={profileUser}>
+            <UserProfileCard user={profileUser} contextMenuExtraItems={contextMenuExtraItems}>
               <button type="button" className="rounded-full">
                 <Avatar
                   displayName={participant.name}
@@ -56,7 +58,7 @@ export function OffCameraRoster({ participants, avatarUrlByUserId, deafenedByUse
             </UserProfileCard>
             <span className="flex items-center gap-1 text-caption text-ink">
               <MicStatusIcon micEnabled={participant.micEnabled} deafened={deafened} />
-              <UserProfileCard user={profileUser}>
+              <UserProfileCard user={profileUser} contextMenuExtraItems={contextMenuExtraItems}>
                 <button type="button" className="hover:underline">
                   {participant.name}
                 </button>
