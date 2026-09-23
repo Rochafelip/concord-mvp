@@ -32,6 +32,9 @@ public class Server {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    @Column(name = "icon_storage_key", length = 500)
+    private String iconStorageKey;
+
     public Server() {
     }
 
@@ -77,5 +80,13 @@ public class Server {
 
     public Instant getUpdatedAt() {
         return updatedAt;
+    }
+
+    public String getIconStorageKey() {
+        return iconStorageKey;
+    }
+
+    public void setIconStorageKey(String iconStorageKey) {
+        this.iconStorageKey = iconStorageKey;
     }
 }

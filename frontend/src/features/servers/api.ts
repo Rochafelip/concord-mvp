@@ -67,3 +67,13 @@ export function joinServer(data: JoinServerPayload): Promise<Server> {
 export function getInvitePreview(code: string): Promise<InvitePreview> {
   return apiClient.get<InvitePreview>(`invites/${code}`);
 }
+
+export function uploadServerIcon(serverId: string, file: File): Promise<Server> {
+  const formData = new FormData();
+  formData.append('file', file);
+  return apiClient.put<Server>(`servers/${serverId}/icon`, formData);
+}
+
+export function removeServerIcon(serverId: string): Promise<Server> {
+  return apiClient.delete<Server>(`servers/${serverId}/icon`);
+}

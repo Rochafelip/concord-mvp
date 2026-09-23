@@ -10,6 +10,7 @@ public record ServerResponse(
         UUID ownerId,
         Instant createdAt,
         Instant updatedAt,
+        String iconUrl,
         /** The requesting user's effective permissions on this server, as permission names. */
         List<String> permissions
 ) {

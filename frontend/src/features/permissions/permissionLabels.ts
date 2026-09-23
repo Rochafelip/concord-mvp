@@ -35,7 +35,6 @@ export const PERMISSION_GROUPS: { label: string; permissions: Permission[] }[] =
  * that doesn't exist.
  */
 export const NOT_ENFORCED_YET = new Set<Permission>([
-  'MANAGE_SERVER',
   'VIEW_AUDIT_LOG',
   'KICK_MEMBERS',
   'BAN_MEMBERS',

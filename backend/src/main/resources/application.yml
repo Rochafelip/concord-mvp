@@ -74,6 +74,7 @@ app:
   uploads:
     dir: ${APP_UPLOADS_DIR:/app/uploads}
     avatar-max-size: ${APP_AVATAR_MAX_SIZE:5242880}
+    server-icon-max-size: ${APP_SERVER_ICON_MAX_SIZE:5242880}
 
   mail:
     from: ${MAIL_FROM:${MAIL_USERNAME}}
