@@ -19,10 +19,10 @@ function mutation(mutate = vi.fn()) {
   return { mutate, isPending: false };
 }
 
-function renderCard(userId = 'u2', displayName = 'Bob') {
+function renderCard(userId = 'u2', displayName = 'Bob', onNavigate?: () => void) {
   return render(
     <MemoryRouter>
-      <UserProfileCard user={{ id: userId, displayName, avatarUrl: null }}>
+      <UserProfileCard user={{ id: userId, displayName, avatarUrl: null }} onNavigate={onNavigate}>
         <button type="button">{displayName}</button>
       </UserProfileCard>
     </MemoryRouter>,
@@ -87,5 +87,18 @@ describe('UserProfileCard', () => {
 
     expect(screen.queryByText('Adicionar amigo')).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /enviar mensagem/i })).not.toBeInTheDocument();
+  });
+
+  it('calls onNavigate when the message link is clicked, not merely when the popover opens', async () => {
+    vi.mocked(friendsHooks.useIsFriend).mockReturnValue(true);
+    const onNavigate = vi.fn();
+    const user = userEvent.setup();
+    renderCard('u2', 'Bob', onNavigate);
+
+    await user.click(screen.getByRole('button', { name: 'Bob' }));
+    expect(onNavigate).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('link', { name: /enviar mensagem/i }));
+    expect(onNavigate).toHaveBeenCalledTimes(1);
   });
 });

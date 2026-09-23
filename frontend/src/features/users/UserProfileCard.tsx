@@ -12,6 +12,10 @@ interface UserProfileCardProps {
    * via Radix's `asChild` (same pattern as components/EmojiPickerButton.tsx), so no extra
    * wrapping element is introduced beyond what the caller already passes. */
   children: ReactElement;
+  /** Called when the "Enviar mensagem" link is clicked, in addition to Radix's own
+   * `Popover.Close`. Lets a caller close its own UI (e.g. a mobile nav drawer) on navigate;
+   * unused by every other call site. */
+  onNavigate?: () => void;
 }
 
 /**
@@ -21,7 +25,7 @@ interface UserProfileCardProps {
  * docs/superpowers/specs/2026-09-18-friends-and-dm-design.md). No-ops for the viewer's own id:
  * `children` renders unwrapped instead of opening a popover about yourself.
  */
-export function UserProfileCard({ user, children }: UserProfileCardProps) {
+export function UserProfileCard({ user, children, onNavigate }: UserProfileCardProps) {
   const currentUserId = useAuthStore((state) => state.user?.id);
   const isFriend = useIsFriend(user.id);
 
@@ -44,7 +48,7 @@ export function UserProfileCard({ user, children }: UserProfileCardProps) {
           <div className="mt-3 flex flex-col items-start gap-1.5">
             {isFriend && (
               <Popover.Close asChild>
-                <Link to={`/app/dm/${user.id}`} className="text-caption text-brand hover:underline">
+                <Link to={`/app/dm/${user.id}`} onClick={onNavigate} className="text-caption text-brand hover:underline">
                   Enviar mensagem
                 </Link>
               </Popover.Close>
