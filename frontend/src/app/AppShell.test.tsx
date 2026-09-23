@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -167,5 +167,13 @@ describe('AppShell', () => {
 
     expect(screen.queryByText('Sair do Concord?')).not.toBeInTheDocument();
     expect(useAuthStore.getState().isAuthenticated).toBe(true);
+  });
+
+  it('shows the logout label once, with an icon standing in for it on small screens', () => {
+    renderShell('/app');
+
+    const button = screen.getByRole('button', { name: 'Sair do Concord' });
+    expect(within(button).getAllByText('Sair')).toHaveLength(1);
+    expect(button.querySelector('svg')).toBeInTheDocument();
   });
 });

@@ -1,4 +1,4 @@
-import { Moon, Settings, Sun, X } from 'lucide-react';
+import { LogOut, Moon, Settings, Sun, X } from 'lucide-react';
 import { useState } from 'react';
 import { Link, Outlet } from 'react-router-dom';
 import { Avatar } from '../components/Avatar';
@@ -75,8 +75,8 @@ export function AppShell() {
               aria-label="Sair do Concord"
               onClick={() => setConfirmingLogout(true)}
             >
+              <LogOut size={18} aria-hidden="true" className="sm:hidden" />
               <span className="hidden sm:inline">Sair</span>
-              <span className="sm:hidden">Sair</span>
             </Button>
           </div>
         )}
