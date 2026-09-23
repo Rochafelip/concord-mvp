@@ -14,6 +14,9 @@ vi.mock('../../../services/voiceClient', () => ({
 vi.mock('../hooks', () => ({
   useVoiceParticipants: vi.fn(() => []),
   useVoicePresence: vi.fn(() => ({ data: [] })),
+  // Needed transitively: CallControlBar's useCallPip() calls this to auto-close an open PiP
+  // window once the call disconnects (docs/superpowers/specs/2026-09-23-call-pip-design.md).
+  useVoiceStatus: vi.fn(() => ({ status: 'connected', channelId: null, error: null, isDeafened: false })),
 }));
 
 function localParticipant() {
