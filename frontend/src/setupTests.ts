@@ -10,6 +10,16 @@ if (typeof AudioWorkletNode === 'undefined') {
   globalThis.AudioWorkletNode = class AudioWorkletNode {} as unknown as typeof AudioWorkletNode
 }
 
+// jsdom has no MediaStream. audioPipeline.ts's buildAudioProcessor() constructs one directly when
+// chaining a plain source into the mic-sensitivity gate (no noise-suppression node to source from
+// instead) — its own tests build that chain against a fake AudioContext, so the real browser
+// constructor needs to exist even though nothing reads its contents.
+if (typeof MediaStream === 'undefined') {
+  globalThis.MediaStream = class MediaStream {
+    constructor(public tracks: unknown[] = []) {}
+  } as unknown as typeof MediaStream
+}
+
 // jsdom has no ResizeObserver. react-resizable-panels (used by ServerLayout's resizable
 // channel sidebar) observes its Group element's size on mount, so it needs the constructor to
 // exist even though no test asserts on resize callbacks.
