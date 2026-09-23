@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -9,6 +9,7 @@ import type { Server } from '../types/server';
 import type { Channel } from '../types/channel';
 import * as serversApi from '../features/servers/api';
 import * as channelsApi from '../features/channels/api';
+import * as callsApi from '../features/calls/api';
 import { AppShell } from './AppShell';
 
 vi.mock('../services/websocketClient', () => ({
@@ -26,6 +27,7 @@ vi.mock('../services/voiceClient', () => ({
 
 vi.mock('../features/servers/api');
 vi.mock('../features/channels/api');
+vi.mock('../features/calls/api');
 
 const channel: Channel = {
   id: 'c1',
@@ -52,6 +54,7 @@ function renderShell(initialPath: string) {
         <Routes>
           <Route path="/app" element={<AppShell />}>
             <Route index element={<div>no server selected</div>} />
+            <Route path="friends" element={<div>friends page</div>} />
             <Route path="servers/:serverId" element={<div>server view</div>} />
           </Route>
         </Routes>
@@ -64,7 +67,10 @@ describe('AppShell', () => {
   beforeEach(() => {
     vi.mocked(serversApi.listServers).mockResolvedValue([]);
     vi.mocked(serversApi.getServer).mockResolvedValue(server);
+    vi.mocked(serversApi.getServerMembers).mockResolvedValue([]);
+    vi.mocked(serversApi.getInvite).mockResolvedValue({ code: 'ABC' });
     vi.mocked(channelsApi.getChannel).mockResolvedValue(channel);
+    vi.mocked(callsApi.getVoicePresence).mockResolvedValue([]);
     useAuthStore.setState({
       sessionEndedReason: null,
       isAuthenticated: true,
@@ -167,5 +173,63 @@ describe('AppShell', () => {
 
     expect(screen.queryByText('Sair do Concord?')).not.toBeInTheDocument();
     expect(useAuthStore.getState().isAuthenticated).toBe(true);
+  });
+
+  it('shows the logout label once, with an icon standing in for it on small screens', () => {
+    renderShell('/app');
+
+    const button = screen.getByRole('button', { name: 'Sair do Concord' });
+    expect(within(button).getAllByText('Sair')).toHaveLength(1);
+    expect(button.querySelector('svg')).toBeInTheDocument();
+  });
+
+  it('opens a navigation drawer with a second copy of the server rail when the hamburger is clicked', async () => {
+    vi.mocked(serversApi.listServers).mockResolvedValue([server]);
+    const user = userEvent.setup();
+    renderShell('/app');
+
+    await screen.findAllByRole('link', { name: 'Alpha' });
+    expect(screen.getAllByRole('link', { name: 'Alpha' })).toHaveLength(1);
+
+    await user.click(screen.getByRole('button', { name: 'Abrir navegação' }));
+
+    expect(screen.getAllByRole('link', { name: 'Alpha' })).toHaveLength(2);
+  });
+
+  it('keeps the drawer open and reveals the channel list after picking a server from it', async () => {
+    vi.mocked(serversApi.listServers).mockResolvedValue([server]);
+    vi.mocked(channelsApi.listChannels).mockResolvedValue([channel]);
+    const user = userEvent.setup();
+    renderShell('/app');
+
+    await user.click(screen.getByRole('button', { name: 'Abrir navegação' }));
+    const alphaLinks = await screen.findAllByRole('link', { name: 'Alpha' });
+    await user.click(alphaLinks[1]);
+
+    expect(await screen.findByRole('link', { name: /lobby/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Fechar navegação' })).toBeInTheDocument();
+  });
+
+  it('closes the drawer after navigating to Amigos', async () => {
+    vi.mocked(serversApi.listServers).mockResolvedValue([]);
+    const user = userEvent.setup();
+    renderShell('/app');
+
+    await user.click(screen.getByRole('button', { name: 'Abrir navegação' }));
+    const amigosLinks = await screen.findAllByRole('link', { name: 'Amigos' });
+    await user.click(amigosLinks[1]);
+
+    expect(screen.queryByRole('button', { name: 'Fechar navegação' })).not.toBeInTheDocument();
+  });
+
+  it('closes the drawer via the close button', async () => {
+    vi.mocked(serversApi.listServers).mockResolvedValue([]);
+    const user = userEvent.setup();
+    renderShell('/app');
+
+    await user.click(screen.getByRole('button', { name: 'Abrir navegação' }));
+    await user.click(screen.getByRole('button', { name: 'Fechar navegação' }));
+
+    expect(screen.queryByRole('button', { name: 'Fechar navegação' })).not.toBeInTheDocument();
   });
 });

@@ -1,6 +1,6 @@
-import { Moon, Settings, Sun, X } from 'lucide-react';
+import { LogOut, Menu, Moon, Settings, Sun, X } from 'lucide-react';
 import { useState } from 'react';
-import { Link, Outlet } from 'react-router-dom';
+import { Link, Outlet, useParams } from 'react-router-dom';
 import { Avatar } from '../components/Avatar';
 import { Button } from '../components/Button';
 import { ErrorBanner } from '../components/ErrorBanner';
@@ -10,6 +10,7 @@ import { useAuthStore } from '../features/auth/authStore';
 import { VerifyEmailBanner } from '../features/auth/VerifyEmailBanner';
 import { VoiceConnectionBar } from '../features/calls/VoiceConnectionBar';
 import { useDisconnectVoiceOnLogout } from '../features/calls/hooks';
+import { ChannelSidebar } from '../features/channels/ChannelSidebar';
 import { ServerSidebar } from '../features/servers/ServerSidebar';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import { useTheme } from '../hooks/useTheme';
@@ -30,6 +31,8 @@ export function AppShell() {
   const user = useAuthStore((state) => state.user);
   const logout = useAuthStore((state) => state.logout);
   const [confirmingLogout, setConfirmingLogout] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
+  const { serverId } = useParams<{ serverId?: string }>();
 
   useRealtimeSync();
   useDisconnectVoiceOnLogout();
@@ -40,9 +43,21 @@ export function AppShell() {
   return (
     <div className="flex h-[100dvh] min-w-0 flex-col overflow-hidden bg-app">
       <header className="flex min-h-14 flex-shrink-0 items-center justify-between gap-2 border-b bg-surface px-3 py-2 sm:px-4">
-        <Link to="/app" aria-label="Ir para a Home do Concord">
-          <Logo />
-        </Link>
+        <div className="flex min-w-0 items-center gap-1.5">
+          {isAuthenticated && (
+            <button
+              type="button"
+              aria-label="Abrir navegação"
+              onClick={() => setNavOpen(true)}
+              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded text-muted hover:text-ink md:hidden"
+            >
+              <Menu size={20} aria-hidden="true" />
+            </button>
+          )}
+          <Link to="/app" aria-label="Ir para a Home do Concord">
+            <Logo />
+          </Link>
+        </div>
 
         {/* Gated on `isAuthenticated`, not `user`: if the backend is briefly unreachable during
             boot rehydration (network error, not a 401), `isAuthenticated` stays set but `user`
@@ -75,8 +90,8 @@ export function AppShell() {
               aria-label="Sair do Concord"
               onClick={() => setConfirmingLogout(true)}
             >
+              <LogOut size={18} aria-hidden="true" className="sm:hidden" />
               <span className="hidden sm:inline">Sair</span>
-              <span className="sm:hidden">Sair</span>
             </Button>
           </div>
         )}
@@ -122,11 +137,52 @@ export function AppShell() {
       )}
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <ServerSidebar />
+        <div className="hidden md:flex">
+          <ServerSidebar />
+        </div>
         <main className="min-h-0 min-w-0 flex-1 overflow-hidden">
           <Outlet />
         </main>
       </div>
+
+      {navOpen && (
+        <div className="fixed inset-0 z-30 flex md:hidden">
+          {/* Decorative click-catcher, not a second "close" control for assistive tech — the
+              X button below is the one accessible close affordance, so this stays out of the
+              a11y tree/tab order rather than duplicating its label. */}
+          <button
+            type="button"
+            aria-hidden="true"
+            tabIndex={-1}
+            onClick={() => setNavOpen(false)}
+            className="flex-1 bg-black/50"
+          />
+          <div
+            className={`flex h-full max-w-full flex-col shadow-xl ${
+              serverId ? 'w-[min(90vw,22rem)]' : 'w-fit'
+            }`}
+          >
+            <div className="flex justify-end bg-sidebar px-2 pt-2">
+              <button
+                type="button"
+                aria-label="Fechar navegação"
+                onClick={() => setNavOpen(false)}
+                className="flex h-10 w-10 items-center justify-center rounded text-muted hover:bg-border/40 hover:text-ink"
+              >
+                <X size={20} aria-hidden="true" />
+              </button>
+            </div>
+            <div className="flex min-h-0 flex-1">
+              <ServerSidebar onNavigate={() => setNavOpen(false)} />
+              {serverId && (
+                <div className="min-w-0 flex-1">
+                  <ChannelSidebar onNavigate={() => setNavOpen(false)} />
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <VoiceConnectionBar />
     </div>

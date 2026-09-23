@@ -21,15 +21,15 @@ const friends: Friend[] = [
   { friendshipId: 'f1', user: { id: 'u3', username: 'lety', displayName: 'Lety', avatarUrl: null }, online: true, since: '2026-01-01' },
 ];
 
-function renderSidebar(initialPath = '/app') {
+function renderSidebar(initialPath = '/app', onNavigate?: () => void) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[initialPath]}>
         <Routes>
-          <Route path="/app" element={<ServerSidebar />} />
-          <Route path="/app/servers/:serverId" element={<ServerSidebar />} />
-          <Route path="/app/dm/:friendUserId" element={<ServerSidebar />} />
+          <Route path="/app" element={<ServerSidebar onNavigate={onNavigate} />} />
+          <Route path="/app/servers/:serverId" element={<ServerSidebar onNavigate={onNavigate} />} />
+          <Route path="/app/dm/:friendUserId" element={<ServerSidebar onNavigate={onNavigate} />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -118,5 +118,37 @@ describe('ServerSidebar', () => {
     expect(
       screen.queryByRole('button', { name: 'Falha ao carregar servidores/amigos. Tentar novamente' }),
     ).not.toBeInTheDocument();
+  });
+
+  it('calls onNavigate when navigating to Amigos', async () => {
+    const onNavigate = vi.fn();
+    const user = userEvent.setup();
+    renderSidebar('/app', onNavigate);
+
+    await user.click(await screen.findByRole('link', { name: 'Amigos' }));
+
+    expect(onNavigate).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not call onNavigate when selecting a server, so a drawer can stay open to pick a channel next', async () => {
+    const onNavigate = vi.fn();
+    const user = userEvent.setup();
+    renderSidebar('/app', onNavigate);
+
+    await user.click(await screen.findByRole('link', { name: 'Alpha' }));
+
+    expect(onNavigate).not.toHaveBeenCalled();
+  });
+
+  it('calls onNavigate when sending a message from a friend popover, not when merely opening it', async () => {
+    const onNavigate = vi.fn();
+    const user = userEvent.setup();
+    renderSidebar('/app', onNavigate);
+
+    await user.click(await screen.findByRole('button', { name: 'Lety' }));
+    expect(onNavigate).not.toHaveBeenCalled();
+
+    await user.click(await screen.findByRole('link', { name: /enviar mensagem/i }));
+    expect(onNavigate).toHaveBeenCalledTimes(1);
   });
 });
