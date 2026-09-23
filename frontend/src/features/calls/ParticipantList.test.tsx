@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ConnectionQuality } from 'livekit-client';
+import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { voiceClient } from '../../services/voiceClient';
 import { useVoiceStore } from '../../stores/voiceStore';
@@ -49,7 +50,9 @@ function renderList(props: Partial<Parameters<typeof ParticipantList>[0]> = {}) 
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <ParticipantList serverId="s1" {...props} />
+      <MemoryRouter>
+        <ParticipantList serverId="s1" {...props} />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }
