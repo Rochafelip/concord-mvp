@@ -2,11 +2,11 @@ import { ConnectionQuality } from 'livekit-client';
 import { Focus } from 'lucide-react';
 import { useEffect, useRef, type KeyboardEvent, type MouseEvent } from 'react';
 import { Avatar } from '../../components/Avatar';
-import { ContextMenu } from '../../components/ContextMenu';
 import { Spinner } from '../../components/Spinner';
 import { voiceClient } from '../../services/voiceClient';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { disconnectVoiceParticipant } from './api';
+import { muteParticipantMenuItem } from './muteParticipantMenuItem';
 import { UserProfileCard } from '../users/UserProfileCard';
 import type { VoiceParticipant } from '../../types/voice';
 import { QUALITY_ICON } from './connectionQuality';
@@ -120,102 +120,110 @@ export function ParticipantTile({
     }
   }
 
+  // Muting is purely local, so it's offered whenever there's a remote participant to mute —
+  // including in a 1:1 DM call, which has no channelId at all. Disconnecting is a server voice
+  // channel moderation action, so it stays gated on channelId + canDisconnect.
+  const contextMenuExtraItems = participant.isLocal
+    ? []
+    : [
+        muteParticipantMenuItem(participant.identity),
+        ...(canDisconnect && channelId
+          ? [
+              {
+                label: 'Disconnect from voice',
+                variant: 'danger' as const,
+                onSelect: () => void disconnectVoiceParticipant(channelId, participant.identity),
+              },
+            ]
+          : []),
+      ];
+
   return (
-    <ContextMenu
-      disabled={participant.isLocal || !canDisconnect || !channelId}
-      items={[
-        {
-          label: 'Disconnect from voice',
-          variant: 'danger',
-          onSelect: () => {
-            if (channelId) void disconnectVoiceParticipant(channelId, participant.identity);
-          },
-        },
-      ]}
+    <div
+      className={`group/participant-tile relative flex min-h-0 min-w-0 items-center justify-center overflow-hidden rounded ${className} ${
+        showVideo ? 'bg-gray-800' : 'bg-gray-800'
+      } ${participant.speaking ? 'ring-2 ring-brand/50' : ''} ${
+        isWhistleTarget ? 'ring-2 ring-danger' : ''
+      } ${onWatchClick ? 'cursor-pointer' : ''}`}
+      role={onWatchClick ? 'button' : undefined}
+      tabIndex={onWatchClick ? 0 : undefined}
+      aria-label={onWatchClick ? `Focus on ${participant.name}'s camera` : undefined}
+      title={onWatchClick ? `Focus on ${participant.name}'s camera` : undefined}
+      onClick={onWatchClick}
+      onKeyDown={handleKeyDown}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
     >
-      <div
-        className={`group/participant-tile relative flex min-h-0 min-w-0 items-center justify-center overflow-hidden rounded ${className} ${
-          showVideo ? 'bg-gray-800' : 'bg-gray-800'
-        } ${participant.speaking ? 'ring-2 ring-brand/50' : ''} ${
-          isWhistleTarget ? 'ring-2 ring-danger' : ''
-        } ${onWatchClick ? 'cursor-pointer' : ''}`}
-        role={onWatchClick ? 'button' : undefined}
-        tabIndex={onWatchClick ? 0 : undefined}
-        aria-label={onWatchClick ? `Focus on ${participant.name}'s camera` : undefined}
-        title={onWatchClick ? `Focus on ${participant.name}'s camera` : undefined}
-        onClick={onWatchClick}
-        onKeyDown={handleKeyDown}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
-      >
-        {showVideo ? (
-          <video ref={videoRef} muted autoPlay playsInline className="block h-full w-full object-cover" />
-        ) : (
-          <Avatar displayName={participant.name} avatarUrl={avatarUrl} size="lg" />
-        )}
+      {showVideo ? (
+        <video ref={videoRef} muted autoPlay playsInline className="block h-full w-full object-cover" />
+      ) : (
+        <Avatar displayName={participant.name} avatarUrl={avatarUrl} size="lg" />
+      )}
 
-        {isConnecting && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-            <Spinner />
-          </div>
-        )}
+      {isConnecting && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+          <Spinner />
+        </div>
+      )}
 
-        {isWhistlingToMe && (
-          <span
-            className="absolute bottom-1 right-1 rounded bg-black/50 px-1 py-0.5 text-sm"
-            title={`${participant.name} is whistling to you`}
-            aria-label={`${participant.name} is whistling to you`}
-          >
-            🐦
-          </span>
-        )}
-
-        {hasConnectionIssue && (
-          <span
-            className="absolute left-1 top-1 rounded bg-black/50 p-1"
-            title={participant.connectionQuality}
-            aria-label={`Connection: ${participant.connectionQuality}`}
-          >
-            <quality.Icon size={12} className={quality.className} aria-hidden="true" />
-          </span>
-        )}
-
-        <span className="absolute bottom-1 left-1 flex items-center gap-1 rounded bg-black/50 px-1.5 py-0.5 text-sm text-white">
-          <MicStatusIcon micEnabled={participant.micEnabled} deafened={deafened} />
-          <UserProfileCard user={{ id: participant.identity, displayName: participant.name, avatarUrl }}>
-            <button type="button" onClick={stopPropagation} className="hover:underline">
-              {participant.name}
-            </button>
-          </UserProfileCard>
-          {participant.isLocal ? ' (you)' : ''}
+      {isWhistlingToMe && (
+        <span
+          className="absolute bottom-1 right-1 rounded bg-black/50 px-1 py-0.5 text-sm"
+          title={`${participant.name} is whistling to you`}
+          aria-label={`${participant.name} is whistling to you`}
+        >
+          🐦
         </span>
+      )}
 
-        {!participant.isLocal && showVolumeControl && (
-          <div
-            className="pointer-events-none absolute right-1 top-1 opacity-0 transition-opacity group-hover/participant-tile:pointer-events-auto group-hover/participant-tile:opacity-100 group-focus-within/participant-tile:pointer-events-auto group-focus-within/participant-tile:opacity-100"
-            onClick={stopPropagation}
-            onKeyDown={stopPropagation}
-          >
-            <VolumeControl
-              label={participant.name}
-              initialVolume={voiceClient.getParticipantVolume(participant.identity)}
-              onVolumeChange={(volume) => voiceClient.setParticipantVolume(participant.identity, volume)}
-            />
-          </div>
-        )}
-        {onWatchClick && (
-          // Stays faintly visible at rest (not just on hover) since touch devices have no hover
-          // state to reveal it — this is the only cue that the tile is tappable. Decorative only:
-          // pointer-events-none so it never competes with the tile's own onClick above.
-          <span
-            aria-hidden="true"
-            data-testid="watch-affordance"
-            className="pointer-events-none absolute bottom-1 right-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/50 text-white opacity-40 transition-opacity group-hover/participant-tile:opacity-100"
-          >
-            <Focus size={14} aria-hidden="true" />
-          </span>
-        )}
-      </div>
-    </ContextMenu>
+      {hasConnectionIssue && (
+        <span
+          className="absolute left-1 top-1 rounded bg-black/50 p-1"
+          title={participant.connectionQuality}
+          aria-label={`Connection: ${participant.connectionQuality}`}
+        >
+          <quality.Icon size={12} className={quality.className} aria-hidden="true" />
+        </span>
+      )}
+
+      <span className="absolute bottom-1 left-1 flex items-center gap-1 rounded bg-black/50 px-1.5 py-0.5 text-sm text-white">
+        <MicStatusIcon micEnabled={participant.micEnabled} deafened={deafened} />
+        <UserProfileCard
+          user={{ id: participant.identity, displayName: participant.name, avatarUrl }}
+          contextMenuExtraItems={contextMenuExtraItems}
+        >
+          <button type="button" onClick={stopPropagation} className="hover:underline">
+            {participant.name}
+          </button>
+        </UserProfileCard>
+        {participant.isLocal ? ' (you)' : ''}
+      </span>
+
+      {!participant.isLocal && showVolumeControl && (
+        <div
+          className="pointer-events-none absolute right-1 top-1 opacity-0 transition-opacity group-hover/participant-tile:pointer-events-auto group-hover/participant-tile:opacity-100 group-focus-within/participant-tile:pointer-events-auto group-focus-within/participant-tile:opacity-100"
+          onClick={stopPropagation}
+          onKeyDown={stopPropagation}
+        >
+          <VolumeControl
+            label={participant.name}
+            initialVolume={voiceClient.getParticipantVolume(participant.identity)}
+            onVolumeChange={(volume) => voiceClient.setParticipantVolume(participant.identity, volume)}
+          />
+        </div>
+      )}
+      {onWatchClick && (
+        // Stays faintly visible at rest (not just on hover) since touch devices have no hover
+        // state to reveal it — this is the only cue that the tile is tappable. Decorative only:
+        // pointer-events-none so it never competes with the tile's own onClick above.
+        <span
+          aria-hidden="true"
+          data-testid="watch-affordance"
+          className="pointer-events-none absolute bottom-1 right-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/50 text-white opacity-40 transition-opacity group-hover/participant-tile:opacity-100"
+        >
+          <Focus size={14} aria-hidden="true" />
+        </span>
+      )}
+    </div>
   );
 }

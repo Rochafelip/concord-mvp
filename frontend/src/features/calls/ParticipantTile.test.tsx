@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ConnectionQuality } from 'livekit-client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ContextMenu, type ContextMenuItem } from '../../components/ContextMenu';
 import { voiceClient } from '../../services/voiceClient';
 import { useVoiceStore } from '../../stores/voiceStore';
 import type { VoiceParticipant } from '../../types/voice';
@@ -19,10 +20,17 @@ vi.mock('./api', () => ({
   disconnectVoiceParticipant: vi.fn(),
 }));
 
-// UserProfileCard needs providers this file doesn't set up — its own behavior is covered by
-// UserProfileCard.test.tsx.
+// UserProfileCard needs providers this file doesn't set up, and its friend-action right-click
+// item is covered by UserProfileCard.test.tsx — this stub keeps only the `contextMenuExtraItems`
+// contract ParticipantTile relies on for "Disconnect from voice" and "Silenciar".
 vi.mock('../users/UserProfileCard', () => ({
-  UserProfileCard: ({ children }: { children: React.ReactNode }) => children,
+  UserProfileCard: ({
+    children,
+    contextMenuExtraItems = [],
+  }: {
+    children: React.ReactNode;
+    contextMenuExtraItems?: ContextMenuItem[];
+  }) => <ContextMenu items={contextMenuExtraItems}>{children}</ContextMenu>,
 }));
 
 function participant(overrides: Partial<VoiceParticipant> = {}): VoiceParticipant {
@@ -408,7 +416,7 @@ describe('ParticipantTile', () => {
         <ParticipantTile participant={participant({ identity: 'bob' })} canDisconnect channelId="chan-1" />,
       );
 
-      fireEvent.contextMenu(screen.getByLabelText('Felipe'));
+      fireEvent.contextMenu(screen.getByRole('button', { name: 'Felipe' }));
       await user.click(await screen.findByText('Disconnect from voice'));
 
       expect(disconnectVoiceParticipant).toHaveBeenCalledWith('chan-1', 'bob');
@@ -417,7 +425,7 @@ describe('ParticipantTile', () => {
     it('does not offer to disconnect the local participant', () => {
       render(<ParticipantTile participant={participant({ isLocal: true })} canDisconnect channelId="chan-1" />);
 
-      fireEvent.contextMenu(screen.getByLabelText('Felipe'));
+      fireEvent.contextMenu(screen.getByRole('button', { name: 'Felipe' }));
 
       expect(screen.queryByText('Disconnect from voice')).not.toBeInTheDocument();
     });
@@ -425,7 +433,7 @@ describe('ParticipantTile', () => {
     it('does not offer to disconnect without the canDisconnect permission', () => {
       render(<ParticipantTile participant={participant()} channelId="chan-1" />);
 
-      fireEvent.contextMenu(screen.getByLabelText('Felipe'));
+      fireEvent.contextMenu(screen.getByRole('button', { name: 'Felipe' }));
 
       expect(screen.queryByText('Disconnect from voice')).not.toBeInTheDocument();
     });
@@ -433,9 +441,37 @@ describe('ParticipantTile', () => {
     it('does not offer to disconnect without a channelId', () => {
       render(<ParticipantTile participant={participant()} canDisconnect />);
 
-      fireEvent.contextMenu(screen.getByLabelText('Felipe'));
+      fireEvent.contextMenu(screen.getByRole('button', { name: 'Felipe' }));
 
       expect(screen.queryByText('Disconnect from voice')).not.toBeInTheDocument();
+    });
+
+    it('offers to mute the participant locally regardless of permission', async () => {
+      const user = userEvent.setup();
+      render(<ParticipantTile participant={participant({ identity: 'bob' })} channelId="chan-1" />);
+
+      fireEvent.contextMenu(screen.getByRole('button', { name: 'Felipe' }));
+      await user.click(await screen.findByText('Silenciar'));
+
+      expect(voiceClient.setParticipantVolume).toHaveBeenCalledWith('bob', 0);
+    });
+
+    it('does not offer to mute the local participant', () => {
+      render(<ParticipantTile participant={participant({ isLocal: true })} channelId="chan-1" />);
+
+      fireEvent.contextMenu(screen.getByRole('button', { name: 'Felipe' }));
+
+      expect(screen.queryByText('Silenciar')).not.toBeInTheDocument();
+    });
+
+    it('offers to mute even without a channelId (e.g. a 1:1 DM call)', async () => {
+      const user = userEvent.setup();
+      render(<ParticipantTile participant={participant({ identity: 'bob' })} />);
+
+      fireEvent.contextMenu(screen.getByRole('button', { name: 'Felipe' }));
+      await user.click(await screen.findByText('Silenciar'));
+
+      expect(voiceClient.setParticipantVolume).toHaveBeenCalledWith('bob', 0);
     });
   });
 
