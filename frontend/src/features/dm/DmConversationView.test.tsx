@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as dmCallApi from '../calls/dm/api';
 import { useDmCallStore } from '../calls/dm/dmCallStore';
 import * as friendsHooks from '../friends/hooks';
+import * as dmHooks from './hooks';
 import { DmConversationView } from './DmConversationView';
 
 vi.mock('../friends/hooks', () => ({
@@ -13,6 +14,10 @@ vi.mock('../friends/hooks', () => ({
 
 vi.mock('../calls/dm/api', () => ({
   inviteCall: vi.fn(),
+}));
+
+vi.mock('./hooks', () => ({
+  useOpenDmConversation: vi.fn(),
 }));
 
 vi.mock('../calls/dm/DmCallView', () => ({
@@ -49,6 +54,7 @@ describe('DmConversationView', () => {
     vi.mocked(dmCallApi.inviteCall).mockClear();
     useDmCallStore.setState({ status: 'idle', callId: null, role: null, peer: null });
     vi.mocked(friendsHooks.useFriends).mockReturnValue({ data: [friend], isLoading: false } as never);
+    vi.mocked(dmHooks.useOpenDmConversation).mockReturnValue({ mutate: vi.fn() } as never);
   });
 
   it('shows an enabled Ligar button for an online friend', () => {
@@ -108,5 +114,14 @@ describe('DmConversationView', () => {
 
     expect(screen.queryByTestId('dm-call-view')).not.toBeInTheDocument();
     expect(screen.getByTestId('dm-message-list')).toBeInTheDocument();
+  });
+
+  it('opens the conversation on mount', () => {
+    const mutate = vi.fn();
+    vi.mocked(dmHooks.useOpenDmConversation).mockReturnValue({ mutate } as never);
+
+    renderView();
+
+    expect(mutate).toHaveBeenCalledWith('u2');
   });
 });
