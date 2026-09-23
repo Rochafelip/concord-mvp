@@ -245,6 +245,12 @@ describe('ScreenShareTile', () => {
       expect(button).toHaveClass('w-9');
     });
 
+    it('hides the fullscreen button entirely when showFullscreenButton is false', () => {
+      render(<ScreenShareTile participant={sharingParticipant()} showFullscreenButton={false} />);
+
+      expect(screen.queryByRole('button', { name: 'Enter fullscreen' })).not.toBeInTheDocument();
+    });
+
     it('reveals the volume icon when this share tile is hovered', () => {
       render(<ScreenShareTile participant={sharingParticipant({ screenShareHasAudio: true })} />);
 
