@@ -1,3 +1,5 @@
+import type { AudioProcessorOptions } from 'livekit-client';
+import { Track } from 'livekit-client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createGateNode } from './micGate';
 import { createNoiseSuppressionNode, type NoiseSuppressionNode } from './noiseSuppression';
@@ -13,8 +15,8 @@ function fakeAudioContext() {
   } as unknown as AudioContext;
 }
 
-function fakeTrack(): MediaStreamTrack {
-  return {} as MediaStreamTrack;
+function fakeOptions(audioContext: AudioContext): AudioProcessorOptions {
+  return { kind: Track.Kind.Audio, track: {} as MediaStreamTrack, audioContext };
 }
 
 describe('buildAudioProcessor', () => {
@@ -31,7 +33,7 @@ describe('buildAudioProcessor', () => {
     vi.mocked(createGateNode).mockResolvedValue(gateNode as unknown as AudioWorkletNode);
 
     const processor = buildAudioProcessor({ noiseSuppression: false, gate: { enabled: true, thresholdDb: -40 } });
-    await processor.init({ track: fakeTrack(), audioContext } as any);
+    await processor.init(fakeOptions(audioContext));
 
     expect(createNoiseSuppressionNode).not.toHaveBeenCalled();
     expect(createGateNode).toHaveBeenCalledWith(audioContext, -40);
@@ -48,7 +50,7 @@ describe('buildAudioProcessor', () => {
     });
 
     const processor = buildAudioProcessor({ noiseSuppression: true, gate: { enabled: false, thresholdDb: -50 } });
-    await processor.init({ track: fakeTrack(), audioContext } as any);
+    await processor.init(fakeOptions(audioContext));
 
     expect(createGateNode).not.toHaveBeenCalled();
     expect(suppressionNode.connect).toHaveBeenCalledWith(vi.mocked(audioContext.createMediaStreamDestination).mock.results[0].value);
@@ -65,7 +67,7 @@ describe('buildAudioProcessor', () => {
     vi.mocked(createGateNode).mockResolvedValue(gateNode as unknown as AudioWorkletNode);
 
     const processor = buildAudioProcessor({ noiseSuppression: true, gate: { enabled: true, thresholdDb: -35 } });
-    await processor.init({ track: fakeTrack(), audioContext } as any);
+    await processor.init(fakeOptions(audioContext));
 
     expect(suppressionNode.connect).toHaveBeenCalledWith(gateNode);
     expect(gateNode.connect).toHaveBeenCalledWith(vi.mocked(audioContext.createMediaStreamDestination).mock.results[0].value);
@@ -79,7 +81,7 @@ describe('buildAudioProcessor', () => {
     });
 
     const processor = buildAudioProcessor({ noiseSuppression: true, gate: { enabled: false, thresholdDb: -50 } });
-    await processor.init({ track: fakeTrack(), audioContext } as any);
+    await processor.init(fakeOptions(audioContext));
 
     expect(processor.processedTrack).toBe('processed-track');
   });
@@ -95,7 +97,7 @@ describe('buildAudioProcessor', () => {
     vi.mocked(createGateNode).mockResolvedValue(gateNode as unknown as AudioWorkletNode);
 
     const processor = buildAudioProcessor({ noiseSuppression: true, gate: { enabled: true, thresholdDb: -50 } });
-    await processor.init({ track: fakeTrack(), audioContext } as any);
+    await processor.init(fakeOptions(audioContext));
     await processor.destroy();
 
     expect(gateNode.disconnect).toHaveBeenCalled();
@@ -109,7 +111,7 @@ describe('buildAudioProcessor', () => {
     vi.mocked(createGateNode).mockResolvedValue(gateNode as unknown as AudioWorkletNode);
 
     const processor = buildAudioProcessor({ noiseSuppression: false, gate: { enabled: true, thresholdDb: -50 } });
-    await processor.init({ track: fakeTrack(), audioContext } as any);
+    await processor.init(fakeOptions(audioContext));
     processor.setGateThreshold(-20);
 
     expect(param.setValueAtTime).toHaveBeenCalledWith(-20, 1.5);
@@ -123,7 +125,7 @@ describe('buildAudioProcessor', () => {
     });
 
     const processor = buildAudioProcessor({ noiseSuppression: true, gate: { enabled: false, thresholdDb: -50 } });
-    await processor.init({ track: fakeTrack(), audioContext } as any);
+    await processor.init(fakeOptions(audioContext));
 
     expect(() => processor.setGateThreshold(-20)).not.toThrow();
   });
