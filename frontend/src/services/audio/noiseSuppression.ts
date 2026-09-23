@@ -2,7 +2,6 @@ import { loadRnnoise, RnnoiseWorkletNode } from '@sapphi-red/web-noise-suppresso
 import rnnoiseWorkletPath from '@sapphi-red/web-noise-suppressor/rnnoiseWorklet.js?url';
 import rnnoiseWasmPath from '@sapphi-red/web-noise-suppressor/rnnoise.wasm?url';
 import rnnoiseWasmSimdPath from '@sapphi-red/web-noise-suppressor/rnnoise_simd.wasm?url';
-import type { AudioProcessorOptions, Track, TrackProcessor } from 'livekit-client';
 
 // RnnoiseWorkletNode assumes a 48kHz input; LiveKit's shared AudioContext (see
 // voiceClient.ts's applyNoiseSuppressionPreference) has no fixed sample rate, so
@@ -42,36 +41,34 @@ export function isNoiseSuppressionSupported(): boolean {
   return typeof AudioWorklet !== 'undefined';
 }
 
-export function createNoiseSuppressionProcessor(): TrackProcessor<Track.Kind.Audio, AudioProcessorOptions> {
-  let node: RnnoiseWorkletNode | null = null;
-  let source: MediaStreamAudioSourceNode | null = null;
-  let destination: MediaStreamAudioDestinationNode | null = null;
+export interface NoiseSuppressionNode {
+  node: RnnoiseWorkletNode;
+  destroy: () => void;
+}
 
+/**
+ * Builds a connected `source -> RnnoiseWorkletNode` pair for `track` and returns the node as the
+ * chain's output, so callers (audioPipeline.ts) can connect further stages after it or straight to
+ * a destination. Split out from the old standalone TrackProcessor so noise suppression can be
+ * chained with the mic-sensitivity gate on the single processor slot LiveKit allows per track.
+ */
+export async function createNoiseSuppressionNode(
+  audioContext: AudioContext,
+  track: MediaStreamTrack,
+): Promise<NoiseSuppressionNode> {
+  if (audioContext.sampleRate !== RNNOISE_SAMPLE_RATE) {
+    throw new Error(`RNNoise requires a ${RNNOISE_SAMPLE_RATE}Hz AudioContext, got ${audioContext.sampleRate}Hz`);
+  }
+  const [wasmBinary] = await Promise.all([getWasmBinary(), addWorkletModule(audioContext)]);
+  const node = new RnnoiseWorkletNode(audioContext, { wasmBinary, maxChannels: 2 });
+  const source = audioContext.createMediaStreamSource(new MediaStream([track]));
+  source.connect(node);
   return {
-    name: 'noise-suppression',
-    async init(opts) {
-      const { track, audioContext } = opts;
-      if (audioContext.sampleRate !== RNNOISE_SAMPLE_RATE) {
-        throw new Error(`RNNoise requires a ${RNNOISE_SAMPLE_RATE}Hz AudioContext, got ${audioContext.sampleRate}Hz`);
-      }
-      const [wasmBinary] = await Promise.all([getWasmBinary(), addWorkletModule(audioContext)]);
-      node = new RnnoiseWorkletNode(audioContext, { wasmBinary, maxChannels: 2 });
-      source = audioContext.createMediaStreamSource(new MediaStream([track]));
-      destination = audioContext.createMediaStreamDestination();
-      source.connect(node).connect(destination);
-      this.processedTrack = destination.stream.getAudioTracks()[0];
-    },
-    async restart(opts) {
-      await this.destroy();
-      await this.init(opts);
-    },
-    async destroy() {
-      node?.destroy();
-      node?.disconnect();
-      source?.disconnect();
-      node = null;
-      source = null;
-      destination = null;
+    node,
+    destroy: () => {
+      node.destroy();
+      node.disconnect();
+      source.disconnect();
     },
   };
 }
