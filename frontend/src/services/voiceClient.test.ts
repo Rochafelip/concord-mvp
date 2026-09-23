@@ -141,17 +141,34 @@ vi.mock('./soundEffects', () => ({
   playParticipantLeft: mockPlayParticipantLeft,
 }));
 
-const mockCreateNoiseSuppressionProcessor = vi.hoisted(() => vi.fn(() => ({ name: 'noise-suppression' })));
+const mockBuildAudioProcessor = vi.hoisted(() =>
+  vi.fn(() => ({ name: 'audio-pipeline', init: vi.fn(), restart: vi.fn(), destroy: vi.fn(), setGateThreshold: vi.fn() })),
+);
 const mockIsNoiseSuppressionSupported = vi.hoisted(() => vi.fn(() => true));
+const mockIsMicGateSupported = vi.hoisted(() => vi.fn(() => true));
 const mockGetNoiseSuppressionPreference = vi.hoisted(() => vi.fn(() => true));
+const mockGetMicSensitivityEnabled = vi.hoisted(() => vi.fn(() => false));
+const mockGetMicSensitivityThresholdDb = vi.hoisted(() => vi.fn(() => -50));
 
 vi.mock('./audio/noiseSuppression', () => ({
-  createNoiseSuppressionProcessor: mockCreateNoiseSuppressionProcessor,
   isNoiseSuppressionSupported: mockIsNoiseSuppressionSupported,
+}));
+
+vi.mock('./audio/micGate', () => ({
+  isMicGateSupported: mockIsMicGateSupported,
+}));
+
+vi.mock('./audio/audioPipeline', () => ({
+  buildAudioProcessor: mockBuildAudioProcessor,
 }));
 
 vi.mock('../features/settings/audio/noiseSuppressionPreference', () => ({
   getNoiseSuppressionPreference: mockGetNoiseSuppressionPreference,
+}));
+
+vi.mock('../features/settings/audio/micSensitivityPreference', () => ({
+  getMicSensitivityEnabled: mockGetMicSensitivityEnabled,
+  getMicSensitivityThresholdDb: mockGetMicSensitivityThresholdDb,
 }));
 
 // Imported after the mock so voiceClient's module-level `new Room()` calls use MockRoom.
@@ -1380,14 +1397,17 @@ describe('voiceClient', () => {
     });
   });
 
-  describe('noise suppression', () => {
+  describe('audio processing (noise suppression + mic sensitivity)', () => {
     beforeEach(() => {
-      mockCreateNoiseSuppressionProcessor.mockClear();
+      mockBuildAudioProcessor.mockClear();
       mockIsNoiseSuppressionSupported.mockReset().mockReturnValue(true);
+      mockIsMicGateSupported.mockReset().mockReturnValue(true);
       mockGetNoiseSuppressionPreference.mockReset().mockReturnValue(true);
+      mockGetMicSensitivityEnabled.mockReset().mockReturnValue(false);
+      mockGetMicSensitivityThresholdDb.mockReset().mockReturnValue(-50);
     });
 
-    it('applies the noise suppression processor to the mic track after connecting, when the preference is enabled', async () => {
+    it('applies the pipeline processor to the mic track after connecting, when noise suppression is enabled', async () => {
       const track = mockAudioTrack();
       const promise = voiceClient.connect('channel-1', 'token', 'wss://example.test/livekit');
       const room = roomInstances[roomInstances.length - 1];
@@ -1397,10 +1417,14 @@ describe('voiceClient', () => {
       connectResolvers[connectResolvers.length - 1]();
       await promise;
 
-      expect(track.setProcessor).toHaveBeenCalledWith({ name: 'noise-suppression' });
+      expect(mockBuildAudioProcessor).toHaveBeenCalledWith({
+        noiseSuppression: true,
+        gate: { enabled: false, thresholdDb: -50 },
+      });
+      expect(track.setProcessor).toHaveBeenCalledWith(mockBuildAudioProcessor.mock.results[0].value);
     });
 
-    it('does not apply the processor after connecting when the preference is disabled', async () => {
+    it('does not apply a processor after connecting when both noise suppression and the gate are disabled', async () => {
       mockGetNoiseSuppressionPreference.mockReturnValue(false);
       const track = mockAudioTrack();
       const promise = voiceClient.connect('channel-1', 'token', 'wss://example.test/livekit');
@@ -1411,12 +1435,14 @@ describe('voiceClient', () => {
       connectResolvers[connectResolvers.length - 1]();
       await promise;
 
+      expect(mockBuildAudioProcessor).not.toHaveBeenCalled();
       expect(track.setProcessor).not.toHaveBeenCalled();
       expect(track.stopProcessor).toHaveBeenCalled();
     });
 
-    it('does not apply the processor when the browser does not support it', async () => {
+    it('does not treat noise suppression as enabled when the browser does not support it, but still applies the gate if that is enabled', async () => {
       mockIsNoiseSuppressionSupported.mockReturnValue(false);
+      mockGetMicSensitivityEnabled.mockReturnValue(true);
       const track = mockAudioTrack();
       const promise = voiceClient.connect('channel-1', 'token', 'wss://example.test/livekit');
       const room = roomInstances[roomInstances.length - 1];
@@ -1426,6 +1452,26 @@ describe('voiceClient', () => {
       connectResolvers[connectResolvers.length - 1]();
       await promise;
 
+      expect(mockBuildAudioProcessor).toHaveBeenCalledWith({
+        noiseSuppression: false,
+        gate: { enabled: true, thresholdDb: -50 },
+      });
+    });
+
+    it('does not apply any processor when nothing is supported', async () => {
+      mockIsNoiseSuppressionSupported.mockReturnValue(false);
+      mockIsMicGateSupported.mockReturnValue(false);
+      mockGetMicSensitivityEnabled.mockReturnValue(true);
+      const track = mockAudioTrack();
+      const promise = voiceClient.connect('channel-1', 'token', 'wss://example.test/livekit');
+      const room = roomInstances[roomInstances.length - 1];
+      room.localParticipant.getTrackPublication = vi.fn((source?: string) =>
+        source === 'microphone' ? { audioTrack: track } : undefined,
+      );
+      connectResolvers[connectResolvers.length - 1]();
+      await promise;
+
+      expect(mockBuildAudioProcessor).not.toHaveBeenCalled();
       expect(track.setProcessor).not.toHaveBeenCalled();
     });
 
@@ -1443,7 +1489,7 @@ describe('voiceClient', () => {
       await expect(promise).resolves.toBeUndefined();
       expect(useVoiceStore.getState().status).toBe('connected');
       expect(warnSpy).toHaveBeenCalledWith(
-        'Failed to enable noise suppression; continuing without it',
+        'Failed to apply audio processing; continuing without it',
         expect.any(Error),
       );
       warnSpy.mockRestore();
@@ -1463,6 +1509,7 @@ describe('voiceClient', () => {
         source === 'microphone' ? { audioTrack: track } : undefined,
       );
       track.setProcessor.mockClear();
+      mockBuildAudioProcessor.mockClear();
 
       voiceClient.toggleMute(); // off
       await Promise.resolve();
@@ -1471,7 +1518,10 @@ describe('voiceClient', () => {
       await Promise.resolve();
       await Promise.resolve();
 
-      expect(track.setProcessor).toHaveBeenCalledWith({ name: 'noise-suppression' });
+      expect(mockBuildAudioProcessor).toHaveBeenCalledWith({
+        noiseSuppression: true,
+        gate: { enabled: false, thresholdDb: -50 },
+      });
     });
 
     it('setNoiseSuppressionEnabled(true) applies the processor directly, e.g. from the Settings toggle', async () => {
@@ -1484,10 +1534,13 @@ describe('voiceClient', () => {
 
       await voiceClient.setNoiseSuppressionEnabled(true);
 
-      expect(track.setProcessor).toHaveBeenCalledWith({ name: 'noise-suppression' });
+      expect(mockBuildAudioProcessor).toHaveBeenCalledWith({
+        noiseSuppression: true,
+        gate: { enabled: false, thresholdDb: -50 },
+      });
     });
 
-    it('setNoiseSuppressionEnabled(false) removes the processor directly, e.g. from the Settings toggle', async () => {
+    it('setNoiseSuppressionEnabled(false) removes the processor directly when the gate is also off, e.g. from the Settings toggle', async () => {
       const track = mockAudioTrack();
       await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
       const room = roomInstances[0];
@@ -1501,15 +1554,30 @@ describe('voiceClient', () => {
       expect(track.setProcessor).not.toHaveBeenCalled();
     });
 
-    it('does not apply noise suppression on behalf of a connect() attempt superseded while its own mic-enable is still in flight', async () => {
-      // Pins the race the code review flagged: applyNoiseSuppressionPreference() reads
-      // `this.room` (the CURRENT room field), not a value captured at the start of this specific
-      // connect() call. So if a stale connect()'s own setMicrophoneEnabled(true) is still
-      // pending when a newer connect() fully supersedes it — reassigning `this.room` to the new
-      // room in the meantime — the stale call must not touch anything once its mic-enable
-      // finally resolves. `setMicrophoneEnabled` here is given a manually-resolved promise
-      // (instead of the mock's usual auto-resolving one) specifically so this ordering is
-      // controlled directly, rather than relying on incidental microtask-queue timing.
+    it('setNoiseSuppressionEnabled(false) keeps the gate active when it is enabled, rebuilding the chain without suppression', async () => {
+      mockGetMicSensitivityEnabled.mockReturnValue(true);
+      const track = mockAudioTrack();
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+      const room = roomInstances[0];
+      room.localParticipant.getTrackPublication = vi.fn((source?: string) =>
+        source === 'microphone' ? { audioTrack: track } : undefined,
+      );
+
+      await voiceClient.setNoiseSuppressionEnabled(false);
+
+      expect(mockBuildAudioProcessor).toHaveBeenCalledWith({
+        noiseSuppression: false,
+        gate: { enabled: true, thresholdDb: -50 },
+      });
+      expect(track.stopProcessor).not.toHaveBeenCalled();
+    });
+
+    it('does not apply audio processing on behalf of a connect() attempt superseded while its own mic-enable is still in flight', async () => {
+      // Pins the race the code review flagged: applyAudioProcessing() reads `this.room` (the
+      // CURRENT room field), not a value captured at the start of this specific connect() call. So
+      // if a stale connect()'s own setMicrophoneEnabled(true) is still pending when a newer
+      // connect() fully supersedes it — reassigning `this.room` to the new room in the meantime —
+      // the stale call must not touch anything once its mic-enable finally resolves.
       const track1 = mockAudioTrack();
       const track2 = mockAudioTrack();
       let resolveMic1: () => void = () => {};
@@ -1522,30 +1590,98 @@ describe('voiceClient', () => {
       room1.localParticipant.setMicrophoneEnabled = vi.fn(
         () => new Promise<undefined>((resolve) => { resolveMic1 = () => resolve(undefined); }),
       );
-      connectResolvers[connectResolvers.length - 1](); // resolves room1.connect()
-      await Promise.resolve(); // lets first's connect() reach `this.room = room1` and call setMicrophoneEnabled(true), which now hangs on resolveMic1
+      connectResolvers[connectResolvers.length - 1]();
+      await Promise.resolve();
 
-      // A second connect() fully supersedes and completes — e.g. the user switched channels again
-      // while the first was still stuck waiting on the mic permission prompt — reassigning
-      // `this.room` to room2 well before the first's mic-enable ever resolves.
       const second = voiceClient.connect('channel-2', 'token-b', 'wss://example.test/livekit');
       const room2 = roomInstances[roomInstances.length - 1];
       room2.localParticipant.getTrackPublication = vi.fn((source?: string) =>
         source === 'microphone' ? { audioTrack: track2 } : undefined,
       );
-      connectResolvers[connectResolvers.length - 1](); // resolves room2.connect()
+      connectResolvers[connectResolvers.length - 1]();
       await second;
 
-      // Only now does the stale first connect()'s long-pending mic-enable resolve.
       resolveMic1();
       await first;
 
       expect(track1.setProcessor).not.toHaveBeenCalled();
       expect(track1.stopProcessor).not.toHaveBeenCalled();
-      // Exactly once (from the legitimate second connect()) — without the generation guard, the
-      // stale first connect() would read `this.room` (by then reassigned to room2) and apply the
-      // processor to room2's track a second, redundant time.
       expect(track2.setProcessor).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('mic sensitivity', () => {
+    beforeEach(() => {
+      mockBuildAudioProcessor.mockClear();
+      mockIsNoiseSuppressionSupported.mockReset().mockReturnValue(true);
+      mockIsMicGateSupported.mockReset().mockReturnValue(true);
+      mockGetNoiseSuppressionPreference.mockReset().mockReturnValue(false);
+      mockGetMicSensitivityEnabled.mockReset().mockReturnValue(false);
+      mockGetMicSensitivityThresholdDb.mockReset().mockReturnValue(-50);
+    });
+
+    it('setMicSensitivity(true, ...) rebuilds the chain with the gate enabled when it was not active before', async () => {
+      const track = mockAudioTrack();
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+      const room = roomInstances[0];
+      room.localParticipant.getTrackPublication = vi.fn((source?: string) =>
+        source === 'microphone' ? { audioTrack: track } : undefined,
+      );
+
+      await voiceClient.setMicSensitivity(true, -35);
+
+      expect(mockBuildAudioProcessor).toHaveBeenCalledWith({
+        noiseSuppression: false,
+        gate: { enabled: true, thresholdDb: -35 },
+      });
+      expect(track.setProcessor).toHaveBeenCalled();
+    });
+
+    it('setMicSensitivity(false, ...) removes the processor when noise suppression is also off', async () => {
+      const track = mockAudioTrack();
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+      const room = roomInstances[0];
+      room.localParticipant.getTrackPublication = vi.fn((source?: string) =>
+        source === 'microphone' ? { audioTrack: track } : undefined,
+      );
+      await voiceClient.setMicSensitivity(true, -35);
+      track.setProcessor.mockClear();
+
+      await voiceClient.setMicSensitivity(false, -35);
+
+      expect(track.stopProcessor).toHaveBeenCalled();
+    });
+
+    it('nudges the live AudioParam instead of rebuilding the chain when only the threshold changes', async () => {
+      const track = mockAudioTrack();
+      const setGateThreshold = vi.fn();
+      mockBuildAudioProcessor.mockReturnValue({
+        name: 'audio-pipeline',
+        init: vi.fn(),
+        restart: vi.fn(),
+        destroy: vi.fn(),
+        setGateThreshold,
+      });
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+      const room = roomInstances[0];
+      room.localParticipant.getTrackPublication = vi.fn((source?: string) =>
+        source === 'microphone' ? { audioTrack: track } : undefined,
+      );
+      await voiceClient.setMicSensitivity(true, -35);
+      mockBuildAudioProcessor.mockClear();
+      track.setProcessor.mockClear();
+
+      await voiceClient.setMicSensitivity(true, -20);
+
+      expect(setGateThreshold).toHaveBeenCalledWith(-20);
+      expect(mockBuildAudioProcessor).not.toHaveBeenCalled();
+      expect(track.setProcessor).not.toHaveBeenCalled();
+    });
+
+    it('does nothing when there is no published microphone track', async () => {
+      await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+
+      await expect(voiceClient.setMicSensitivity(true, -35)).resolves.toBeUndefined();
     });
   });
 
