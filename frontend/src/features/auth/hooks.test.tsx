@@ -14,12 +14,11 @@ function CurrentPath() {
   return <span data-testid="path">{useLocation().pathname}</span>;
 }
 
-function renderLoginArrivingFrom(from: string | undefined) {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
+function renderLoginArrivingFrom(from: string | undefined, queryClient?: QueryClient) {
+  const client =
+    queryClient ?? new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   return render(
-    <QueryClientProvider client={queryClient}>
+    <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[{ pathname: '/login', state: from ? { from } : null }]}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
@@ -136,6 +135,21 @@ describe('useLogin redirect target', () => {
     await waitFor(() => {
       expect(screen.getByTestId('path')).toHaveTextContent('/app');
     });
+  });
+
+  it('clears any cached queries from a previous session before storing the new one', async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    queryClient.setQueryData(['users', 'me'], { id: 'someone-else' });
+
+    renderLoginArrivingFrom('/app/servers/s1', queryClient);
+    await submitLogin();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('path')).toHaveTextContent('/app/servers/s1');
+    });
+    expect(queryClient.getQueryData(['users', 'me'])).toBeUndefined();
   });
 });
 

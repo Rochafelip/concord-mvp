@@ -1,4 +1,7 @@
 import { useAuthStore } from '../features/auth/authStore';
+import { ApiError } from './apiError';
+
+export { ApiError } from './apiError';
 
 const API_PREFIX = '/api/v1';
 
@@ -13,16 +16,6 @@ interface BackendApiError {
   error: string;
   message: string;
   path: string;
-}
-
-export class ApiError extends Error {
-  status: number;
-
-  constructor(message: string, status: number) {
-    super(message);
-    this.name = 'ApiError';
-    this.status = status;
-  }
 }
 
 type RequestOptions = Omit<RequestInit, 'body'> & {

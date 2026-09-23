@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { getMe, login, register } from './api';
 import { useAuthStore } from './authStore';
@@ -21,12 +21,17 @@ function safeRedirectTarget(from: unknown): string {
 
 export function useLogin() {
   const storeLogin = useAuthStore((state) => state.login);
+  const queryClient = useQueryClient();
   const navigate = useNavigate();
   const location = useLocation();
 
   return useMutation({
     mutationFn: login,
     onSuccess: (result) => {
+      // A prior session on this browser may never have called logout() (tab just closed) and
+      // left its cache behind — clear it before this account's data starts filling the same,
+      // un-namespaced query keys, so no query resolves with someone else's cached response.
+      queryClient.clear();
       storeLogin(result);
       navigate(safeRedirectTarget((location.state as { from?: unknown } | null)?.from), {
         replace: true,
@@ -37,12 +42,14 @@ export function useLogin() {
 
 export function useRegister() {
   const storeLogin = useAuthStore((state) => state.login);
+  const queryClient = useQueryClient();
   const navigate = useNavigate();
   const location = useLocation();
 
   return useMutation({
     mutationFn: register,
     onSuccess: (result) => {
+      queryClient.clear();
       storeLogin(result);
       navigate(safeRedirectTarget((location.state as { from?: unknown } | null)?.from), {
         replace: true,
