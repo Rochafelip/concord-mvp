@@ -1,7 +1,11 @@
+import { Phone } from 'lucide-react';
 import { useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { Avatar } from '../../components/Avatar';
 import { useNotificationStore } from '../../stores/notificationStore';
+import * as dmCallApi from '../calls/dm/api';
+import { DmCallView } from '../calls/dm/DmCallView';
+import { useDmCallStore } from '../calls/dm/dmCallStore';
 import { useFriends } from '../friends/hooks';
 import { DmMessageInput } from './DmMessageInput';
 import { DmMessageList } from './DmMessageList';
@@ -17,12 +21,25 @@ export function DmConversationView() {
   const { data: friends, isLoading } = useFriends();
   const friend = friends?.find((candidate) => candidate.user.id === friendUserId);
   const clearFriendUnread = useNotificationStore((state) => state.clearFriendUnread);
+  const callStatus = useDmCallStore((state) => state.status);
+  const callPeerId = useDmCallStore((state) => state.peer?.id);
 
   useEffect(() => {
     if (friendUserId) clearFriendUnread(friendUserId);
   }, [clearFriendUnread, friendUserId]);
 
   if (!friendUserId) return null;
+
+  if (callStatus === 'connected' && callPeerId === friendUserId) {
+    return <DmCallView />;
+  }
+
+  function handleCall() {
+    if (!friend) return;
+    dmCallApi.inviteCall(friend.user.id).then(({ callId }) => {
+      useDmCallStore.getState().startOutgoing(callId, friend.user);
+    }).catch(() => {});
+  }
 
   return (
     <div className="flex h-full flex-col">
@@ -31,6 +48,18 @@ export function DmConversationView() {
         <span className="truncate text-heading font-semibold text-ink">
           {friend?.user.displayName ?? 'Conversa'}
         </span>
+        {friend && (
+          <button
+            type="button"
+            aria-label="Ligar"
+            title={friend.online ? 'Ligar' : `${friend.user.displayName} está offline`}
+            disabled={!friend.online || callStatus !== 'idle'}
+            onClick={handleCall}
+            className="ml-auto flex h-10 w-10 flex-shrink-0 items-center justify-center rounded text-muted hover:text-ink disabled:opacity-40 disabled:hover:text-muted"
+          >
+            <Phone size={18} aria-hidden="true" />
+          </button>
+        )}
       </div>
 
       <DmMessageList otherUserId={friendUserId} />
