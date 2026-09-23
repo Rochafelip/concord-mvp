@@ -16,7 +16,10 @@ if (typeof AudioWorkletNode === 'undefined') {
 // constructor needs to exist even though nothing reads its contents.
 if (typeof MediaStream === 'undefined') {
   globalThis.MediaStream = class MediaStream {
-    constructor(public tracks: unknown[] = []) {}
+    tracks: unknown[]
+    constructor(tracks: unknown[] = []) {
+      this.tracks = tracks
+    }
   } as unknown as typeof MediaStream
 }
 

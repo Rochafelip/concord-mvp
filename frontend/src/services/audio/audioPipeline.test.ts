@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createGateNode } from './micGate';
-import { createNoiseSuppressionNode } from './noiseSuppression';
+import { createNoiseSuppressionNode, type NoiseSuppressionNode } from './noiseSuppression';
 import { buildAudioProcessor } from './audioPipeline';
 
 vi.mock('./noiseSuppression', () => ({ createNoiseSuppressionNode: vi.fn() }));
@@ -43,7 +43,7 @@ describe('buildAudioProcessor', () => {
     const audioContext = fakeAudioContext();
     const suppressionNode = { connect: vi.fn() };
     vi.mocked(createNoiseSuppressionNode).mockResolvedValue({
-      node: suppressionNode as unknown as AudioWorkletNode,
+      node: suppressionNode as unknown as NoiseSuppressionNode['node'],
       destroy: vi.fn(),
     });
 
@@ -58,7 +58,7 @@ describe('buildAudioProcessor', () => {
     const audioContext = fakeAudioContext();
     const suppressionNode = { connect: vi.fn() };
     vi.mocked(createNoiseSuppressionNode).mockResolvedValue({
-      node: suppressionNode as unknown as AudioWorkletNode,
+      node: suppressionNode as unknown as NoiseSuppressionNode['node'],
       destroy: vi.fn(),
     });
     const gateNode = { connect: vi.fn(), parameters: { get: vi.fn() }, context: { currentTime: 0 } };
@@ -74,7 +74,7 @@ describe('buildAudioProcessor', () => {
   it('sets processedTrack to the destination stream track after init', async () => {
     const audioContext = fakeAudioContext();
     vi.mocked(createNoiseSuppressionNode).mockResolvedValue({
-      node: { connect: vi.fn() } as unknown as AudioWorkletNode,
+      node: { connect: vi.fn() } as unknown as NoiseSuppressionNode['node'],
       destroy: vi.fn(),
     });
 
@@ -88,7 +88,7 @@ describe('buildAudioProcessor', () => {
     const audioContext = fakeAudioContext();
     const suppressionDestroy = vi.fn();
     vi.mocked(createNoiseSuppressionNode).mockResolvedValue({
-      node: { connect: vi.fn() } as unknown as AudioWorkletNode,
+      node: { connect: vi.fn() } as unknown as NoiseSuppressionNode['node'],
       destroy: suppressionDestroy,
     });
     const gateNode = { connect: vi.fn(), disconnect: vi.fn(), parameters: { get: vi.fn() }, context: { currentTime: 0 } };
@@ -118,7 +118,7 @@ describe('buildAudioProcessor', () => {
   it('setGateThreshold does nothing when the gate is not part of the chain', async () => {
     const audioContext = fakeAudioContext();
     vi.mocked(createNoiseSuppressionNode).mockResolvedValue({
-      node: { connect: vi.fn() } as unknown as AudioWorkletNode,
+      node: { connect: vi.fn() } as unknown as NoiseSuppressionNode['node'],
       destroy: vi.fn(),
     });
 

@@ -15,9 +15,12 @@ import {
 type TrackSubscriptionPermissions = NonNullable<Parameters<LocalParticipant['setTrackSubscriptionPermissions']>[1]>;
 import { websocketClient } from './websocketClient';
 import * as soundEffects from './soundEffects';
-import { createNoiseSuppressionProcessor, isNoiseSuppressionSupported } from './audio/noiseSuppression';
+import { isNoiseSuppressionSupported } from './audio/noiseSuppression';
+import { isMicGateSupported } from './audio/micGate';
+import { buildAudioProcessor, type AudioPipelineProcessor } from './audio/audioPipeline';
 import { SCREEN_SHARE_QUALITY_PRESETS } from '../features/calls/screenShareQuality';
 import { getNoiseSuppressionPreference } from '../features/settings/audio/noiseSuppressionPreference';
+import { getMicSensitivityEnabled, getMicSensitivityThresholdDb } from '../features/settings/audio/micSensitivityPreference';
 import { useVoiceStore } from '../stores/voiceStore';
 import type { ScreenShareOptions, VoiceParticipant } from '../types/voice';
 
@@ -77,6 +80,13 @@ class VoiceClient {
   // Identity I'm currently whistling to, or null. Mirrors useVoiceStore's whisperingTo (kept here
   // too since production code, unlike components, can't subscribe to the store reactively).
   private whisperingToIdentity: string | null = null;
+
+  // The processor currently applied to the mic track (noise suppression and/or the mic-sensitivity
+  // gate), or null when neither is active. gateActiveInCurrentChain lets setMicSensitivity() tell
+  // "the gate is already live, just nudge its threshold" apart from "the gate needs to be added to
+  // (or removed from) the chain, rebuild it".
+  private currentAudioProcessor: AudioPipelineProcessor | null = null;
+  private gateActiveInCurrentChain = false;
 
   // Synchronous half of connect(): bumps the generation guard and flips the store to
   // "connecting" immediately, before any async work happens. Split out from connect() itself so
@@ -146,7 +156,7 @@ class VoiceClient {
       // silently fail, don't kill the session).
       await room.localParticipant.setMicrophoneEnabled(true);
       if (generation === this.connectGeneration) {
-        this.applyNoiseSuppressionPreference();
+        this.applyAudioProcessingPreferences();
       }
     } catch {
       if (generation === this.connectGeneration) {
@@ -211,7 +221,7 @@ class VoiceClient {
         this.syncParticipants();
         if (enabling) {
           this.setDeafened(false);
-          this.applyNoiseSuppressionPreference();
+          this.applyAudioProcessingPreferences();
         }
       })
       .catch(() => useVoiceStore.getState().setError('Failed to change microphone state'));
@@ -240,7 +250,7 @@ class VoiceClient {
         .setMicrophoneEnabled(true)
         .then(() => {
           this.syncParticipants();
-          this.applyNoiseSuppressionPreference();
+          this.applyAudioProcessingPreferences();
         })
         .catch(() => useVoiceStore.getState().setError('Failed to change microphone state'));
     } else {
@@ -261,26 +271,64 @@ class VoiceClient {
   }
 
   async setNoiseSuppressionEnabled(enabled: boolean): Promise<void> {
+    await this.applyAudioProcessing({ noiseSuppression: enabled });
+  }
+
+  /**
+   * Nudges the mic-sensitivity gate live when it's already the active chain (just updates the
+   * AudioWorkletNode's threshold AudioParam via setGateThreshold — no track.setProcessor()
+   * round-trip, no audio glitch) — otherwise (the gate was just turned on/off, or wasn't part of
+   * the current chain yet) rebuilds the processor chain via applyAudioProcessing.
+   */
+  async setMicSensitivity(enabled: boolean, thresholdDb: number): Promise<void> {
+    if (enabled && this.gateActiveInCurrentChain && this.currentAudioProcessor) {
+      this.currentAudioProcessor.setGateThreshold(thresholdDb);
+      return;
+    }
+    await this.applyAudioProcessing({ gateEnabled: enabled, gateThresholdDb: thresholdDb });
+  }
+
+  private applyAudioProcessingPreferences(): void {
+    void this.applyAudioProcessing();
+  }
+
+  /**
+   * Single place that (re)builds the mic track's processor chain from the noise-suppression and
+   * mic-sensitivity preferences. `overrides` lets a caller (e.g. AudioSettingsSection, mid-toggle)
+   * apply a value it's about to persist without waiting for a localStorage round-trip. LiveKit
+   * allows exactly one TrackProcessor per track, so both features live in the single chain
+   * audioPipeline.ts's buildAudioProcessor() builds, rather than each owning its own processor slot.
+   */
+  private async applyAudioProcessing(overrides: {
+    noiseSuppression?: boolean;
+    gateEnabled?: boolean;
+    gateThresholdDb?: number;
+  } = {}): Promise<void> {
     const track = this.room?.localParticipant.getTrackPublication(Track.Source.Microphone)?.audioTrack;
     if (!track) return;
 
-    if (!enabled) {
+    const noiseSuppression = (overrides.noiseSuppression ?? getNoiseSuppressionPreference()) && isNoiseSuppressionSupported();
+    const gateEnabled = (overrides.gateEnabled ?? getMicSensitivityEnabled()) && isMicGateSupported();
+    const gateThresholdDb = overrides.gateThresholdDb ?? getMicSensitivityThresholdDb();
+
+    if (!noiseSuppression && !gateEnabled) {
       await track.stopProcessor().catch((error: unknown) => {
-        console.warn('Failed to remove noise suppression processor', error);
+        console.warn('Failed to remove audio processing', error);
       });
+      this.currentAudioProcessor = null;
+      this.gateActiveInCurrentChain = false;
       return;
     }
-    if (!isNoiseSuppressionSupported()) return;
+
     try {
-      await track.setProcessor(createNoiseSuppressionProcessor());
+      const processor = buildAudioProcessor({ noiseSuppression, gate: { enabled: gateEnabled, thresholdDb: gateThresholdDb } });
+      await track.setProcessor(processor);
+      this.currentAudioProcessor = processor;
+      this.gateActiveInCurrentChain = gateEnabled;
     } catch (error) {
       // WASM/AudioWorklet failure — the call keeps working on the unprocessed track.
-      console.warn('Failed to enable noise suppression; continuing without it', error);
+      console.warn('Failed to apply audio processing; continuing without it', error);
     }
-  }
-
-  private applyNoiseSuppressionPreference(): void {
-    void this.setNoiseSuppressionEnabled(getNoiseSuppressionPreference());
   }
 
   isInCall(): boolean {
