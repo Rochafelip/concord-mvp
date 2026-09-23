@@ -15,17 +15,26 @@ import com.concordmvp.users.UserRepository;
 import com.concordmvp.users.UserAvatarUrls;
 import com.concordmvp.users.dto.UserSummaryResponse;
 import jakarta.validation.Valid;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 
@@ -36,12 +45,14 @@ public class ServerController {
     private final ServerService serverService;
     private final UserRepository userRepository;
     private final PermissionService permissionService;
+    private final ServerIconStorageService serverIconStorageService;
 
     public ServerController(ServerService serverService, UserRepository userRepository,
-                             PermissionService permissionService) {
+                             PermissionService permissionService, ServerIconStorageService serverIconStorageService) {
         this.permissionService = permissionService;
         this.serverService = serverService;
         this.userRepository = userRepository;
+        this.serverIconStorageService = serverIconStorageService;
     }
 
     @PostMapping
@@ -114,13 +125,42 @@ public class ServerController {
         return toResponse(server);
     }
 
+    @PutMapping(value = "/{id}/icon", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ServerResponse uploadIcon(@PathVariable UUID id, @RequestParam("file") MultipartFile file) {
+        Server server = serverService.updateIcon(id, CurrentUser.id(), file);
+        return toResponse(server);
+    }
+
+    @DeleteMapping("/{id}/icon")
+    public ServerResponse deleteIcon(@PathVariable UUID id) {
+        Server server = serverService.removeIcon(id, CurrentUser.id());
+        return toResponse(server);
+    }
+
+    @GetMapping("/{id}/icon")
+    public ResponseEntity<byte[]> icon(@PathVariable UUID id) {
+        Server server = serverService.getServer(id, CurrentUser.id());
+        if (server.getIconStorageKey() == null) return ResponseEntity.notFound().build();
+        try {
+            Path path = serverIconStorageService.resolve(server.getIconStorageKey());
+            if (!Files.exists(path)) return ResponseEntity.notFound().build();
+            String contentType = Files.probeContentType(path);
+            MediaType mediaType = contentType == null ? MediaType.APPLICATION_OCTET_STREAM : MediaType.parseMediaType(contentType);
+            return ResponseEntity.ok().contentType(mediaType)
+                    .cacheControl(CacheControl.maxAge(Duration.ofMinutes(5)).cachePrivate())
+                    .body(Files.readAllBytes(path));
+        } catch (IOException ex) {
+            throw new com.concordmvp.common.exception.ResourceNotFoundException("Server icon not found");
+        }
+    }
+
     /**
      * Carries the requester's own effective permissions so the UI can hide actions it would only
      * get a 403 for. Convenience, never enforcement — that lives in the services.
      */
     private ServerResponse toResponse(Server server) {
         return new ServerResponse(server.getId(), server.getName(), server.getOwnerId(),
-                server.getCreatedAt(), server.getUpdatedAt(),
+                server.getCreatedAt(), server.getUpdatedAt(), ServerIconUrls.url(server),
                 PermissionSet.toNames(permissionService.serverPermissions(server.getId(), CurrentUser.id())));
     }
 

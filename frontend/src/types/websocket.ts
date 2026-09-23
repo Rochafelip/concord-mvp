@@ -18,6 +18,7 @@ export type WsEventType =
   | 'SERVER_MEMBER_UPDATE'
   | 'SERVER_DELETE'
   | 'SERVER_OWNER_CHANGE'
+  | 'SERVER_ICON_UPDATE'
   | 'VOICE_PRESENCE_UPDATE'
   | 'VOICE_PRESENCE_LEAVE'
   | 'VOICE_KICK'
@@ -55,6 +56,11 @@ export interface ServerOwnerChangePayload {
 
 export interface ServerDeletedPayload {
   serverId: string;
+}
+
+export interface ServerIconUpdatePayload {
+  serverId: string;
+  iconUrl: string | null;
 }
 
 export interface ChannelDeletedPayload {

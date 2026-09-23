@@ -6,6 +6,7 @@ import { Avatar } from '../../components/Avatar';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { disconnectVoiceParticipant } from '../calls/api';
 import { useVoicePresence } from '../calls/hooks';
+import { muteParticipantMenuItem } from '../calls/muteParticipantMenuItem';
 import { ScreenShareHoverPreview } from '../calls/ScreenShareHoverPreview';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useAuthStore } from '../auth/authStore';
@@ -283,14 +284,19 @@ export function ChannelSidebar({ onNavigate }: ChannelSidebarProps) {
                                 avatarUrl: participant.avatarUrl,
                               }}
                               contextMenuExtraItems={
-                                canDisconnect && participant.userId !== currentUserId
+                                participant.userId !== currentUserId
                                   ? [
-                                      {
-                                        label: 'Disconnect from voice',
-                                        variant: 'danger',
-                                        onSelect: () =>
-                                          void disconnectVoiceParticipant(channel.id, participant.userId),
-                                      },
+                                      muteParticipantMenuItem(participant.userId),
+                                      ...(canDisconnect
+                                        ? [
+                                            {
+                                              label: 'Disconnect from voice',
+                                              variant: 'danger' as const,
+                                              onSelect: () =>
+                                                void disconnectVoiceParticipant(channel.id, participant.userId),
+                                            },
+                                          ]
+                                        : []),
                                     ]
                                   : []
                               }

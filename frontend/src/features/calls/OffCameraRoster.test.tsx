@@ -1,6 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { ConnectionQuality } from 'livekit-client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ContextMenu, type ContextMenuItem } from '../../components/ContextMenu';
 import { voiceClient } from '../../services/voiceClient';
 import type { VoiceParticipant } from '../../types/voice';
 import { OffCameraRoster } from './OffCameraRoster';
@@ -12,10 +14,17 @@ vi.mock('../../services/voiceClient', () => ({
   },
 }));
 
-// UserProfileCard needs providers this file doesn't set up — its own behavior is covered by
-// UserProfileCard.test.tsx.
+// UserProfileCard needs providers this file doesn't set up, and its friend-action right-click
+// item is covered by UserProfileCard.test.tsx — this stub keeps only the `contextMenuExtraItems`
+// contract OffCameraRoster relies on for "Silenciar".
 vi.mock('../users/UserProfileCard', () => ({
-  UserProfileCard: ({ children }: { children: React.ReactNode }) => children,
+  UserProfileCard: ({
+    children,
+    contextMenuExtraItems = [],
+  }: {
+    children: React.ReactNode;
+    contextMenuExtraItems?: ContextMenuItem[];
+  }) => <ContextMenu items={contextMenuExtraItems}>{children}</ContextMenu>,
 }));
 
 function participant(overrides: Partial<VoiceParticipant> = {}): VoiceParticipant {
@@ -144,6 +153,36 @@ describe('OffCameraRoster', () => {
     );
 
     expect(screen.getByLabelText('Felipe')).not.toHaveClass('ring-2');
+  });
+
+  it('offers to mute a remote participant locally from the right-click menu', async () => {
+    const user = userEvent.setup();
+    render(
+      <OffCameraRoster
+        participants={[participant({ identity: 'bob', name: 'Bob' })]}
+        avatarUrlByUserId={new Map()}
+        deafenedByUserId={new Map()}
+      />,
+    );
+
+    fireEvent.contextMenu(screen.getAllByRole('button', { name: 'Bob' })[0]);
+    await user.click(await screen.findByText('Silenciar'));
+
+    expect(voiceClient.setParticipantVolume).toHaveBeenCalledWith('bob', 0);
+  });
+
+  it('does not offer to mute the local participant', () => {
+    render(
+      <OffCameraRoster
+        participants={[participant({ identity: 'me', name: 'Eu', isLocal: true })]}
+        avatarUrlByUserId={new Map()}
+        deafenedByUserId={new Map()}
+      />,
+    );
+
+    fireEvent.contextMenu(screen.getAllByRole('button', { name: 'Eu' })[0]);
+
+    expect(screen.queryByText('Silenciar')).not.toBeInTheDocument();
   });
 
   it('makes a remote participant name a profile card trigger', () => {

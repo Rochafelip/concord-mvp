@@ -168,3 +168,27 @@ export function useRegenerateInvite(serverId: string) {
     },
   });
 }
+
+export function useUploadServerIcon(serverId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (file: File) => api.uploadServerIcon(serverId, file),
+    onSuccess: () => {
+      // iconUrl also lives on the list-shaped Server objects (same reasoning as
+      // useTransferOwnership above), so invalidate the whole ['servers'] branch.
+      queryClient.invalidateQueries({ queryKey: ['servers'] });
+    },
+  });
+}
+
+export function useRemoveServerIcon(serverId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => api.removeServerIcon(serverId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['servers'] });
+    },
+  });
+}

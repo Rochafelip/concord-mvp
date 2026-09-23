@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ContextMenu } from '../../components/ContextMenu';
+import { voiceClient } from '../../services/voiceClient';
 import { useVoiceStore } from '../../stores/voiceStore';
 import type { Channel } from '../../types/channel';
 import type { Server } from '../../types/server';
@@ -374,6 +375,25 @@ describe('ChannelSidebar', () => {
       fireEvent.contextMenu(await screen.findByText('Ana'));
 
       expect(screen.queryByText('Disconnect from voice')).not.toBeInTheDocument();
+    });
+
+    it('offers to mute the participant locally regardless of permission', async () => {
+      vi.mocked(serversApi.getServer).mockResolvedValue({
+        ...server,
+        permissions: (server.permissions ?? []).filter((permission) => permission !== 'DISCONNECT_MEMBERS'),
+      });
+      useAuthStore.setState({
+        isAuthenticated: true,
+        user: { id: 'member-1', username: 'm', displayName: 'M', email: 'm@x.com', avatarUrl: null },
+      });
+      vi.mocked(callsApi.getVoicePresence).mockResolvedValue([presence()]);
+      const user = userEvent.setup();
+      renderSidebar();
+
+      fireEvent.contextMenu(await screen.findByText('Ana'));
+      await user.click(await screen.findByText('Silenciar'));
+
+      expect(voiceClient.getParticipantVolume('u2')).toBe(0);
     });
 
     it('does not offer to disconnect without the DISCONNECT_MEMBERS permission', async () => {

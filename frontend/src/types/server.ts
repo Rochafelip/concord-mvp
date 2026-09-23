@@ -6,6 +6,8 @@ export interface Server {
   ownerId: string;
   createdAt: string;
   updatedAt: string;
+  /** Absent on pre-icon cached responses. */
+  iconUrl?: string | null;
   /** The current user's effective permissions on this server. Absent on pre-roles cached responses. */
   permissions?: Permission[];
 }
