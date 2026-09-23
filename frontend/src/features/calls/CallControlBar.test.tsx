@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ConnectionQuality } from 'livekit-client';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { voiceClient } from '../../services/voiceClient';
 import { useDeviceStore } from '../../stores/deviceStore';
 import { useVoiceStore } from '../../stores/voiceStore';
@@ -213,6 +213,49 @@ describe('CallControlBar', () => {
     await user.click(screen.getByRole('button', { name: 'Leave call' }));
 
     expect(onLeave).toHaveBeenCalledTimes(1);
+  });
+
+  describe('picture-in-picture', () => {
+    beforeEach(() => {
+      useVoiceStore.setState({ participants: [localParticipant({})] });
+      (window as { documentPictureInPicture?: unknown }).documentPictureInPicture = {
+        requestPictureInPicture: vi.fn().mockResolvedValue({
+          document: {
+            body: document.createElement('body'),
+            head: document.createElement('head'),
+            documentElement: document.createElement('html'),
+          },
+          close: vi.fn(),
+          addEventListener: vi.fn(),
+        }),
+      };
+    });
+
+    afterEach(() => {
+      delete (window as { documentPictureInPicture?: unknown }).documentPictureInPicture;
+    });
+
+    it('shows a "Destacar chamada" button when the browser supports Picture-in-Picture', () => {
+      render(<CallControlBar canUseVideo onLeave={vi.fn()} />);
+
+      expect(screen.getByRole('button', { name: 'Destacar chamada' })).toBeInTheDocument();
+    });
+
+    it('does not show the button when the browser has no Picture-in-Picture support', () => {
+      delete (window as { documentPictureInPicture?: unknown }).documentPictureInPicture;
+      render(<CallControlBar canUseVideo onLeave={vi.fn()} />);
+
+      expect(screen.queryByRole('button', { name: 'Destacar chamada' })).not.toBeInTheDocument();
+    });
+
+    it('clicking it requests picture-in-picture', async () => {
+      const user = userEvent.setup();
+      render(<CallControlBar canUseVideo onLeave={vi.fn()} />);
+
+      await user.click(screen.getByRole('button', { name: 'Destacar chamada' }));
+
+      expect(window.documentPictureInPicture!.requestPictureInPicture).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('private whistle badge', () => {
