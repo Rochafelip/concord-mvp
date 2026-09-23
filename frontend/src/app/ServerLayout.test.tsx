@@ -63,4 +63,25 @@ describe('ServerLayout', () => {
     await screen.findByText('Alpha');
     expect(screen.getByRole('separator', { name: 'Resize channel sidebar' })).toBeInTheDocument();
   });
+
+  it('renders only the routed content on mobile — the hamburger and drawer now live in AppShell', async () => {
+    const matchMediaSpy = vi.spyOn(window, 'matchMedia').mockReturnValue({
+      matches: true,
+      media: '(max-width: 767px)',
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    } as unknown as MediaQueryList);
+
+    renderLayout();
+
+    expect(await screen.findByText('channel content')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Abrir canais')).not.toBeInTheDocument();
+    expect(screen.queryByText('Canais do servidor')).not.toBeInTheDocument();
+
+    matchMediaSpy.mockRestore();
+  });
 });
