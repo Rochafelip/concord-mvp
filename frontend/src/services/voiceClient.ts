@@ -15,9 +15,12 @@ import {
 type TrackSubscriptionPermissions = NonNullable<Parameters<LocalParticipant['setTrackSubscriptionPermissions']>[1]>;
 import { websocketClient } from './websocketClient';
 import * as soundEffects from './soundEffects';
-import { createNoiseSuppressionProcessor, isNoiseSuppressionSupported } from './audio/noiseSuppression';
+import { isNoiseSuppressionSupported } from './audio/noiseSuppression';
+import { isMicGateSupported } from './audio/micGate';
+import { buildAudioProcessor, type AudioPipelineProcessor } from './audio/audioPipeline';
 import { SCREEN_SHARE_QUALITY_PRESETS } from '../features/calls/screenShareQuality';
 import { getNoiseSuppressionPreference } from '../features/settings/audio/noiseSuppressionPreference';
+import { getMicSensitivityEnabled, getMicSensitivityThresholdDb } from '../features/settings/audio/micSensitivityPreference';
 import { useVoiceStore } from '../stores/voiceStore';
 import type { ScreenShareOptions, VoiceParticipant } from '../types/voice';
 
@@ -77,6 +80,23 @@ class VoiceClient {
   // Identity I'm currently whistling to, or null. Mirrors useVoiceStore's whisperingTo (kept here
   // too since production code, unlike components, can't subscribe to the store reactively).
   private whisperingToIdentity: string | null = null;
+
+  // The mic MediaStreamTrack currently wired to handleHardwareMicMute/Unmute, or null. A physical
+  // microphone's own hardware mute button fires a native mute/unmute event on the MediaStreamTrack
+  // itself (standard Web platform behavior, device/driver dependent) — not through any LiveKit-level
+  // mute API. livekit-client's own handling of that native event only pauses upstream transmission
+  // (LocalTrackPublication.pauseUpstream()); it deliberately never touches the publication's isMuted
+  // flag or emits TrackMuted, so without bridging it ourselves the app's mute indicator never
+  // reflects the hardware button. Re-synced after every operation that can replace the published mic
+  // track (see syncHardwareMuteListener).
+  private hardwareMuteTrack: MediaStreamTrack | null = null;
+
+  // The processor chain currently applied to the published mic track (or null if neither noise
+  // suppression nor the sensitivity gate is active), and whether the gate specifically is part of
+  // it. setMicSensitivity's fast path (just nudging the gate's threshold AudioParam) depends on
+  // both staying in sync with what applyAudioProcessing last actually did to the track.
+  private currentAudioProcessor: AudioPipelineProcessor | null = null;
+  private gateActiveInCurrentChain = false;
 
   // Synchronous half of connect(): bumps the generation guard and flips the store to
   // "connecting" immediately, before any async work happens. Split out from connect() itself so
@@ -146,7 +166,8 @@ class VoiceClient {
       // silently fail, don't kill the session).
       await room.localParticipant.setMicrophoneEnabled(true);
       if (generation === this.connectGeneration) {
-        this.applyNoiseSuppressionPreference();
+        this.applyAudioProcessingPreferences();
+        this.syncHardwareMuteListener();
       }
     } catch {
       if (generation === this.connectGeneration) {
@@ -187,6 +208,13 @@ class VoiceClient {
     // VoicePresenceService.removePresence) — the room being abandoned makes the local permission
     // reset moot too. useVoiceStore.reset() below clears the store's whisperingTo field.
     this.whisperingToIdentity = null;
+    this.hardwareMuteTrack?.removeEventListener('mute', this.handleHardwareMicMute);
+    this.hardwareMuteTrack?.removeEventListener('unmute', this.handleHardwareMicUnmute);
+    this.hardwareMuteTrack = null;
+    // The processor chain dies with the track it was attached to — without this,
+    // setMicSensitivity's fast path could nudge a processor left over from the call just ended.
+    this.currentAudioProcessor = null;
+    this.gateActiveInCurrentChain = false;
     // Removed proactively rather than left for the room's own TrackUnsubscribed events to clean
     // up: livekit-client's real Room.disconnect() awaits a server round-trip before emitting
     // those, so relying on them here would leak these elements for the entire duration of that
@@ -211,7 +239,7 @@ class VoiceClient {
         this.syncParticipants();
         if (enabling) {
           this.setDeafened(false);
-          this.applyNoiseSuppressionPreference();
+          this.applyAudioProcessingPreferences();
         }
       })
       .catch(() => useVoiceStore.getState().setError('Failed to change microphone state'));
@@ -240,7 +268,7 @@ class VoiceClient {
         .setMicrophoneEnabled(true)
         .then(() => {
           this.syncParticipants();
-          this.applyNoiseSuppressionPreference();
+          this.applyAudioProcessingPreferences();
         })
         .catch(() => useVoiceStore.getState().setError('Failed to change microphone state'));
     } else {
@@ -261,34 +289,96 @@ class VoiceClient {
   }
 
   async setNoiseSuppressionEnabled(enabled: boolean): Promise<void> {
+    await this.applyAudioProcessing({ noiseSuppression: enabled });
+  }
+
+  /**
+   * Nudges the mic-sensitivity gate live when it's already the active chain (just updates the
+   * AudioWorkletNode's threshold AudioParam via setGateThreshold — no track.setProcessor()
+   * round-trip, no audio glitch) — otherwise (the gate was just turned on/off, or wasn't part of
+   * the current chain yet) rebuilds the processor chain via applyAudioProcessing.
+   */
+  async setMicSensitivity(enabled: boolean, thresholdDb: number): Promise<void> {
+    if (enabled && this.gateActiveInCurrentChain && this.currentAudioProcessor) {
+      this.currentAudioProcessor.setGateThreshold(thresholdDb);
+      return;
+    }
+    await this.applyAudioProcessing({ gateEnabled: enabled, gateThresholdDb: thresholdDb });
+  }
+
+  private applyAudioProcessingPreferences(): void {
+    void this.applyAudioProcessing();
+  }
+
+  /**
+   * Single place that (re)builds the mic track's processor chain from the noise-suppression and
+   * mic-sensitivity preferences. `overrides` lets a caller (e.g. AudioSettingsSection, mid-toggle)
+   * apply a value it's about to persist without waiting for a localStorage round-trip. LiveKit
+   * allows exactly one TrackProcessor per track, so both features live in the single chain
+   * audioPipeline.ts's buildAudioProcessor() builds, rather than each owning its own processor slot.
+   */
+  private async applyAudioProcessing(overrides: {
+    noiseSuppression?: boolean;
+    gateEnabled?: boolean;
+    gateThresholdDb?: number;
+  } = {}): Promise<void> {
     const track = this.room?.localParticipant.getTrackPublication(Track.Source.Microphone)?.audioTrack;
     if (!track) return;
 
-    if (!enabled) {
+    const noiseSuppression = (overrides.noiseSuppression ?? getNoiseSuppressionPreference()) && isNoiseSuppressionSupported();
+    const gateEnabled = (overrides.gateEnabled ?? getMicSensitivityEnabled()) && isMicGateSupported();
+    const gateThresholdDb = overrides.gateThresholdDb ?? getMicSensitivityThresholdDb();
+
+    if (!noiseSuppression && !gateEnabled) {
       await track.stopProcessor().catch((error: unknown) => {
-        console.warn('Failed to remove noise suppression processor', error);
+        console.warn('Failed to remove audio processing', error);
       });
+      this.currentAudioProcessor = null;
+      this.gateActiveInCurrentChain = false;
       return;
     }
-    if (!isNoiseSuppressionSupported()) return;
+
     try {
-      await track.setProcessor(createNoiseSuppressionProcessor());
+      const processor = buildAudioProcessor({ noiseSuppression, gate: { enabled: gateEnabled, thresholdDb: gateThresholdDb } });
+      await track.setProcessor(processor);
+      this.currentAudioProcessor = processor;
+      this.gateActiveInCurrentChain = gateEnabled;
     } catch (error) {
       // WASM/AudioWorklet failure — the call keeps working on the unprocessed track.
-      console.warn('Failed to enable noise suppression; continuing without it', error);
+      console.warn('Failed to apply audio processing; continuing without it', error);
     }
-  }
-
-  private applyNoiseSuppressionPreference(): void {
-    void this.setNoiseSuppressionEnabled(getNoiseSuppressionPreference());
   }
 
   isInCall(): boolean {
     return this.room !== null;
   }
 
+  private handleHardwareMicMute = (): void => {
+    this.room?.localParticipant.getTrackPublication(Track.Source.Microphone)?.mute().catch(() => {});
+  };
+
+  private handleHardwareMicUnmute = (): void => {
+    this.room?.localParticipant.getTrackPublication(Track.Source.Microphone)?.unmute().catch(() => {});
+  };
+
+  // Re-attaches handleHardwareMicMute/Unmute to whatever MediaStreamTrack currently backs the mic
+  // publication; a no-op if it's the same track as last time. mute()/unmute() are used (rather than
+  // some separate hardware-mute flag) so the existing TrackMuted/TrackUnmuted-driven resync pipeline
+  // (registerListeners below) picks it up for free, the same as an explicit in-app mute.
+  private syncHardwareMuteListener(): void {
+    const track =
+      this.room?.localParticipant.getTrackPublication(Track.Source.Microphone)?.audioTrack?.mediaStreamTrack ?? null;
+    if (track === this.hardwareMuteTrack) return;
+    this.hardwareMuteTrack?.removeEventListener('mute', this.handleHardwareMicMute);
+    this.hardwareMuteTrack?.removeEventListener('unmute', this.handleHardwareMicUnmute);
+    this.hardwareMuteTrack = track;
+    track?.addEventListener('mute', this.handleHardwareMicMute);
+    track?.addEventListener('unmute', this.handleHardwareMicUnmute);
+  }
+
   async setMicrophoneDevice(deviceId: string): Promise<void> {
     await this.room?.switchActiveDevice('audioinput', deviceId);
+    this.syncHardwareMuteListener();
   }
 
   async setSpeakerDevice(deviceId: string): Promise<void> {
