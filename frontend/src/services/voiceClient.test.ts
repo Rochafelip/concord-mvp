@@ -164,7 +164,7 @@ function handlerFor(room: InstanceType<typeof MockRoom>, event: string): (...arg
 }
 
 /** Calls voiceClient.connect() and immediately resolves that call's underlying room.connect(). */
-async function connectVoice(channelId: string, token: string, url: string): Promise<void> {
+async function connectVoice(channelId: string | null, token: string, url: string): Promise<void> {
   const promise = voiceClient.connect(channelId, token, url);
   connectResolvers[connectResolvers.length - 1]();
   await promise;
@@ -1117,6 +1117,26 @@ describe('voiceClient', () => {
         type: 'VOICE_PRESENCE_UPDATE',
         payload: { channelId: 'channel-2', muted: false, cameraOn: false, screenSharing: false, speaking: false, deafened: false },
       }]);
+    });
+
+    it('connecting with a null channelId (a 1:1 call) never reports VOICE_PRESENCE_UPDATE, even on a state change', async () => {
+      await connectVoice(null, 'token', 'wss://example.test/livekit');
+      mockSend.mockClear();
+
+      voiceClient.toggleMute();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(mockSend).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'VOICE_PRESENCE_UPDATE' }));
+    });
+
+    it('connecting with a null channelId (a 1:1 call) never sends VOICE_PRESENCE_LEAVE on disconnect', async () => {
+      await connectVoice(null, 'token', 'wss://example.test/livekit');
+      mockSend.mockClear();
+
+      voiceClient.disconnect();
+
+      expect(mockSend).not.toHaveBeenCalledWith({ type: 'VOICE_PRESENCE_LEAVE', payload: {} });
     });
   });
 

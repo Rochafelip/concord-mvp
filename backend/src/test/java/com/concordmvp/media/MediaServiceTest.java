@@ -41,6 +41,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
@@ -380,6 +381,53 @@ class MediaServiceTest {
         assertThat(video.get("roomJoin")).isEqualTo(true);
         assertThat(video.get("canSubscribe")).isEqualTo(true);
         assertThat(publishSources(claims)).isEmpty();
+    }
+
+    // --- issueDmCallToken: no channel/role involved, access already gated by DmCallService ---
+
+    @Test
+    void issueDmCallToken_userNotFound_throwsResourceNotFound() {
+        UUID requesterId = UUID.randomUUID();
+        when(userRepository.findById(requesterId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> mediaService.issueDmCallToken(requesterId, "dm-call-a-b"))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void issueDmCallToken_unverifiedEmail_throwsForbidden() {
+        UUID requesterId = UUID.randomUUID();
+        User unverified = user(requesterId, "Felipe R");
+        unverified.setEmailVerified(false);
+        when(userRepository.findById(requesterId)).thenReturn(Optional.of(unverified));
+
+        assertThatThrownBy(() -> mediaService.issueDmCallToken(requesterId, "dm-call-a-b"))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void issueDmCallToken_grantsEveryPublishSource_regardlessOfAnyChannelPermission() {
+        UUID requesterId = UUID.randomUUID();
+        when(userRepository.findById(requesterId)).thenReturn(Optional.of(user(requesterId, "Felipe R")));
+
+        VoiceTokenResponse response = mediaService.issueDmCallToken(requesterId, "dm-call-a-b");
+
+        assertThat(response.roomName()).isEqualTo("dm-call-a-b");
+        assertThat(response.url()).isEqualTo(PUBLIC_URL);
+        Claims claims = parse(response.token());
+        assertThat(claims.getSubject()).isEqualTo(requesterId.toString());
+        assertThat(claims.get("name", String.class)).isEqualTo("Felipe R");
+        assertThat(publishSources(claims))
+                .containsExactlyInAnyOrder("microphone", "camera", "screen_share", "screen_share_audio");
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> video = claims.get("video", Map.class);
+        assertThat(video.get("room")).isEqualTo("dm-call-a-b");
+        assertThat(video.get("roomJoin")).isEqualTo(true);
+        assertThat(video.get("canPublish")).isEqualTo(true);
+        assertThat(video.get("canSubscribe")).isEqualTo(true);
+        assertThat(video.get("hidden")).isEqualTo(false);
+        verifyNoInteractions(channelService, permissionService, serverMemberRepository);
     }
 
     // --- removeParticipant ---
