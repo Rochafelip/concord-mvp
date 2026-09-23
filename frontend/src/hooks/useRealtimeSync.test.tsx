@@ -857,6 +857,22 @@ describe('useRealtimeSync', () => {
     expect(useNotificationStore.getState().unreadFriendIds).toEqual([]);
   });
 
+  it('DM_MESSAGE_CREATE invalidates the dm-conversations list', () => {
+    const queryClient = newQueryClient();
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    renderHarness(queryClient, '/app');
+
+    emit('DM_MESSAGE_CREATE', {
+      id: 'm1',
+      author: { id: 'u2', username: 'b', displayName: 'B', avatarUrl: null },
+      recipientId: 'u1',
+      content: 'oi',
+      createdAt: '2026-01-01T00:00:00Z',
+    });
+
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['dm-conversations'] });
+  });
+
   it('FRIEND_UPDATE invalidates the friends queries and marks the other user unread', async () => {
     const queryClient = newQueryClient();
     queryClient.setQueryData(['friends'], []);
@@ -909,6 +925,19 @@ describe('useRealtimeSync', () => {
       });
 
       expect(useDmCallStore.getState().callId).toBe('call-existing');
+    });
+
+    it('invalidates the dm-conversations list', () => {
+      const queryClient = newQueryClient();
+      const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+      renderHarness(queryClient, '/app');
+
+      emit('CALL_INVITE', {
+        callId: 'call-1',
+        caller: { id: 'u2', username: 'bob', displayName: 'Bob', avatarUrl: null },
+      });
+
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['dm-conversations'] });
     });
   });
 

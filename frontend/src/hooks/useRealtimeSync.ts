@@ -423,6 +423,8 @@ export function useRealtimeSync(): void {
           return { ...old, pages };
         });
 
+        queryClient.invalidateQueries({ queryKey: ['dm-conversations'] });
+
         if (message.author.id !== currentUserId) {
           if (otherUserId !== currentFriendUserIdRef.current) {
             markFriendUnread(otherUserId);
@@ -475,6 +477,7 @@ export function useRealtimeSync(): void {
 
       websocketClient.subscribe('CALL_INVITE', (payload) => {
         const { callId, caller } = payload as CallInvitePayload;
+        queryClient.invalidateQueries({ queryKey: ['dm-conversations'] });
         // Already busy locally (in a call or already ringing something else) — the backend's own
         // busy check already stops the caller from reaching this in the first place for most
         // cases; this is just this client not clobbering its own in-progress state.
