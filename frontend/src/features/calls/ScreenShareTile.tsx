@@ -1,4 +1,4 @@
-import { Maximize2, Mic, MicOff, Minimize2, MonitorUp, PhoneOff, X } from 'lucide-react';
+import { Maximize2, Mic, MicOff, Minimize2, MonitorUp, PhoneOff, Volume2, VolumeX, X } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import { ContextMenu } from '../../components/ContextMenu';
 import { voiceClient } from '../../services/voiceClient';
@@ -44,10 +44,15 @@ interface ScreenShareTileProps {
  * slides) is illegible squeezed small — but accepts a className override so FocusedCallView's
  * tiered multi-watch area can size it the same way ParticipantTile's tiles are sized.
  *
- * The fullscreen and volume overlays are hidden until the mouse enters the surrounding watched
- * area (FocusedCallView's `group/camera-grid` container), matching ParticipantTile — the hover
- * zone is the whole call area, not each card. See
+ * The fullscreen overlay is hidden until the mouse enters the surrounding watched area
+ * (FocusedCallView's `group/camera-grid` container), matching ParticipantTile — the hover zone is
+ * the whole call area, not each card. See
  * docs/superpowers/specs/2026-09-09-call-grid-controls-hover-design.md.
+ *
+ * The audio corner (interactive volume control, or a static badge when there is nothing to
+ * adjust) is always visible, not hover-gated — a viewer who never hovers must still be able to
+ * tell at a glance whether a share has audio at all, instead of wondering if a control is hidden
+ * somewhere.
  *
  * The root element also doubles as the Fullscreen API target (see
  * docs/superpowers/specs/2026-09-08-fullscreen-screenshare-design.md): fullscreening it hides
@@ -140,6 +145,11 @@ export function ScreenShareTile({
   }
 
   const clickToRemove = !participant.isLocal && !isFullscreen && onWatchClick;
+  // Whether there is anything to actually hear right now — either because the sharer never
+  // published a screen-share-audio track at all (they didn't check "share audio" when starting),
+  // or because they published one and then muted it themselves. Both look identical to a viewer
+  // (silence), so they share one static "no audio" badge instead of two different messages.
+  const audioAvailable = participant.screenShareHasAudio && participant.screenShareAudioEnabled;
 
   // The <audio> element for this share's sound lives in voiceClient, independent of whether this
   // tile is mounted (see the class doc comment above) — unmounting it alone doesn't stop the
@@ -203,18 +213,34 @@ export function ScreenShareTile({
                 <Maximize2 size={16} aria-hidden="true" />
               </button>
             )}
-            {!participant.isLocal && participant.screenShareHasAudio && participant.screenShareAudioEnabled && (
-              <div
-                className="pointer-events-none absolute right-1 top-1 opacity-0 transition-opacity group-hover/participant-tile:pointer-events-auto group-hover/participant-tile:opacity-100 group-focus-within/participant-tile:pointer-events-auto group-focus-within/participant-tile:opacity-100"
-                onClick={stopPropagation}
-                onKeyDown={stopPropagation}
-              >
+            {!participant.isLocal && audioAvailable && (
+              <div className="absolute right-1 top-1" onClick={stopPropagation} onKeyDown={stopPropagation}>
                 <VolumeControl
                   label={`${participant.name}'s screen`}
                   initialVolume={voiceClient.getScreenShareVolume(participant.identity) ?? 0}
                   onVolumeChange={(volume) => voiceClient.setScreenShareVolume(participant.identity, volume)}
                 />
               </div>
+            )}
+            {!participant.isLocal && !audioAvailable && (
+              <span
+                role="img"
+                aria-label={`${participant.name}'s screen has no audio`}
+                title={`${participant.name}'s screen has no audio`}
+                className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded bg-black/60 text-white"
+              >
+                <VolumeX size={14} aria-hidden="true" />
+              </span>
+            )}
+            {participant.isLocal && (
+              <span
+                role="img"
+                aria-label={audioAvailable ? 'Your screen audio is on' : 'Your screen has no audio'}
+                title={audioAvailable ? 'Your screen audio is on' : 'Your screen has no audio'}
+                className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded bg-black/60 text-white"
+              >
+                {audioAvailable ? <Volume2 size={14} aria-hidden="true" /> : <VolumeX size={14} aria-hidden="true" />}
+              </span>
             )}
             {clickToRemove && (
               // Stays faintly visible at rest (not just on hover) since touch devices have no
@@ -235,12 +261,32 @@ export function ScreenShareTile({
           <div className="absolute right-2 top-2 flex items-center gap-1.5 rounded bg-black/60 px-2 py-1.5">
             {/* Leads the bar (not sandwiched between the other buttons): its popover opens
                 downward from this position without overlapping a neighboring button. */}
-            {!participant.isLocal && participant.screenShareHasAudio && participant.screenShareAudioEnabled && (
+            {!participant.isLocal && audioAvailable && (
               <VolumeControl
                 label={`${participant.name}'s screen`}
                 initialVolume={voiceClient.getScreenShareVolume(participant.identity) ?? 0}
                 onVolumeChange={(volume) => voiceClient.setScreenShareVolume(participant.identity, volume)}
               />
+            )}
+            {!participant.isLocal && !audioAvailable && (
+              <span
+                role="img"
+                aria-label={`${participant.name}'s screen has no audio`}
+                title={`${participant.name}'s screen has no audio`}
+                className="flex h-9 w-9 items-center justify-center rounded-full text-white"
+              >
+                <VolumeX size={18} aria-hidden="true" />
+              </span>
+            )}
+            {participant.isLocal && (
+              <span
+                role="img"
+                aria-label={audioAvailable ? 'Your screen audio is on' : 'Your screen has no audio'}
+                title={audioAvailable ? 'Your screen audio is on' : 'Your screen has no audio'}
+                className="flex h-9 w-9 items-center justify-center rounded-full text-white"
+              >
+                {audioAvailable ? <Volume2 size={18} aria-hidden="true" /> : <VolumeX size={18} aria-hidden="true" />}
+              </span>
             )}
             <button
               type="button"
