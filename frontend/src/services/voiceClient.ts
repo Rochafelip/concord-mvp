@@ -78,6 +78,16 @@ class VoiceClient {
   // too since production code, unlike components, can't subscribe to the store reactively).
   private whisperingToIdentity: string | null = null;
 
+  // The mic MediaStreamTrack currently wired to handleHardwareMicMute/Unmute, or null. A physical
+  // microphone's own hardware mute button fires a native mute/unmute event on the MediaStreamTrack
+  // itself (standard Web platform behavior, device/driver dependent) — not through any LiveKit-level
+  // mute API. livekit-client's own handling of that native event only pauses upstream transmission
+  // (LocalTrackPublication.pauseUpstream()); it deliberately never touches the publication's isMuted
+  // flag or emits TrackMuted, so without bridging it ourselves the app's mute indicator never
+  // reflects the hardware button. Re-synced after every operation that can replace the published mic
+  // track (see syncHardwareMuteListener).
+  private hardwareMuteTrack: MediaStreamTrack | null = null;
+
   // Synchronous half of connect(): bumps the generation guard and flips the store to
   // "connecting" immediately, before any async work happens. Split out from connect() itself so
   // a caller that first fetches something async (a voice token) can capture the generation
@@ -147,6 +157,7 @@ class VoiceClient {
       await room.localParticipant.setMicrophoneEnabled(true);
       if (generation === this.connectGeneration) {
         this.applyNoiseSuppressionPreference();
+        this.syncHardwareMuteListener();
       }
     } catch {
       if (generation === this.connectGeneration) {
@@ -187,6 +198,9 @@ class VoiceClient {
     // VoicePresenceService.removePresence) — the room being abandoned makes the local permission
     // reset moot too. useVoiceStore.reset() below clears the store's whisperingTo field.
     this.whisperingToIdentity = null;
+    this.hardwareMuteTrack?.removeEventListener('mute', this.handleHardwareMicMute);
+    this.hardwareMuteTrack?.removeEventListener('unmute', this.handleHardwareMicUnmute);
+    this.hardwareMuteTrack = null;
     // Removed proactively rather than left for the room's own TrackUnsubscribed events to clean
     // up: livekit-client's real Room.disconnect() awaits a server round-trip before emitting
     // those, so relying on them here would leak these elements for the entire duration of that
@@ -287,8 +301,32 @@ class VoiceClient {
     return this.room !== null;
   }
 
+  private handleHardwareMicMute = (): void => {
+    this.room?.localParticipant.getTrackPublication(Track.Source.Microphone)?.mute().catch(() => {});
+  };
+
+  private handleHardwareMicUnmute = (): void => {
+    this.room?.localParticipant.getTrackPublication(Track.Source.Microphone)?.unmute().catch(() => {});
+  };
+
+  // Re-attaches handleHardwareMicMute/Unmute to whatever MediaStreamTrack currently backs the mic
+  // publication; a no-op if it's the same track as last time. mute()/unmute() are used (rather than
+  // some separate hardware-mute flag) so the existing TrackMuted/TrackUnmuted-driven resync pipeline
+  // (registerListeners below) picks it up for free, the same as an explicit in-app mute.
+  private syncHardwareMuteListener(): void {
+    const track =
+      this.room?.localParticipant.getTrackPublication(Track.Source.Microphone)?.audioTrack?.mediaStreamTrack ?? null;
+    if (track === this.hardwareMuteTrack) return;
+    this.hardwareMuteTrack?.removeEventListener('mute', this.handleHardwareMicMute);
+    this.hardwareMuteTrack?.removeEventListener('unmute', this.handleHardwareMicUnmute);
+    this.hardwareMuteTrack = track;
+    track?.addEventListener('mute', this.handleHardwareMicMute);
+    track?.addEventListener('unmute', this.handleHardwareMicUnmute);
+  }
+
   async setMicrophoneDevice(deviceId: string): Promise<void> {
     await this.room?.switchActiveDevice('audioinput', deviceId);
+    this.syncHardwareMuteListener();
   }
 
   async setSpeakerDevice(deviceId: string): Promise<void> {
