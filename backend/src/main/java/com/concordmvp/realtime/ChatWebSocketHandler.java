@@ -5,6 +5,7 @@ import com.concordmvp.common.exception.ForbiddenException;
 import com.concordmvp.common.exception.ResourceNotFoundException;
 import com.concordmvp.dm.DmMessageService;
 import com.concordmvp.dm.dto.SendDmMessageRequest;
+import com.concordmvp.dmcalls.DmCallService;
 import com.concordmvp.media.VoicePresenceService;
 import com.concordmvp.media.WhistleService;
 import com.concordmvp.media.dto.VoicePresenceUpdateRequest;
@@ -50,16 +51,19 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     private final DmMessageService dmMessageService;
     private final VoicePresenceService voicePresenceService;
     private final WhistleService whistleService;
+    private final DmCallService dmCallService;
 
     public ChatWebSocketHandler(WebSocketSessionRegistry sessionRegistry, ObjectMapper objectMapper,
                                  MessageService messageService, DmMessageService dmMessageService,
-                                 VoicePresenceService voicePresenceService, WhistleService whistleService) {
+                                 VoicePresenceService voicePresenceService, WhistleService whistleService,
+                                 DmCallService dmCallService) {
         this.sessionRegistry = sessionRegistry;
         this.objectMapper = objectMapper;
         this.messageService = messageService;
         this.dmMessageService = dmMessageService;
         this.voicePresenceService = voicePresenceService;
         this.whistleService = whistleService;
+        this.dmCallService = dmCallService;
     }
 
     @Override
@@ -73,6 +77,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         sessionRegistry.unregister(userId, session);
         if (sessionRegistry.getSessions(userId).isEmpty()) {
             voicePresenceService.removePresence(userId);
+            dmCallService.handleDisconnect(userId);
         }
     }
 

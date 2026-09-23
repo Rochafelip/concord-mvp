@@ -84,7 +84,11 @@ class VoiceClient {
   // *before* that fetch starts — otherwise a disconnect() that happens mid-fetch would bump
   // connectGeneration too late to be seen by the connect() call that follows once the fetch
   // resolves, and the user would be silently reconnected to the channel they just left.
-  beginConnect(channelId: string): number {
+  // `channelId` is null for a 1:1 call between friends (dmCalls), which has no server voice
+  // channel to report presence for — reportPresenceIfChanged()/disconnect() below already guard
+  // on `this.currentChannelId` being truthy, so leaving it null there is all that's needed to
+  // skip VOICE_PRESENCE_UPDATE/LEAVE for that case; nothing else about the connection differs.
+  beginConnect(channelId: string | null): number {
     if (this.room) {
       // disconnect() also bumps connectGeneration, invalidating any older in-flight connect()
       // still running — this call's own generation is captured AFTER that, below. silent: true
@@ -106,7 +110,7 @@ class VoiceClient {
   // unchanged. A caller with an async gap (useJoinVoiceChannel, fetching a token first) must call
   // beginConnect() itself beforehand and pass the result here — see beginConnect's comment.
   async connect(
-    channelId: string,
+    channelId: string | null,
     token: string,
     url: string,
     generation: number = this.beginConnect(channelId),

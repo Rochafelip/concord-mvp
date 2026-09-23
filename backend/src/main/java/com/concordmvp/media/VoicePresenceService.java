@@ -2,10 +2,12 @@ package com.concordmvp.media;
 
 import com.concordmvp.channels.Channel;
 import com.concordmvp.channels.ChannelService;
+import com.concordmvp.dmcalls.DmCallService;
 import com.concordmvp.permissions.Permission;
 import com.concordmvp.permissions.PermissionService;
 import com.concordmvp.channels.ChannelType;
 import com.concordmvp.common.exception.BadRequestException;
+import com.concordmvp.common.exception.ConflictException;
 import com.concordmvp.common.exception.ForbiddenException;
 import com.concordmvp.common.exception.ResourceNotFoundException;
 import com.concordmvp.media.dto.VoicePresenceLeavePayload;
@@ -54,6 +56,7 @@ public class VoicePresenceService {
     private final PermissionService permissionService;
     private final MediaService mediaService;
     private final WhistleService whistleService;
+    private final DmCallService dmCallService;
 
         @Autowired
         public VoicePresenceService(ChannelService channelService,
@@ -63,7 +66,8 @@ public class VoicePresenceService {
                                  RealtimeEventPublisher realtimeEventPublisher,
                                  PermissionService permissionService,
                                  MediaService mediaService,
-                                 @Lazy WhistleService whistleService) {
+                                 @Lazy WhistleService whistleService,
+                                 @Lazy DmCallService dmCallService) {
         this.permissionService = permissionService;
         this.channelService = channelService;
         this.serverMemberRepository = serverMemberRepository;
@@ -72,6 +76,7 @@ public class VoicePresenceService {
         this.realtimeEventPublisher = realtimeEventPublisher;
         this.mediaService = mediaService;
         this.whistleService = whistleService;
+        this.dmCallService = dmCallService;
     }
 
     public void updatePresence(UUID channelId, UUID userId, boolean muted, boolean cameraOn,
@@ -79,6 +84,11 @@ public class VoicePresenceService {
         Channel channel = channelService.getChannel(channelId, userId);
         if (channel.getType() != ChannelType.VOICE) {
             throw new BadRequestException("Channel is not a voice channel: " + channelId);
+        }
+        // One call at a time (docs/superpowers/specs/2026-09-23-dm-call-design.md) — mirrors the
+        // same check DmCallService does in the other direction via isInVoice below.
+        if (dmCallService.isInCall(userId)) {
+            throw new ConflictException("Você está em uma chamada");
         }
 
         User user = userRepository.findById(userId)
@@ -102,6 +112,12 @@ public class VoicePresenceService {
     public boolean isConnected(UUID channelId, UUID userId) {
         Entry entry = byUserId.get(userId);
         return entry != null && entry.channelId().equals(channelId);
+    }
+
+    /** Whether {@code userId} is currently connected to any server voice channel — consulted by
+     *  {@link DmCallService} to keep "one call at a time" across both call types. */
+    public boolean isInVoice(UUID userId) {
+        return byUserId.containsKey(userId);
     }
 
     /**

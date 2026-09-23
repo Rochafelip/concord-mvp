@@ -27,6 +27,8 @@ export type WsEventType =
   | 'PERMISSIONS_UPDATE'
   | 'FRIEND_UPDATE'
   | 'DM_MESSAGE_CREATE'
+  | 'CALL_INVITE'
+  | 'CALL_RESOLVED'
   | 'ERROR';
 
 /** Generic envelope for a WebSocket frame in both directions: {"type": "...", "payload": {...}}. */
@@ -127,4 +129,19 @@ export interface WhistlePayload {
 export interface FriendUpdatePayload {
   userId: string;
   otherUserId: string;
+}
+
+/** Wire shape of CALL_INVITE — sent only to the callee (docs/superpowers/specs/2026-09-23-dm-call-design.md). */
+export interface CallInvitePayload {
+  callId: string;
+  caller: { id: string; username: string; displayName: string; avatarUrl: string | null };
+}
+
+export type CallOutcome = 'ACCEPTED' | 'DECLINED' | 'CANCELLED';
+
+/** Wire shape of CALL_RESOLVED — sent to both participants; `roomName` is set only when `outcome` is ACCEPTED. */
+export interface CallResolvedPayload {
+  callId: string;
+  outcome: CallOutcome;
+  roomName: string | null;
 }

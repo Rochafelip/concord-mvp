@@ -2,6 +2,7 @@ package com.concordmvp.realtime;
 
 import com.concordmvp.common.exception.ForbiddenException;
 import com.concordmvp.dm.DmMessageService;
+import com.concordmvp.dmcalls.DmCallService;
 import com.concordmvp.media.VoicePresenceService;
 import com.concordmvp.media.WhistleService;
 import com.concordmvp.messages.MessageService;
@@ -54,6 +55,9 @@ class ChatWebSocketHandlerTest {
     @Mock
     private WhistleService whistleService;
 
+    @Mock
+    private DmCallService dmCallService;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private ChatWebSocketHandler handler;
@@ -61,7 +65,7 @@ class ChatWebSocketHandlerTest {
     @BeforeEach
     void setUp() {
         handler = new ChatWebSocketHandler(sessionRegistry, objectMapper, messageService, dmMessageService,
-                voicePresenceService, whistleService);
+                voicePresenceService, whistleService, dmCallService);
     }
 
     @Test
@@ -96,6 +100,17 @@ class ChatWebSocketHandlerTest {
     }
 
     @Test
+    void afterConnectionClosed_userHasNoRemainingSessions_alsoEndsAnyDmCallActivity() {
+        UUID userId = UUID.randomUUID();
+        WebSocketSession session = sessionWithUserId(userId);
+        when(sessionRegistry.getSessions(userId)).thenReturn(Set.of());
+
+        handler.afterConnectionClosed(session, CloseStatus.NORMAL);
+
+        verify(dmCallService).handleDisconnect(userId);
+    }
+
+    @Test
     void afterConnectionClosed_userHasAnotherOpenSession_doesNotRemoveVoicePresence() {
         UUID userId = UUID.randomUUID();
         WebSocketSession session = sessionWithUserId(userId);
@@ -105,6 +120,7 @@ class ChatWebSocketHandlerTest {
         handler.afterConnectionClosed(session, CloseStatus.NORMAL);
 
         verify(voicePresenceService, never()).removePresence(any());
+        verify(dmCallService, never()).handleDisconnect(any());
     }
 
     @Test
