@@ -152,8 +152,11 @@ user with permission to run Docker.
 cd /path/to/concord-mvp
 git pull
 cd infrastructure
-docker compose --env-file .env -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+./compose-up.sh --env-file .env -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ```
+
+`compose-up.sh` (`HOME_DEPLOY.md`) refuses to run outside the `master`
+branch, since this brings up the real production stack.
 
 Same update pattern `VM_REVIEW.md` already uses for the review VM.
 
