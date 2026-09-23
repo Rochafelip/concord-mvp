@@ -6,6 +6,7 @@ import com.concordmvp.common.exception.ConflictException;
 import com.concordmvp.common.exception.ForbiddenException;
 import com.concordmvp.common.exception.ResourceNotFoundException;
 import com.concordmvp.common.exception.TooManyRequestsException;
+import com.concordmvp.dm.DmConversationStateService;
 import com.concordmvp.dmcalls.dto.CallInvitePayload;
 import com.concordmvp.dmcalls.dto.CallResolvedPayload;
 import com.concordmvp.friends.FriendshipRepository;
@@ -69,6 +70,7 @@ public class DmCallService {
     private final RealtimeEventPublisher realtimeEventPublisher;
     private final MediaService mediaService;
     private final VoicePresenceService voicePresenceService;
+    private final DmConversationStateService dmConversationStateService;
 
     // Keyed by "callerId:calleeId", not just callerId — a caller spamming many different friends
     // shouldn't be throttled by attempts aimed at any one of them, but ringing the same friend
@@ -78,13 +80,15 @@ public class DmCallService {
 
     public DmCallService(FriendshipRepository friendshipRepository, UserRepository userRepository,
                           WebSocketSessionRegistry sessionRegistry, RealtimeEventPublisher realtimeEventPublisher,
-                          MediaService mediaService, VoicePresenceService voicePresenceService) {
+                          MediaService mediaService, VoicePresenceService voicePresenceService,
+                          DmConversationStateService dmConversationStateService) {
         this.friendshipRepository = friendshipRepository;
         this.userRepository = userRepository;
         this.sessionRegistry = sessionRegistry;
         this.realtimeEventPublisher = realtimeEventPublisher;
         this.mediaService = mediaService;
         this.voicePresenceService = voicePresenceService;
+        this.dmConversationStateService = dmConversationStateService;
     }
 
     public UUID invite(UUID callerId, UUID calleeId) {
@@ -108,6 +112,8 @@ public class DmCallService {
 
         UUID callId = UUID.randomUUID();
         pendingById.put(callId, new PendingCall(callId, callerId, calleeId, Instant.now().plus(RING_TTL)));
+        dmConversationStateService.ensureVisible(callerId, calleeId);
+        dmConversationStateService.ensureVisible(calleeId, callerId);
 
         realtimeEventPublisher.broadcast(Set.of(calleeId),
                 new WsEvent(WsEventType.CALL_INVITE, new CallInvitePayload(callId, toSummary(caller))));
