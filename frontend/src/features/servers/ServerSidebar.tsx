@@ -17,7 +17,15 @@ import type { Friend } from '../../types/friend';
  * DMs reuse the friend list (there is no separate "conversations" concept on the backend) so
  * every friend is one tap away, the same way every server is.
  */
-export function ServerSidebar() {
+interface ServerSidebarProps {
+  /** Called when a link that represents a "final" destination (Amigos, or sending a message
+   * from a friend's profile popover) is used — NOT when selecting a server, since that should
+   * keep a mobile nav drawer open for picking a channel next. See ChannelSidebar's own
+   * `onNavigate` for the matching convention on the channel side. */
+  onNavigate?: () => void;
+}
+
+export function ServerSidebar({ onNavigate }: ServerSidebarProps) {
   const { serverId, friendUserId } = useParams<{ serverId: string; friendUserId: string }>();
   const location = useLocation();
   const serversQuery = useServers();
@@ -49,6 +57,7 @@ export function ServerSidebar() {
           aria-label="Amigos"
           aria-current={isFriendsAreaSelected ? 'page' : undefined}
           title="Amigos"
+          onClick={onNavigate}
           className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full transition-colors sm:h-12 sm:w-12 ${
             isFriendsAreaSelected ? 'bg-brand text-white' : 'bg-sidebar text-muted hover:bg-brand/20'
           }`}
@@ -85,6 +94,7 @@ export function ServerSidebar() {
           friend={friend}
           isSelected={friend.user.id === friendUserId}
           hasUnread={unreadFriendIds.includes(friend.user.id) && friend.user.id !== friendUserId}
+          onNavigate={onNavigate}
         />
       ))}
 
@@ -146,10 +156,12 @@ function FriendRailIcon({
   friend,
   isSelected,
   hasUnread,
+  onNavigate,
 }: {
   friend: Friend;
   isSelected: boolean;
   hasUnread: boolean;
+  onNavigate?: () => void;
 }) {
   const [avatarFailed, setAvatarFailed] = useState(false);
   const initial = friend.user.displayName.trim().charAt(0).toUpperCase() || '?';
@@ -157,7 +169,7 @@ function FriendRailIcon({
   return (
     <div className="relative flex w-full items-center justify-center">
       {isSelected && <span className="absolute left-0 h-8 w-1 rounded-r bg-brand" aria-hidden="true" />}
-      <UserProfileCard user={friend.user}>
+      <UserProfileCard user={friend.user} onNavigate={onNavigate}>
         <button
           type="button"
           aria-label={friend.user.displayName}
