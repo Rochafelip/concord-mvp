@@ -1,5 +1,6 @@
 import { Avatar } from '../../components/Avatar';
 import { voiceClient } from '../../services/voiceClient';
+import { UserProfileCard } from '../users/UserProfileCard';
 import type { VoiceParticipant } from '../../types/voice';
 import { MicStatusIcon } from './MicStatusIcon';
 import { VolumeControl } from './VolumeControl';
@@ -33,20 +34,33 @@ export function OffCameraRoster({ participants, avatarUrlByUserId, deafenedByUse
     >
       {participants.map((participant) => {
         const deafened = deafenedByUserId.get(participant.identity) ?? false;
+        const profileUser = {
+          id: participant.identity,
+          displayName: participant.name,
+          avatarUrl: avatarUrlByUserId.get(participant.identity),
+        };
         return (
           <div
             key={participant.identity}
             className="group/roster-entry flex flex-shrink-0 items-center gap-2"
           >
-            <Avatar
-              displayName={participant.name}
-              avatarUrl={avatarUrlByUserId.get(participant.identity)}
-              size="sm"
-              className={participant.speaking ? 'ring-2 ring-success' : ''}
-            />
+            <UserProfileCard user={profileUser}>
+              <button type="button" className="rounded-full">
+                <Avatar
+                  displayName={participant.name}
+                  avatarUrl={avatarUrlByUserId.get(participant.identity)}
+                  size="sm"
+                  className={participant.speaking ? 'ring-2 ring-success' : ''}
+                />
+              </button>
+            </UserProfileCard>
             <span className="flex items-center gap-1 text-caption text-ink">
               <MicStatusIcon micEnabled={participant.micEnabled} deafened={deafened} />
-              {participant.name}
+              <UserProfileCard user={profileUser}>
+                <button type="button" className="hover:underline">
+                  {participant.name}
+                </button>
+              </UserProfileCard>
             </span>
             {!participant.isLocal && (
               <div className="opacity-0 transition-opacity group-hover/roster-entry:opacity-100 group-focus-within/roster-entry:opacity-100">

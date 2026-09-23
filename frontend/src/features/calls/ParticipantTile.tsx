@@ -7,6 +7,7 @@ import { Spinner } from '../../components/Spinner';
 import { voiceClient } from '../../services/voiceClient';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { disconnectVoiceParticipant } from './api';
+import { UserProfileCard } from '../users/UserProfileCard';
 import type { VoiceParticipant } from '../../types/voice';
 import { QUALITY_ICON } from './connectionQuality';
 import { MicStatusIcon } from './MicStatusIcon';
@@ -181,7 +182,11 @@ export function ParticipantTile({
 
         <span className="absolute bottom-1 left-1 flex items-center gap-1 rounded bg-black/50 px-1.5 py-0.5 text-sm text-white">
           <MicStatusIcon micEnabled={participant.micEnabled} deafened={deafened} />
-          {participant.name}
+          <UserProfileCard user={{ id: participant.identity, displayName: participant.name, avatarUrl }}>
+            <button type="button" onClick={stopPropagation} className="hover:underline">
+              {participant.name}
+            </button>
+          </UserProfileCard>
           {participant.isLocal ? ' (you)' : ''}
         </span>
 

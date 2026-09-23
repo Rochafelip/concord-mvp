@@ -1,6 +1,7 @@
 import { useLayoutEffect, useMemo, useRef } from 'react';
 import { Avatar } from '../../components/Avatar';
 import { MessageContent } from '../chat/MessageContent';
+import { UserProfileCard } from '../users/UserProfileCard';
 import { useDmHistory } from './hooks';
 import type { DmMessage } from '../../types/dm';
 
@@ -105,10 +106,18 @@ export function DmMessageList({ otherUserId }: { otherUserId: string }) {
               </div>
             )}
             <div className="flex items-start gap-3">
-              <Avatar displayName={message.author.displayName} avatarUrl={message.author.avatarUrl} size="md" />
+              <UserProfileCard user={message.author}>
+                <button type="button" className="rounded-full">
+                  <Avatar displayName={message.author.displayName} avatarUrl={message.author.avatarUrl} size="md" />
+                </button>
+              </UserProfileCard>
               <div className="min-w-0">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-body font-semibold text-ink">{message.author.displayName}</span>
+                  <UserProfileCard user={message.author}>
+                    <button type="button" className="rounded text-body font-semibold text-ink hover:underline">
+                      {message.author.displayName}
+                    </button>
+                  </UserProfileCard>
                   <span className="text-caption text-muted">{createdAt.toLocaleTimeString()}</span>
                 </div>
                 <MessageContent content={message.content} />

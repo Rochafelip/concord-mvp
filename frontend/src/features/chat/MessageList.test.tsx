@@ -16,6 +16,12 @@ vi.mock('../channels/hooks', () => ({
   useMarkChannelAsRead: vi.fn(() => ({ mutate: vi.fn() })),
 }));
 
+// UserProfileCard needs a QueryClientProvider (useIsFriend) and a router (its DM link), neither
+// of which this file sets up — its own behavior is covered by UserProfileCard.test.tsx.
+vi.mock('../users/UserProfileCard', () => ({
+  UserProfileCard: ({ children }: { children: React.ReactNode }) => children,
+}));
+
 function attachment(
   url: string,
   fileName: string | null = null,
@@ -288,5 +294,16 @@ describe('MessageList', () => {
       'src',
       '/api/v1/uploads/second.png',
     );
+  });
+
+  it('makes the author avatar and name open a profile card for that author', () => {
+    mockHistory({
+      data: { pages: [[makeMessage('m1', 'hi', '2026-01-01T00:00:00Z')]], pageParams: [undefined] },
+    });
+
+    render(<MessageList channelId="c1" />);
+
+    // One trigger on the avatar (Avatar's own fallback aria-label), one on the name text.
+    expect(screen.getAllByRole('button', { name: 'Alice' })).toHaveLength(2);
   });
 });

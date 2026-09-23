@@ -12,6 +12,12 @@ vi.mock('../../services/voiceClient', () => ({
   },
 }));
 
+// UserProfileCard needs providers this file doesn't set up — its own behavior is covered by
+// UserProfileCard.test.tsx.
+vi.mock('../users/UserProfileCard', () => ({
+  UserProfileCard: ({ children }: { children: React.ReactNode }) => children,
+}));
+
 function participant(overrides: Partial<VoiceParticipant> = {}): VoiceParticipant {
   return {
     identity: 'u1',
@@ -138,5 +144,18 @@ describe('OffCameraRoster', () => {
     );
 
     expect(screen.getByLabelText('Felipe')).not.toHaveClass('ring-2');
+  });
+
+  it('makes a remote participant name a profile card trigger', () => {
+    render(
+      <OffCameraRoster
+        participants={[participant({ identity: 'bob', name: 'Bob' })]}
+        avatarUrlByUserId={new Map()}
+        deafenedByUserId={new Map()}
+      />,
+    );
+
+    // One trigger on the avatar (Avatar's own fallback aria-label), one on the name text.
+    expect(screen.getAllByRole('button', { name: 'Bob' })).toHaveLength(2);
   });
 });

@@ -8,9 +8,10 @@ import {
 } from './hooks';
 
 /**
- * Friend action for one member row in ServerSettingsPanel's Members tab — the only place a
- * friend request can be started (docs/superpowers/specs/2026-09-18-friends-and-dm-design.md:
- * discovery is deliberately scoped to shared-server members, no global search).
+ * Friend action button ("Adicionar amigo" / pending / "Amigos"), reused as-is inside
+ * UserProfileCard's popover (features/users/UserProfileCard.tsx), which is now the main entry
+ * point across the app. Discovery stays scoped to shared-server/DM contexts — no global search
+ * (docs/superpowers/specs/2026-09-18-friends-and-dm-design.md).
  */
 export function AddFriendButton({ userId }: { userId: string }) {
   const currentUserId = useAuthStore((state) => state.user?.id);
