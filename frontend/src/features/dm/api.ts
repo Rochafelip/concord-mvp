@@ -21,3 +21,11 @@ export function getHistory(
 
   return apiClient.get<DmMessage[]>(`dm/${otherUserId}/messages?${params.toString()}`);
 }
+
+export function openConversation(otherUserId: string): Promise<void> {
+  return apiClient.post<void>(`dm/${otherUserId}/open`);
+}
+
+export function listConversations(): Promise<string[]> {
+  return apiClient.get<string[]>('dm/conversations');
+}

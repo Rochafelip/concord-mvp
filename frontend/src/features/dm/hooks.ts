@@ -1,4 +1,4 @@
-import { useInfiniteQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { websocketClient } from '../../services/websocketClient';
 import * as api from './api';
 
@@ -29,4 +29,21 @@ export function useDmHistory(otherUserId: string | undefined) {
  */
 export function sendDmMessage(recipientId: string, content: string): void {
   websocketClient.send({ type: 'DM_MESSAGE_CREATE', payload: { recipientId, content } });
+}
+
+const CONVERSATIONS_KEY = ['dm-conversations'];
+
+/** The DM conversations currently visible in this user's list — see
+ *  docs/superpowers/specs/2026-09-23-dm-conversation-visibility-design.md. */
+export function useDmConversations() {
+  return useQuery({ queryKey: CONVERSATIONS_KEY, queryFn: api.listConversations });
+}
+
+/** Marks a conversation as opened by the current user, making it visible in their list. */
+export function useOpenDmConversation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (otherUserId: string) => api.openConversation(otherUserId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: CONVERSATIONS_KEY }),
+  });
 }
