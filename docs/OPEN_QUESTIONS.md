@@ -946,7 +946,9 @@ Recommended:
 
 ## Q28 — Friends
 
-**Status:** ✅ Resolved — see `PRODUCT.md` §19.
+**Status:** ✅ Resolved — superseded. Originally decided "No" (see below),
+later implemented as an owner-approved scope addition; see `PRODUCT.md` §24
+and `docs/DECISIONS.md` D25.
 
 ### Question
 
@@ -958,16 +960,21 @@ Friends list
 Friend removal
 ```
 
-* [ ] Yes
-* [x] No
+* [x] Yes
+* [ ] No
 
 Recommended:
 
-* No.
+* No, at the time this question was first answered.
 
 **Decision:**
 
-> No. Listed under MVP Non-Goals in PRODUCT.md §19 ("Social").
+> Originally: No — listed under MVP Non-Goals in PRODUCT.md §19 ("Social").
+> Superseded: implemented on `feature/friends-and-dm` (PR #30, extended by
+> PR #65) along with 1:1 direct messages and 1:1 voice/video/screen-share
+> calls between friends. Group DMs were not part of this addition and stay
+> out of scope. See `docs/DECISIONS.md` D25 for the full scope and
+> `PRODUCT.md` §24 for the product-level description.
 
 ---
 

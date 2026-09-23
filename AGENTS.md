@@ -129,13 +129,44 @@ per-channel permission overrides do not yet.
 * Stop screen sharing
 * Display shared screen
 
+### Friends and Direct Messages
+
+Implemented as an owner-approved scope addition (`feature/friends-and-dm`,
+docs/DECISIONS.md D25) — not part of the original MVP definition above, kept
+separate here rather than folded into it.
+
+* Friend requests: send, accept, decline, cancel, and remove (unfriend). A
+  request can only be sent to a user who shares at least one server with the
+  sender (`FriendshipService.shareAnyServer`)
+* `FriendshipStatus` has only `PENDING` and `ACCEPTED` — decline, cancel, and
+  unfriend all delete the row rather than recording a terminal state
+* Direct messages: plain text only (max 4000 characters), no attachments, no
+  edit/delete, no unread tracking. Sending requires an `ACCEPTED` friendship
+  (`DmMessageService.requireFriends`); history stays readable after
+  unfriending — only sending is blocked. Sent over WebSocket
+  (`DM_MESSAGE_CREATE`); history is read via a paginated REST endpoint
+* 1:1 calls between friends: voice, video and screen share (not voice-only),
+  using the same LiveKit token flow as server voice channels. Invite,
+  accept, decline and cancel are entirely in-memory (`DmCallService`, no DB
+  table) — a missed call just disappears, like a real phone call — with a
+  30s ring TTL and a per-pair rate limit. Also friends-only
+  (`DmCallService.requireFriends`)
+* Call Picture-in-Picture works for both server voice channels and 1:1 calls
+  (`DmCallView` reuses the same `CallControlBar`). The private whistle
+  (`WhistleService`) does not — it requires a server voice `Channel` and is
+  not wired to `DmCallService`
+* Entirely outside the roles/permissions system: no role, channel override,
+  or `PermissionService` check applies to friends or DMs — the only rule is
+  "friends only"
+
+Group DMs remain out of scope (see below).
+
 ---
 
 # Explicitly Out of Scope
 
 Do NOT implement the following unless explicitly requested:
 
-* Direct messages
 * Group DMs
 * Bots
 * Threads
