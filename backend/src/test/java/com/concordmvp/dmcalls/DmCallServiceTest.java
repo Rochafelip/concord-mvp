@@ -5,6 +5,7 @@ import com.concordmvp.common.exception.ConflictException;
 import com.concordmvp.common.exception.ForbiddenException;
 import com.concordmvp.common.exception.ResourceNotFoundException;
 import com.concordmvp.common.exception.TooManyRequestsException;
+import com.concordmvp.dm.DmConversationStateService;
 import com.concordmvp.dmcalls.dto.CallInvitePayload;
 import com.concordmvp.dmcalls.dto.CallResolvedPayload;
 import com.concordmvp.friends.Friendship;
@@ -60,12 +61,15 @@ class DmCallServiceTest {
     @Mock
     private VoicePresenceService voicePresenceService;
 
+    @Mock
+    private DmConversationStateService dmConversationStateService;
+
     private DmCallService dmCallService;
 
     @BeforeEach
     void setUp() {
         dmCallService = new DmCallService(friendshipRepository, userRepository, sessionRegistry,
-                realtimeEventPublisher, mediaService, voicePresenceService);
+                realtimeEventPublisher, mediaService, voicePresenceService, dmConversationStateService);
         // Defaults so a test only has to override what it actually cares about: friends, online,
         // nobody busy.
         lenient().when(sessionRegistry.isOnline(org.mockito.ArgumentMatchers.any())).thenReturn(true);
@@ -99,7 +103,7 @@ class DmCallServiceTest {
 
         assertThatThrownBy(() -> dmCallService.invite(userId, userId)).isInstanceOf(BadRequestException.class);
 
-        verifyNoInteractions(realtimeEventPublisher);
+        verifyNoInteractions(realtimeEventPublisher, dmConversationStateService);
     }
 
     @Test
@@ -110,7 +114,7 @@ class DmCallServiceTest {
 
         assertThatThrownBy(() -> dmCallService.invite(callerId, calleeId)).isInstanceOf(ForbiddenException.class);
 
-        verifyNoInteractions(realtimeEventPublisher);
+        verifyNoInteractions(realtimeEventPublisher, dmConversationStateService);
     }
 
     @Test
@@ -135,7 +139,7 @@ class DmCallServiceTest {
 
         assertThatThrownBy(() -> dmCallService.invite(callerId, calleeId)).isInstanceOf(ConflictException.class);
 
-        verifyNoInteractions(realtimeEventPublisher);
+        verifyNoInteractions(realtimeEventPublisher, dmConversationStateService);
     }
 
     @Test
@@ -222,6 +226,9 @@ class DmCallServiceTest {
         assertThat(payload.callId()).isEqualTo(callId);
         assertThat(payload.caller().id()).isEqualTo(callerId);
         assertThat(payload.caller().displayName()).isEqualTo("Alice");
+
+        verify(dmConversationStateService).ensureVisible(callerId, calleeId);
+        verify(dmConversationStateService).ensureVisible(calleeId, callerId);
     }
 
     // --- accept ---

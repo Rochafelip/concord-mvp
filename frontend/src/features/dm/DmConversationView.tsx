@@ -9,6 +9,7 @@ import { startDmCall } from '../calls/dm/startDmCall';
 import { useFriends } from '../friends/hooks';
 import { DmMessageInput } from './DmMessageInput';
 import { DmMessageList } from './DmMessageList';
+import { useOpenDmConversation } from './hooks';
 
 /**
  * Mounted at /app/dm/:friendUserId. History stays readable after an unfriend (see the design
@@ -23,10 +24,15 @@ export function DmConversationView() {
   const clearFriendUnread = useNotificationStore((state) => state.clearFriendUnread);
   const callStatus = useDmCallStore((state) => state.status);
   const callPeerId = useDmCallStore((state) => state.peer?.id);
+  const { mutate: openConversation } = useOpenDmConversation();
 
   useEffect(() => {
     if (friendUserId) clearFriendUnread(friendUserId);
   }, [clearFriendUnread, friendUserId]);
+
+  useEffect(() => {
+    if (friendUserId) openConversation(friendUserId);
+  }, [friendUserId, openConversation]);
 
   if (!friendUserId) return null;
 

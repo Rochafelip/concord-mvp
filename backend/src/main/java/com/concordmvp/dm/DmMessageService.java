@@ -44,15 +44,18 @@ public class DmMessageService {
     private final FriendshipRepository friendshipRepository;
     private final UserRepository userRepository;
     private final RealtimeEventPublisher realtimeEventPublisher;
+    private final DmConversationStateService dmConversationStateService;
 
     public DmMessageService(DmMessageRepository dmMessageRepository,
                              FriendshipRepository friendshipRepository,
                              UserRepository userRepository,
-                             RealtimeEventPublisher realtimeEventPublisher) {
+                             RealtimeEventPublisher realtimeEventPublisher,
+                             DmConversationStateService dmConversationStateService) {
         this.dmMessageRepository = dmMessageRepository;
         this.friendshipRepository = friendshipRepository;
         this.userRepository = userRepository;
         this.realtimeEventPublisher = realtimeEventPublisher;
+        this.dmConversationStateService = dmConversationStateService;
     }
 
     @Transactional
@@ -78,6 +81,8 @@ public class DmMessageService {
         message.setAuthorId(authorId);
         message.setContent(trimmed);
         DmMessage saved = dmMessageRepository.save(message);
+        dmConversationStateService.ensureVisible(authorId, otherUserId);
+        dmConversationStateService.ensureVisible(otherUserId, authorId);
 
         User author = userRepository.findById(authorId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + authorId));
