@@ -3,9 +3,9 @@ import { useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { Avatar } from '../../components/Avatar';
 import { useNotificationStore } from '../../stores/notificationStore';
-import * as dmCallApi from '../calls/dm/api';
 import { DmCallView } from '../calls/dm/DmCallView';
 import { useDmCallStore } from '../calls/dm/dmCallStore';
+import { startDmCall } from '../calls/dm/startDmCall';
 import { useFriends } from '../friends/hooks';
 import { DmMessageInput } from './DmMessageInput';
 import { DmMessageList } from './DmMessageList';
@@ -36,9 +36,7 @@ export function DmConversationView() {
 
   function handleCall() {
     if (!friend) return;
-    dmCallApi.inviteCall(friend.user.id).then(({ callId }) => {
-      useDmCallStore.getState().startOutgoing(callId, friend.user);
-    }).catch(() => {});
+    startDmCall(friend.user);
   }
 
   return (

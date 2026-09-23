@@ -3,6 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAuthStore } from '../auth/authStore';
+import { useDmCallStore } from '../calls/dm/dmCallStore';
+import { startDmCall } from '../calls/dm/startDmCall';
 import * as friendsHooks from '../friends/hooks';
 import { UserProfileCard } from './UserProfileCard';
 
@@ -12,6 +14,8 @@ vi.mock('react-router-dom', async (importOriginal) => ({
   useNavigate: () => navigate,
 }));
 
+vi.mock('../calls/dm/startDmCall', () => ({ startDmCall: vi.fn() }));
+
 vi.mock('../friends/hooks', () => ({
   useIsFriend: vi.fn(),
   useFriends: vi.fn(),
@@ -19,6 +23,7 @@ vi.mock('../friends/hooks', () => ({
   useSendFriendRequest: vi.fn(),
   useAcceptFriendRequest: vi.fn(),
   useCancelOrDeclineFriendRequest: vi.fn(),
+  useRemoveFriend: vi.fn(),
 }));
 
 function mutation(mutate = vi.fn()) {
@@ -38,6 +43,8 @@ function renderCard(userId = 'u2', displayName = 'Bob') {
 describe('UserProfileCard', () => {
   beforeEach(() => {
     navigate.mockClear();
+    vi.mocked(startDmCall).mockClear();
+    useDmCallStore.setState({ status: 'idle', callId: null, role: null, peer: null });
     useAuthStore.setState({
       user: { id: 'me', username: 'me', displayName: 'Me', email: 'me@x.com', avatarUrl: null },
     });
@@ -49,6 +56,7 @@ describe('UserProfileCard', () => {
     vi.mocked(friendsHooks.useSendFriendRequest).mockReturnValue(mutation() as never);
     vi.mocked(friendsHooks.useAcceptFriendRequest).mockReturnValue(mutation() as never);
     vi.mocked(friendsHooks.useCancelOrDeclineFriendRequest).mockReturnValue(mutation() as never);
+    vi.mocked(friendsHooks.useRemoveFriend).mockReturnValue(mutation() as never);
   });
 
   it('does not show popover content until the trigger is clicked', () => {
@@ -120,6 +128,46 @@ describe('UserProfileCard', () => {
     await user.click(await screen.findByText('Enviar mensagem'));
 
     expect(navigate).toHaveBeenCalledWith('/app/dm/u2');
+  });
+
+  it('opens the profile popover from the right-click "Perfil" item', async () => {
+    const user = userEvent.setup();
+    renderCard();
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: 'Bob' }));
+    await user.click(await screen.findByText('Perfil'));
+
+    expect(await screen.findByRole('button', { name: /adicionar amigo/i })).toBeInTheDocument();
+  });
+
+  it('offers to start a call from the right-click menu when the friend is online', async () => {
+    vi.mocked(friendsHooks.useIsFriend).mockReturnValue(true);
+    vi.mocked(friendsHooks.useFriends).mockReturnValue({
+      data: [{ friendshipId: 'f1', user: { id: 'u2', username: 'b', displayName: 'Bob', avatarUrl: null }, online: true, since: '' }],
+    } as never);
+    const user = userEvent.setup();
+    renderCard();
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: 'Bob' }));
+    await user.click(await screen.findByText('Iniciar chamada'));
+
+    expect(startDmCall).toHaveBeenCalledWith({ id: 'u2', username: 'b', displayName: 'Bob', avatarUrl: null });
+  });
+
+  it('offers to remove the friend from the right-click menu', async () => {
+    const remove = vi.fn();
+    vi.mocked(friendsHooks.useIsFriend).mockReturnValue(true);
+    vi.mocked(friendsHooks.useFriends).mockReturnValue({
+      data: [{ friendshipId: 'f1', user: { id: 'u2', username: 'b', displayName: 'Bob', avatarUrl: null }, online: false, since: '' }],
+    } as never);
+    vi.mocked(friendsHooks.useRemoveFriend).mockReturnValue(mutation(remove) as never);
+    const user = userEvent.setup();
+    renderCard();
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: 'Bob' }));
+    await user.click(await screen.findByText('Desfazer amizade'));
+
+    expect(remove).toHaveBeenCalledWith('f1');
   });
 
   it('does not show a right-click menu for the current user', () => {

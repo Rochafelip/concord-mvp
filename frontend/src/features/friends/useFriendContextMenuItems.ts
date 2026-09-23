@@ -1,18 +1,22 @@
 import { useNavigate } from 'react-router-dom';
 import type { ContextMenuItem } from '../../components/ContextMenu';
+import { useDmCallStore } from '../calls/dm/dmCallStore';
+import { startDmCall } from '../calls/dm/startDmCall';
 import {
   useAcceptFriendRequest,
   useCancelOrDeclineFriendRequest,
   useFriends,
   usePendingFriendRequests,
+  useRemoveFriend,
   useSendFriendRequest,
 } from './hooks';
 
 /**
- * The friend action for `userId` (send/cancel/accept a request, or jump to the DM once friends),
- * as a single right-click context-menu item — same state machine as AddFriendButton, offered
- * as a ContextMenu entry instead of a rendered button. Consumed by UserProfileCard, which is the
- * one place this needs wiring since every username in the app already renders through it.
+ * The friend action(s) for `userId` — send/cancel/accept a request, or once friends: message,
+ * call (if online and not already mid-call), and unfriend — as right-click context-menu items.
+ * Same state machine as AddFriendButton, offered as ContextMenu entries instead of a rendered
+ * button. Consumed by UserProfileCard, which is the one place this needs wiring since every
+ * username in the app already renders through it.
  */
 export function useFriendContextMenuItems(userId: string): ContextMenuItem[] {
   const navigate = useNavigate();
@@ -21,9 +25,21 @@ export function useFriendContextMenuItems(userId: string): ContextMenuItem[] {
   const sendMutation = useSendFriendRequest();
   const acceptMutation = useAcceptFriendRequest();
   const cancelMutation = useCancelOrDeclineFriendRequest();
+  const removeMutation = useRemoveFriend();
+  const dmCallStatus = useDmCallStore((state) => state.status);
 
-  if ((friends ?? []).some((friend) => friend.user.id === userId)) {
-    return [{ label: 'Enviar mensagem', onSelect: () => navigate(`/app/dm/${userId}`) }];
+  const friend = (friends ?? []).find((candidate) => candidate.user.id === userId);
+  if (friend) {
+    const items: ContextMenuItem[] = [{ label: 'Enviar mensagem', onSelect: () => navigate(`/app/dm/${userId}`) }];
+    if (friend.online && dmCallStatus === 'idle') {
+      items.push({ label: 'Iniciar chamada', onSelect: () => startDmCall(friend.user) });
+    }
+    items.push({
+      label: 'Desfazer amizade',
+      variant: 'danger',
+      onSelect: () => removeMutation.mutate(friend.friendshipId),
+    });
+    return items;
   }
 
   const incoming = pending?.incoming.find((request) => request.user.id === userId);
