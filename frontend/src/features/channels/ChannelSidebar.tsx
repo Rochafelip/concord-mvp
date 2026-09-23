@@ -13,6 +13,7 @@ import { useAuthStore } from '../auth/authStore';
 import { useHasPermission, useServer } from '../servers/hooks';
 import { InvitePeopleModal } from '../servers/InvitePeopleModal';
 import { ServerSettingsPanel } from '../servers/ServerSettingsPanel';
+import { UserProfileCard } from '../users/UserProfileCard';
 import type { Channel, ChannelType } from '../../types/channel';
 import { CreateChannelModal } from './CreateChannelModal';
 import { useChannels, useDeleteChannel } from './hooks';
@@ -285,13 +286,30 @@ export function ChannelSidebar({ onNavigate }: ChannelSidebarProps) {
                               },
                             ]}
                           >
+                            {/* Plain <div>, not the UserProfileCard button: ContextMenu's own
+                                asChild needs a real DOM node as its immediate child to attach
+                                the right-click handler to — nesting it through UserProfileCard's
+                                opaque wrapper would drop that handler. The left-click popover
+                                trigger nests inside instead. */}
                             <div className="flex min-w-0 flex-1 items-center gap-1.5">
-                              <Avatar
-                                displayName={participant.displayName}
-                                avatarUrl={participant.avatarUrl}
-                                className={`h-5 w-5 flex-shrink-0 text-caption ${participant.speaking ? 'ring-2 ring-success' : ''}`}
-                              />
-                              <span className="truncate text-caption text-muted">{participant.displayName}</span>
+                              <UserProfileCard
+                                user={{
+                                  id: participant.userId,
+                                  displayName: participant.displayName,
+                                  avatarUrl: participant.avatarUrl,
+                                }}
+                              >
+                                <button type="button" className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
+                                  <span aria-hidden="true">
+                                    <Avatar
+                                      displayName={participant.displayName}
+                                      avatarUrl={participant.avatarUrl}
+                                      className={`h-5 w-5 flex-shrink-0 text-caption ${participant.speaking ? 'ring-2 ring-success' : ''}`}
+                                    />
+                                  </span>
+                                  <span className="truncate text-caption text-muted">{participant.displayName}</span>
+                                </button>
+                              </UserProfileCard>
                             </div>
                           </ContextMenu>
                           <span className="ml-auto flex flex-shrink-0 items-center gap-1 text-muted">

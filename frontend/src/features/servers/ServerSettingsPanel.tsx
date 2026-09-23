@@ -5,10 +5,10 @@ import { ErrorBanner } from '../../components/ErrorBanner';
 import { Modal } from '../../components/Modal';
 import { ApiError } from '../../services/apiClient';
 import { useAuthStore } from '../auth/authStore';
-import { AddFriendButton } from '../friends/AddFriendButton';
 import { MemberRoleEditor } from '../permissions/MemberRoleEditor';
 import { useRoles } from '../permissions/hooks';
 import { RolesTab } from '../permissions/RolesTab';
+import { UserProfileCard } from '../users/UserProfileCard';
 import {
   useDeleteServer,
   useInvite,
@@ -240,17 +240,27 @@ export function ServerSettingsPanel({ serverId, open, onClose }: ServerSettingsP
               {(members ?? []).map((member) => (
                 <li key={member.user.id} className="space-y-1 text-body text-ink">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="flex items-center gap-2">
-                      <Avatar
-                        displayName={member.displayName ?? member.user.displayName}
-                        avatarUrl={member.user.avatarUrl}
-                        className="h-6 w-6"
-                      />
-                      {member.displayName ?? member.user.displayName}
-                      {server?.ownerId === member.user.id && (
-                        <span className="text-caption uppercase text-muted">Owner</span>
-                      )}
-                    </span>
+                    <UserProfileCard
+                      user={{
+                        id: member.user.id,
+                        displayName: member.displayName ?? member.user.displayName,
+                        avatarUrl: member.user.avatarUrl,
+                      }}
+                    >
+                      <button type="button" className="flex items-center gap-2 text-left">
+                        <span aria-hidden="true">
+                          <Avatar
+                            displayName={member.displayName ?? member.user.displayName}
+                            avatarUrl={member.user.avatarUrl}
+                            className="h-6 w-6"
+                          />
+                        </span>
+                        {member.displayName ?? member.user.displayName}
+                        {server?.ownerId === member.user.id && (
+                          <span className="text-caption uppercase text-muted">Owner</span>
+                        )}
+                      </button>
+                    </UserProfileCard>
                     <span className="flex items-center gap-3">
                       {isOwner && member.user.id !== currentUserId && (
                         <button
@@ -261,7 +271,6 @@ export function ServerSettingsPanel({ serverId, open, onClose }: ServerSettingsP
                           Make owner
                         </button>
                       )}
-                      <AddFriendButton userId={member.user.id} />
                     </span>
                   </div>
                   {canManageRoles && server?.ownerId !== member.user.id && member.user.id !== currentUserId && (

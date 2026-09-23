@@ -19,6 +19,12 @@ vi.mock('./api', () => ({
   disconnectVoiceParticipant: vi.fn(),
 }));
 
+// UserProfileCard needs providers this file doesn't set up — its own behavior is covered by
+// UserProfileCard.test.tsx.
+vi.mock('../users/UserProfileCard', () => ({
+  UserProfileCard: ({ children }: { children: React.ReactNode }) => children,
+}));
+
 function participant(overrides: Partial<VoiceParticipant> = {}): VoiceParticipant {
   return {
     identity: 'u1',
@@ -430,6 +436,14 @@ describe('ParticipantTile', () => {
       fireEvent.contextMenu(screen.getByLabelText('Felipe'));
 
       expect(screen.queryByText('Disconnect from voice')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('profile card trigger', () => {
+    it('makes the participant name a profile card trigger, for a remote participant', () => {
+      render(<ParticipantTile participant={participant({ identity: 'bob', name: 'Bob', isLocal: false })} />);
+
+      expect(screen.getByRole('button', { name: 'Bob' })).toBeInTheDocument();
     });
   });
 

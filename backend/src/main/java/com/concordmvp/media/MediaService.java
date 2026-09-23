@@ -98,6 +98,25 @@ public class MediaService {
         this.livekitPublicUrl = livekitPublicUrl;
     }
 
+    /** Every publish source there is — a 1:1 call has no roles to derive rights from, so once
+     *  accepted, both sides always get full mic/camera/screen-share rights. */
+    private static final List<String> DM_CALL_PUBLISH_SOURCES =
+            List.of("microphone", "camera", "screen_share", "screen_share_audio");
+
+    /**
+     * Issues a token for a 1:1 call between two friends
+     * (docs/superpowers/specs/2026-09-23-dm-call-design.md). Unlike {@link #issueVoiceToken},
+     * there's no channel/role to derive publish rights from — access is gated upstream by
+     * {@code dmcalls.DmCallService} (friendship + the call having actually been accepted), not by
+     * a grant computed here.
+     */
+    public VoiceTokenResponse issueDmCallToken(UUID requesterId, String roomName) {
+        User requester = requireVerifiedUser(requesterId);
+        String token = buildLiveKitToken(requester, requester.getDisplayName(), roomName,
+                DM_CALL_PUBLISH_SOURCES, false);
+        return new VoiceTokenResponse(token, livekitPublicUrl, roomName);
+    }
+
     public VoiceTokenResponse issueVoiceToken(UUID channelId, UUID requesterId) {
         Channel channel = validateVoiceChannel(channelId, requesterId);
         User requester = requireVerifiedUser(requesterId);

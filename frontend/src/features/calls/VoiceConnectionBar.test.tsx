@@ -1,9 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ConnectionQuality } from 'livekit-client';
 import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { voiceClient } from '../../services/voiceClient';
 import { useVoiceStore } from '../../stores/voiceStore';
 import type { Channel } from '../../types/channel';
@@ -242,7 +242,7 @@ describe('VoiceConnectionBar', () => {
       await user.click(screen.getByLabelText('Share system/tab audio'));
       await user.click(screen.getByRole('button', { name: 'Share' }));
 
-      expect(voiceClient.toggleScreenShare).toHaveBeenCalledWith({ quality: 'hd', withAudio: true });
+      expect(voiceClient.toggleScreenShare).toHaveBeenCalledWith({ quality: 'hd', frameRate: 30, withAudio: true });
       expect(screen.queryByText('Share your screen')).not.toBeInTheDocument();
     });
 
@@ -261,6 +261,74 @@ describe('VoiceConnectionBar', () => {
 
       expect(voiceClient.toggleScreenShare).not.toHaveBeenCalled();
       expect(screen.queryByText('Share your screen')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('picture-in-picture', () => {
+    // The portal renders into this detached <body> — it's not part of the real document, so
+    // assertions about its content use within(pipDocumentBody), not the module-level `screen`
+    // (which is bound to the real document.body and would never see it).
+    let pipDocumentBody: HTMLElement;
+
+    beforeEach(() => {
+      pipDocumentBody = document.createElement('body');
+      // Kept connected to the real document (rather than a fully detached node): jsdom's
+      // accessibility-tree computation for getByRole/findByRole treats a disconnected subtree as
+      // inaccessible, which would make every role query inside it fail even though the content
+      // renders correctly — a test-only artifact, since a real Picture-in-Picture window's
+      // document is a genuine, separately-rendered document, not a detached node.
+      document.body.appendChild(pipDocumentBody);
+      (window as { documentPictureInPicture?: unknown }).documentPictureInPicture = {
+        requestPictureInPicture: vi.fn().mockResolvedValue({
+          document: {
+            body: pipDocumentBody,
+            head: document.createElement('head'),
+            documentElement: document.createElement('html'),
+          },
+          close: vi.fn(),
+          addEventListener: vi.fn(),
+        }),
+      };
+    });
+
+    afterEach(() => {
+      pipDocumentBody.remove();
+      delete (window as { documentPictureInPicture?: unknown }).documentPictureInPicture;
+    });
+
+    it('shows a "Destacar chamada" button when the browser supports Picture-in-Picture', async () => {
+      useVoiceStore.setState({ status: 'connected', channelId: 'c1', participants: [localParticipant({})] });
+      renderBar();
+
+      await screen.findByText('Alpha');
+
+      expect(screen.getByRole('button', { name: 'Destacar chamada' })).toBeInTheDocument();
+    });
+
+    it('does not show the button when the browser has no Picture-in-Picture support', async () => {
+      delete (window as { documentPictureInPicture?: unknown }).documentPictureInPicture;
+      useVoiceStore.setState({ status: 'connected', channelId: 'c1', participants: [localParticipant({})] });
+      renderBar();
+
+      await screen.findByText('Alpha');
+
+      expect(screen.queryByRole('button', { name: 'Destacar chamada' })).not.toBeInTheDocument();
+    });
+
+    it('opens the pip window and hides the button once open', async () => {
+      const user = userEvent.setup();
+      useVoiceStore.setState({ status: 'connected', channelId: 'c1', participants: [localParticipant({})] });
+      renderBar();
+
+      await screen.findByText('Alpha');
+      await user.click(screen.getByRole('button', { name: 'Destacar chamada' }));
+
+      expect(window.documentPictureInPicture!.requestPictureInPicture).toHaveBeenCalledTimes(1);
+      // The PiP window's body is deliberately detached from the real document (that's the whole
+      // point) — jest-dom's toBeInTheDocument() would always fail on it regardless of content, so
+      // finding the button within that container (which throws if absent) is the assertion itself.
+      await within(pipDocumentBody).findByRole('button', { name: 'Voltar à chamada' });
+      expect(screen.queryByRole('button', { name: 'Destacar chamada' })).not.toBeInTheDocument();
     });
   });
 });

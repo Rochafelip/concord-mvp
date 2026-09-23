@@ -1,12 +1,8 @@
-import type { ScreenShareQuality } from '../../types/voice';
+import type { ScreenShareFrameRate, ScreenShareQuality } from '../../types/voice';
 
-// frameRate is capped at 30 for every preset: uncapped capture let the browser pick a variable
-// rate (up to display refresh, sometimes spiking), which combined with no bitrate ceiling caused
-// viewers to see stutter. A steady 30fps is smoother for screen share content than a higher,
-// unstable rate.
-export const SCREEN_SHARE_QUALITY_PRESETS: Record<ScreenShareQuality, { width: number; height: number; frameRate: number }> = {
-  hd: { width: 1280, height: 720, frameRate: 30 },
-  fhd: { width: 1920, height: 1080, frameRate: 30 },
+export const SCREEN_SHARE_QUALITY_PRESETS: Record<ScreenShareQuality, { width: number; height: number }> = {
+  hd: { width: 1280, height: 720 },
+  fhd: { width: 1920, height: 1080 },
 };
 
 const STORAGE_KEY = 'concord:screenShareQuality';
@@ -30,6 +26,28 @@ export function setLastScreenShareQuality(quality: ScreenShareQuality): void {
   } catch {
     // Best-effort only (e.g. private browsing) — the picker still works this session, it just
     // won't remember the choice for next time.
+  }
+}
+
+const FRAME_RATE_STORAGE_KEY = 'concord:screenShareFrameRate';
+
+// Defaults to 30: an uncapped/60fps capture lets the browser pick a variable rate up to display
+// refresh, which can stutter for viewers, so 30 is the safer out-of-the-box choice. Users who want
+// smoother motion (e.g. sharing a game) can opt into 60 explicitly.
+export function getLastScreenShareFrameRate(): ScreenShareFrameRate {
+  try {
+    const stored = localStorage.getItem(FRAME_RATE_STORAGE_KEY);
+    return stored === '60' ? 60 : 30;
+  } catch {
+    return 30;
+  }
+}
+
+export function setLastScreenShareFrameRate(frameRate: ScreenShareFrameRate): void {
+  try {
+    localStorage.setItem(FRAME_RATE_STORAGE_KEY, String(frameRate));
+  } catch {
+    // Best-effort only, same reasoning as setLastScreenShareQuality.
   }
 }
 

@@ -26,5 +26,7 @@ public enum WsEventType {
     PERMISSIONS_UPDATE,
     FRIEND_UPDATE,
     DM_MESSAGE_CREATE,
+    CALL_INVITE,
+    CALL_RESOLVED,
     ERROR
 }

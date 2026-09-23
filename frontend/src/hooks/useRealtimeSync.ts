@@ -3,6 +3,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { toVoicePresenceEntry } from '../features/calls/api';
+import * as dmCallApi from '../features/calls/dm/api';
+import { useDmCallStore } from '../features/calls/dm/dmCallStore';
 import { useAuthStore } from '../features/auth/authStore';
 import { getWsTicket } from '../features/auth/api';
 import { notify, playChime } from '../services/desktopNotifications';
@@ -17,6 +19,8 @@ import type { Message } from '../types/message';
 import type { Server } from '../types/server';
 import type { VoicePresenceEntry } from '../types/voice';
 import type {
+  CallInvitePayload,
+  CallResolvedPayload,
   ChannelDeletedPayload,
   ErrorPayload,
   FriendUpdatePayload,
@@ -467,6 +471,32 @@ export function useRealtimeSync(): void {
           if (!old) return old;
           return { ...old, unreadCount };
         });
+      }),
+
+      websocketClient.subscribe('CALL_INVITE', (payload) => {
+        const { callId, caller } = payload as CallInvitePayload;
+        // Already busy locally (in a call or already ringing something else) — the backend's own
+        // busy check already stops the caller from reaching this in the first place for most
+        // cases; this is just this client not clobbering its own in-progress state.
+        if (useDmCallStore.getState().status !== 'idle') return;
+        useDmCallStore.getState().receiveInvite(callId, caller);
+      }),
+
+      websocketClient.subscribe('CALL_RESOLVED', (payload) => {
+        const { callId, outcome, roomName } = payload as CallResolvedPayload;
+        const state = useDmCallStore.getState();
+        if (state.callId !== callId) return;
+
+        if (outcome === 'ACCEPTED' && roomName) {
+          // The callee already connected synchronously from its own accept() response
+          // (IncomingCallModal) — only the caller still needs to fetch its own token here.
+          if (state.role === 'caller') {
+            state.setConnected();
+            void dmCallApi.getCallToken(callId).then(({ token, url }) => voiceClient.connect(null, token, url));
+          }
+        } else {
+          state.reset();
+        }
       }),
     ];
 

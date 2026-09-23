@@ -75,24 +75,27 @@ describe('ServerSidebar', () => {
     expect(screen.queryByRole('button', { name: 'Join server' })).not.toBeInTheDocument();
   });
 
-  it('renders one rail entry per friend, linking to their DM conversation', async () => {
+  it('opens a profile card for a friend, offering a way to their DM conversation', async () => {
+    const user = userEvent.setup();
     renderSidebar();
 
-    const friendLink = await screen.findByRole('link', { name: 'Lety' });
-    expect(friendLink).toHaveAttribute('href', '/app/dm/u3');
+    await user.click(await screen.findByRole('button', { name: 'Lety' }));
+
+    const messageLink = await screen.findByRole('link', { name: /enviar mensagem/i });
+    expect(messageLink).toHaveAttribute('href', '/app/dm/u3');
   });
 
   it('highlights the currently open DM, derived from the URL', async () => {
     renderSidebar('/app/dm/u3');
 
-    const selected = await screen.findByRole('link', { name: 'Lety' });
-    expect(selected).toHaveAttribute('aria-current', 'page');
+    const selected = await screen.findByRole('button', { name: 'Lety' });
+    expect(selected).toHaveClass('bg-brand', 'text-white');
   });
 
   it('shows a retry indicator when the server list fails to load, instead of silently rendering as empty', async () => {
     vi.mocked(api.listServers).mockRejectedValue(new Error('network error'));
     renderSidebar();
-    await screen.findByRole('link', { name: 'Lety' });
+    await screen.findByRole('button', { name: 'Lety' });
 
     expect(
       screen.getByRole('button', { name: 'Falha ao carregar servidores/amigos. Tentar novamente' }),

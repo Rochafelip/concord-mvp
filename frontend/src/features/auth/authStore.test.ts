@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { queryClient } from '../../services/queryClient';
 import type { AuthResult } from '../../types/user';
 import { useAuthStore } from './authStore';
 
@@ -51,6 +52,15 @@ describe('authStore', () => {
     });
   });
 
+  it('logout() clears the query cache, so the next session on this browser starts with none of this one\'s data', () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true } as Response));
+    queryClient.setQueryData(['users', 'me'], { id: 'user-1' });
+
+    useAuthStore.getState().logout();
+
+    expect(queryClient.getQueryData(['users', 'me'])).toBeUndefined();
+  });
+
   it('logout() clears local state even if the network call fails', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')));
     useAuthStore.getState().login(authResult);
@@ -93,6 +103,15 @@ describe('authStore', () => {
     expect(state.sessionEndedReason).toBe('expired');
   });
 
+  it('expireSession() clears the query cache too, same as logout()', () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true } as Response));
+    queryClient.setQueryData(['users', 'me'], { id: 'user-1' });
+
+    useAuthStore.getState().expireSession();
+
+    expect(queryClient.getQueryData(['users', 'me'])).toBeUndefined();
+  });
+
   it('logout() leaves no reason behind, so a deliberate exit shows no notice', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true } as Response));
     useAuthStore.setState({ isAuthenticated: true, sessionEndedReason: 'expired' });
@@ -120,7 +139,7 @@ describe('authStore', () => {
     expect(persisted.state.sessionEndedReason).toBeUndefined();
   });
 
-  it('persists isAuthenticated and user to localStorage via the persist middleware', () => {
+  it('persists isAuthenticated to localStorage via the persist middleware, but not the user', () => {
     useAuthStore.getState().login(authResult);
 
     const raw = localStorage.getItem('concord-auth');
@@ -128,6 +147,8 @@ describe('authStore', () => {
 
     const persisted = JSON.parse(raw!);
     expect(persisted.state.isAuthenticated).toBe(true);
-    expect(persisted.state.user.username).toBe('jdoe');
+    // The user object (email, display name) must never survive a cookie-only session end on a
+    // shared browser — see authStore.ts's partialize comment.
+    expect(persisted.state.user).toBeUndefined();
   });
 });

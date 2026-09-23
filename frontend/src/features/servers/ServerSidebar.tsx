@@ -5,6 +5,7 @@ import { CreateServerModal } from './CreateServerModal';
 import { useServers } from './hooks';
 import { useFriends } from '../friends/hooks';
 import { useNotificationStore } from '../../stores/notificationStore';
+import { UserProfileCard } from '../users/UserProfileCard';
 import type { Friend } from '../../types/friend';
 
 /**
@@ -156,33 +157,34 @@ function FriendRailIcon({
   return (
     <div className="relative flex w-full items-center justify-center">
       {isSelected && <span className="absolute left-0 h-8 w-1 rounded-r bg-brand" aria-hidden="true" />}
-      <Link
-        to={`/app/dm/${friend.user.id}`}
-        aria-label={friend.user.displayName}
-        aria-current={isSelected ? 'page' : undefined}
-        title={friend.user.displayName}
-        className={`flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-full text-body font-semibold transition-colors sm:h-12 sm:w-12 ${
-          isSelected ? 'bg-brand text-white' : 'bg-sidebar text-muted hover:bg-brand/20'
-        }`}
-      >
-        {friend.user.avatarUrl && !avatarFailed ? (
-          <img
-            src={friend.user.avatarUrl}
-            alt=""
-            aria-hidden="true"
-            className="h-full w-full object-cover"
-            onError={() => setAvatarFailed(true)}
-          />
-        ) : (
-          initial
-        )}
-        {hasUnread && (
-          <span
-            aria-label="Novas mensagens"
-            className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-brand ring-2 ring-rail"
-          />
-        )}
-      </Link>
+      <UserProfileCard user={friend.user}>
+        <button
+          type="button"
+          aria-label={friend.user.displayName}
+          title={friend.user.displayName}
+          className={`flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-full text-body font-semibold transition-colors sm:h-12 sm:w-12 ${
+            isSelected ? 'bg-brand text-white' : 'bg-sidebar text-muted hover:bg-brand/20'
+          }`}
+        >
+          {friend.user.avatarUrl && !avatarFailed ? (
+            <img
+              src={friend.user.avatarUrl}
+              alt=""
+              aria-hidden="true"
+              className="h-full w-full object-cover"
+              onError={() => setAvatarFailed(true)}
+            />
+          ) : (
+            initial
+          )}
+          {hasUnread && (
+            <span
+              aria-label="Novas mensagens"
+              className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-brand ring-2 ring-rail"
+            />
+          )}
+        </button>
+      </UserProfileCard>
     </div>
   );
 }

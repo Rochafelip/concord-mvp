@@ -16,6 +16,7 @@ import { getLastVisitedTextChannelId } from '../channels/lastVisitedChannel';
 import { useChannels } from '../channels/hooks';
 import { getServerMembers } from '../servers/api';
 import { useServers } from '../servers/hooks';
+import { UserProfileCard } from '../users/UserProfileCard';
 import { getVoicePresence } from '../calls/api';
 import type { VoicePresenceEntry } from '../../types/voice';
 
@@ -151,19 +152,27 @@ export function HomePage() {
             ) : (
               <div className="grid gap-3 sm:grid-cols-2">
                 {friends.map((member) => (
-                  <div key={member.user.id} className="flex items-center gap-3 rounded-xl bg-app p-3">
-                    <div className="relative">
-                      <Avatar displayName={member.displayName ?? member.user.displayName} avatarUrl={member.user.avatarUrl} />
-                      <span
-                        className={`absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-app ${onlineIds.has(member.user.id) ? 'bg-success' : 'bg-muted'}`}
-                        aria-label={onlineIds.has(member.user.id) ? 'Online' : 'Offline'}
-                      />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="truncate text-body font-medium text-ink">{member.displayName ?? member.user.displayName}</p>
-                      <p className="text-small text-muted">{onlineIds.has(member.user.id) ? 'Em chamada' : 'Offline'}</p>
-                    </div>
-                  </div>
+                  <UserProfileCard
+                    key={member.user.id}
+                    user={{
+                      id: member.user.id,
+                      displayName: member.displayName ?? member.user.displayName,
+                      avatarUrl: member.user.avatarUrl,
+                    }}
+                  >
+                    <button type="button" className="flex w-full items-center gap-3 rounded-xl bg-app p-3 text-left hover:bg-app/80">
+                      <div className="relative" aria-hidden="true">
+                        <Avatar displayName={member.displayName ?? member.user.displayName} avatarUrl={member.user.avatarUrl} />
+                        <span
+                          className={`absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-app ${onlineIds.has(member.user.id) ? 'bg-success' : 'bg-muted'}`}
+                        />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate text-body font-medium text-ink">{member.displayName ?? member.user.displayName}</p>
+                        <p className="text-small text-muted">{onlineIds.has(member.user.id) ? 'Em chamada' : 'Offline'}</p>
+                      </div>
+                    </button>
+                  </UserProfileCard>
                 ))}
               </div>
             )}

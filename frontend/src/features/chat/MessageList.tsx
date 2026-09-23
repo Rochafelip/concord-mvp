@@ -6,6 +6,7 @@ import { useAuthStore } from '../auth/authStore';
 import { deleteMessage } from './api';
 import type { Attachment, Message } from '../../types/message';
 import { useMarkChannelAsRead } from '../channels/hooks';
+import { UserProfileCard } from '../users/UserProfileCard';
 import { useMessageHistory } from './hooks';
 import { MessageContent } from './MessageContent';
 
@@ -188,16 +189,22 @@ export function MessageList({ channelId, canManageMessages = false }: MessageLis
               </div>
             )}
             <div data-testid="message" className="flex items-start gap-3">
-              <Avatar
-                displayName={message.author.displayName}
-                avatarUrl={message.author.avatarUrl}
-                size="md"
-              />
+              <UserProfileCard user={message.author}>
+                <button type="button" className="rounded-full">
+                  <Avatar
+                    displayName={message.author.displayName}
+                    avatarUrl={message.author.avatarUrl}
+                    size="md"
+                  />
+                </button>
+              </UserProfileCard>
               <div className="min-w-0">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-body font-semibold text-ink">
-                    {message.author.displayName}
-                  </span>
+                  <UserProfileCard user={message.author}>
+                    <button type="button" className="rounded text-body font-semibold text-ink hover:underline">
+                      {message.author.displayName}
+                    </button>
+                  </UserProfileCard>
                   <span className="text-caption text-muted">
                     {createdAt.toLocaleTimeString()}
                   </span>

@@ -10,6 +10,8 @@ vi.mock('./screenShareQuality', async () => {
     ...actual,
     getLastScreenShareQuality: vi.fn(),
     setLastScreenShareQuality: vi.fn(),
+    getLastScreenShareFrameRate: vi.fn(),
+    setLastScreenShareFrameRate: vi.fn(),
     getLastScreenShareAudioPreference: vi.fn(),
     setLastScreenShareAudioPreference: vi.fn(),
   };
@@ -18,8 +20,10 @@ vi.mock('./screenShareQuality', async () => {
 describe('ScreenShareQualityModal', () => {
   beforeEach(() => {
     vi.mocked(screenShareQuality.getLastScreenShareQuality).mockReturnValue('fhd');
+    vi.mocked(screenShareQuality.getLastScreenShareFrameRate).mockReturnValue(30);
     vi.mocked(screenShareQuality.getLastScreenShareAudioPreference).mockReturnValue(false);
     vi.mocked(screenShareQuality.setLastScreenShareQuality).mockClear();
+    vi.mocked(screenShareQuality.setLastScreenShareFrameRate).mockClear();
     vi.mocked(screenShareQuality.setLastScreenShareAudioPreference).mockClear();
   });
 
@@ -36,6 +40,15 @@ describe('ScreenShareQualityModal', () => {
 
     expect(screen.getByLabelText('HD (720p)')).toBeChecked();
     expect(screen.getByLabelText('FHD (1080p)')).not.toBeChecked();
+  });
+
+  it('pre-selects the last stored frame rate', () => {
+    vi.mocked(screenShareQuality.getLastScreenShareFrameRate).mockReturnValue(60);
+
+    render(<ScreenShareQualityModal open onClose={vi.fn()} onConfirm={vi.fn()} />);
+
+    expect(screen.getByLabelText('60 fps (more fluid motion)')).toBeChecked();
+    expect(screen.getByLabelText('30 fps (steadier, less bandwidth)')).not.toBeChecked();
   });
 
   it('leaves the audio checkbox unchecked by default', () => {
@@ -61,7 +74,19 @@ describe('ScreenShareQualityModal', () => {
     await user.click(screen.getByRole('button', { name: 'Share' }));
 
     expect(screenShareQuality.setLastScreenShareQuality).toHaveBeenCalledWith('hd');
-    expect(onConfirm).toHaveBeenCalledWith({ quality: 'hd', withAudio: false });
+    expect(onConfirm).toHaveBeenCalledWith({ quality: 'hd', frameRate: 30, withAudio: false });
+  });
+
+  it('confirms with the selected frame rate and remembers it', async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+    render(<ScreenShareQualityModal open onClose={vi.fn()} onConfirm={onConfirm} />);
+
+    await user.click(screen.getByLabelText('60 fps (more fluid motion)'));
+    await user.click(screen.getByRole('button', { name: 'Share' }));
+
+    expect(screenShareQuality.setLastScreenShareFrameRate).toHaveBeenCalledWith(60);
+    expect(onConfirm).toHaveBeenCalledWith({ quality: 'fhd', frameRate: 60, withAudio: false });
   });
 
   it('confirms with audio enabled and remembers it when the checkbox is checked', async () => {
@@ -73,7 +98,7 @@ describe('ScreenShareQualityModal', () => {
     await user.click(screen.getByRole('button', { name: 'Share' }));
 
     expect(screenShareQuality.setLastScreenShareAudioPreference).toHaveBeenCalledWith(true);
-    expect(onConfirm).toHaveBeenCalledWith({ quality: 'fhd', withAudio: true });
+    expect(onConfirm).toHaveBeenCalledWith({ quality: 'fhd', frameRate: 30, withAudio: true });
   });
 
   it('cancels without confirming or saving any preference', async () => {
@@ -87,6 +112,7 @@ describe('ScreenShareQualityModal', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(onConfirm).not.toHaveBeenCalled();
     expect(screenShareQuality.setLastScreenShareQuality).not.toHaveBeenCalled();
+    expect(screenShareQuality.setLastScreenShareFrameRate).not.toHaveBeenCalled();
     expect(screenShareQuality.setLastScreenShareAudioPreference).not.toHaveBeenCalled();
   });
 });

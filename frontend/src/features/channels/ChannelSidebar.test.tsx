@@ -23,6 +23,11 @@ vi.mock('../calls/ScreenShareHoverPreview', () => ({
     <div role="tooltip" aria-label={`${displayName}'s screen`} />
   ),
 }));
+// UserProfileCard needs a `../friends/api` mock this file doesn't set up — its own behavior is
+// covered by UserProfileCard.test.tsx.
+vi.mock('../users/UserProfileCard', () => ({
+  UserProfileCard: ({ children }: { children: React.ReactNode }) => children,
+}));
 
 const server: Server = {
   id: 's1',
@@ -309,6 +314,13 @@ describe('ChannelSidebar', () => {
 
       await screen.findByRole('link', { name: /lobby/ });
       expect(screen.queryByText('Ana')).not.toBeInTheDocument();
+    });
+
+    it('makes a voice participant avatar and name open a profile card for that participant', async () => {
+      vi.mocked(callsApi.getVoicePresence).mockResolvedValue([presence()]);
+      renderSidebar();
+
+      expect(await screen.findByRole('button', { name: 'Ana' })).toBeInTheDocument();
     });
   });
 

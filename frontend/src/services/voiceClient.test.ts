@@ -164,7 +164,7 @@ function handlerFor(room: InstanceType<typeof MockRoom>, event: string): (...arg
 }
 
 /** Calls voiceClient.connect() and immediately resolves that call's underlying room.connect(). */
-async function connectVoice(channelId: string, token: string, url: string): Promise<void> {
+async function connectVoice(channelId: string | null, token: string, url: string): Promise<void> {
   const promise = voiceClient.connect(channelId, token, url);
   connectResolvers[connectResolvers.length - 1]();
   await promise;
@@ -345,7 +345,7 @@ describe('voiceClient', () => {
     await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
     const room = roomInstances[0];
 
-    voiceClient.toggleScreenShare({ quality: 'hd', withAudio: false });
+    voiceClient.toggleScreenShare({ quality: 'hd', frameRate: 30, withAudio: false });
 
     expect(room.localParticipant.setScreenShareEnabled).toHaveBeenLastCalledWith(true, {
       resolution: { width: 1280, height: 720, frameRate: 30 },
@@ -361,10 +361,21 @@ describe('voiceClient', () => {
     await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
     const room = roomInstances[0];
 
-    voiceClient.toggleScreenShare({ quality: 'fhd', withAudio: false });
+    voiceClient.toggleScreenShare({ quality: 'fhd', frameRate: 30, withAudio: false });
 
     expect(room.localParticipant.setScreenShareEnabled).toHaveBeenLastCalledWith(true, {
       resolution: { width: 1920, height: 1080, frameRate: 30 },
+    });
+  });
+
+  it('starts screen sharing with a 60fps constraint when that frame rate is given', async () => {
+    await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
+    const room = roomInstances[0];
+
+    voiceClient.toggleScreenShare({ quality: 'hd', frameRate: 60, withAudio: false });
+
+    expect(room.localParticipant.setScreenShareEnabled).toHaveBeenLastCalledWith(true, {
+      resolution: { width: 1280, height: 720, frameRate: 60 },
     });
   });
 
@@ -372,7 +383,7 @@ describe('voiceClient', () => {
     await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
     const room = roomInstances[0];
 
-    voiceClient.toggleScreenShare({ quality: 'hd', withAudio: true });
+    voiceClient.toggleScreenShare({ quality: 'hd', frameRate: 30, withAudio: true });
 
     // autoGainControl/echoCancellation/noiseSuppression are mic-oriented processing that muffles
     // continuous non-speech audio (music, game/video sound) — must be explicitly disabled here
@@ -401,8 +412,8 @@ describe('voiceClient', () => {
     await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
     const room = roomInstances[0];
 
-    voiceClient.toggleScreenShare({ quality: 'hd', withAudio: true });
-    voiceClient.toggleScreenShare({ quality: 'fhd', withAudio: true });
+    voiceClient.toggleScreenShare({ quality: 'hd', frameRate: 30, withAudio: true });
+    voiceClient.toggleScreenShare({ quality: 'fhd', frameRate: 30, withAudio: true });
 
     expect(room.localParticipant.setScreenShareEnabled).toHaveBeenLastCalledWith(false);
   });
@@ -423,8 +434,8 @@ describe('voiceClient', () => {
 
   it('does not start screen share when not connected to a room', () => {
     // Don't call connect or beginConnect - just call toggleScreenShare directly
-    voiceClient.toggleScreenShare({ quality: 'hd', withAudio: true });
-    
+    voiceClient.toggleScreenShare({ quality: 'hd', frameRate: 30, withAudio: true });
+
     // Since there's no room at all, toggleScreenShare should return early
     expect(roomInstances.length).toBe(0);
   });
@@ -1106,6 +1117,26 @@ describe('voiceClient', () => {
         type: 'VOICE_PRESENCE_UPDATE',
         payload: { channelId: 'channel-2', muted: false, cameraOn: false, screenSharing: false, speaking: false, deafened: false },
       }]);
+    });
+
+    it('connecting with a null channelId (a 1:1 call) never reports VOICE_PRESENCE_UPDATE, even on a state change', async () => {
+      await connectVoice(null, 'token', 'wss://example.test/livekit');
+      mockSend.mockClear();
+
+      voiceClient.toggleMute();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(mockSend).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'VOICE_PRESENCE_UPDATE' }));
+    });
+
+    it('connecting with a null channelId (a 1:1 call) never sends VOICE_PRESENCE_LEAVE on disconnect', async () => {
+      await connectVoice(null, 'token', 'wss://example.test/livekit');
+      mockSend.mockClear();
+
+      voiceClient.disconnect();
+
+      expect(mockSend).not.toHaveBeenCalledWith({ type: 'VOICE_PRESENCE_LEAVE', payload: {} });
     });
   });
 

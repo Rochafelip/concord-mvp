@@ -8,8 +8,10 @@ import com.concordmvp.servers.Server;
 import com.concordmvp.servers.ServerRepository;
 import com.concordmvp.channels.ChannelType;
 import com.concordmvp.common.exception.BadRequestException;
+import com.concordmvp.common.exception.ConflictException;
 import com.concordmvp.common.exception.ForbiddenException;
 import com.concordmvp.common.exception.ResourceNotFoundException;
+import com.concordmvp.dmcalls.DmCallService;
 import com.concordmvp.media.dto.VoicePresenceLeavePayload;
 import com.concordmvp.media.dto.VoicePresenceResponse;
 import com.concordmvp.realtime.RealtimeEventPublisher;
@@ -70,13 +72,16 @@ class VoicePresenceServiceTest {
     @Mock
     private WhistleService whistleService;
 
+    @Mock
+    private DmCallService dmCallService;
+
     private VoicePresenceService voicePresenceService;
 
     @BeforeEach
     void setUp() {
         voicePresenceService = new VoicePresenceService(
                 channelService, serverMemberRepository, serverRepository, userRepository,
-                realtimeEventPublisher, permissionService, mediaService, whistleService);
+                realtimeEventPublisher, permissionService, mediaService, whistleService, dmCallService);
         // Default: the requester can see every voice channel. Tests that care about the filter
         // override this for one specific channel.
         lenient().when(permissionService.hasChannel(any(UUID.class), any(), eq(Permission.VIEW_CHANNEL)))
@@ -224,6 +229,40 @@ class VoicePresenceServiceTest {
         when(serverMemberRepository.existsByServerIdAndUserId(serverId, userId)).thenReturn(true);
         List<VoicePresenceResponse> current = voicePresenceService.getPresence(serverId, userId);
         assertThat(current.get(0).deafened()).isTrue();
+    }
+
+    // --- one call at a time: DM calls block joining a voice channel, and vice versa ---
+
+    @Test
+    void updatePresence_userInAnActiveDmCall_throwsConflict() {
+        UUID channelId = UUID.randomUUID();
+        UUID serverId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        when(channelService.getChannel(channelId, userId)).thenReturn(channel(channelId, serverId, ChannelType.VOICE));
+        when(dmCallService.isInCall(userId)).thenReturn(true);
+
+        assertThatThrownBy(() -> voicePresenceService.updatePresence(channelId, userId, false, false, false, false, false))
+                .isInstanceOf(ConflictException.class);
+
+        verifyNoInteractions(realtimeEventPublisher);
+    }
+
+    @Test
+    void isInVoice_userWithAnEntry_returnsTrue() {
+        UUID channelId = UUID.randomUUID();
+        UUID serverId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        when(channelService.getChannel(channelId, userId)).thenReturn(channel(channelId, serverId, ChannelType.VOICE));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user(userId, "Felipe")));
+        lenient().when(serverMemberRepository.findByServerId(serverId)).thenReturn(List.of(member(userId, serverId)));
+        voicePresenceService.updatePresence(channelId, userId, false, false, false, false, false);
+
+        assertThat(voicePresenceService.isInVoice(userId)).isTrue();
+    }
+
+    @Test
+    void isInVoice_userWithNoEntry_returnsFalse() {
+        assertThat(voicePresenceService.isInVoice(UUID.randomUUID())).isFalse();
     }
 
     // --- isConnected ---
