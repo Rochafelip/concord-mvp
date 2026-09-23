@@ -50,12 +50,15 @@ class DmMessageServiceTest {
     @Mock
     private RealtimeEventPublisher realtimeEventPublisher;
 
+    @Mock
+    private DmConversationStateService dmConversationStateService;
+
     private DmMessageService dmMessageService;
 
     @BeforeEach
     void setUp() {
         dmMessageService = new DmMessageService(dmMessageRepository, friendshipRepository, userRepository,
-                realtimeEventPublisher);
+                realtimeEventPublisher, dmConversationStateService);
     }
 
     private User user(UUID id, String username) {
@@ -98,7 +101,7 @@ class DmMessageServiceTest {
         assertThatThrownBy(() -> dmMessageService.sendMessage(userId, userId, "hi"))
                 .isInstanceOf(BadRequestException.class);
 
-        verifyNoInteractions(dmMessageRepository, realtimeEventPublisher);
+        verifyNoInteractions(dmMessageRepository, realtimeEventPublisher, dmConversationStateService);
     }
 
     @Test
@@ -110,7 +113,7 @@ class DmMessageServiceTest {
         assertThatThrownBy(() -> dmMessageService.sendMessage(authorId, recipientId, "hi"))
                 .isInstanceOf(ResourceNotFoundException.class);
 
-        verifyNoInteractions(dmMessageRepository, realtimeEventPublisher);
+        verifyNoInteractions(dmMessageRepository, realtimeEventPublisher, dmConversationStateService);
     }
 
     @Test
@@ -123,7 +126,7 @@ class DmMessageServiceTest {
         assertThatThrownBy(() -> dmMessageService.sendMessage(authorId, recipientId, "hi"))
                 .isInstanceOf(ForbiddenException.class);
 
-        verifyNoInteractions(dmMessageRepository, realtimeEventPublisher);
+        verifyNoInteractions(dmMessageRepository, realtimeEventPublisher, dmConversationStateService);
     }
 
     @Test
@@ -189,6 +192,9 @@ class DmMessageServiceTest {
         assertThat(payload.content()).isEqualTo("hello");
         assertThat(payload.author().id()).isEqualTo(authorId);
         assertThat(payload.recipientId()).isEqualTo(recipientId);
+
+        verify(dmConversationStateService).ensureVisible(authorId, recipientId);
+        verify(dmConversationStateService).ensureVisible(recipientId, authorId);
     }
 
     // --- getHistory ---
