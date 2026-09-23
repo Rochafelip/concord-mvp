@@ -1,4 +1,4 @@
-import { AudioLines, AudioLinesOff, Mic, MicOff, PhoneOff, RefreshCw, Settings, Video, VideoOff, Volume2, VolumeX } from 'lucide-react';
+import { AudioLines, AudioLinesOff, Mic, MicOff, PhoneOff, PictureInPicture2, RefreshCw, Settings, Video, VideoOff, Volume2, VolumeX } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { voiceClient } from '../../services/voiceClient';
 import { useDeviceStore } from '../../stores/deviceStore';
@@ -6,6 +6,7 @@ import { useVoiceStore } from '../../stores/voiceStore';
 import { getNoiseSuppressionPreference, setNoiseSuppressionPreference } from '../settings/audio/noiseSuppressionPreference';
 import { DeviceSettingsPanel } from './DeviceSettingsPanel';
 import { useVoiceParticipants } from './hooks';
+import { useCallPip } from './pip/useCallPip';
 
 const MOBILE_QUERY = '(max-width: 640px)';
 
@@ -46,6 +47,7 @@ export function CallControlBar({ onLeave, canUseVideo = false }: CallControlBarP
   const [suppressionEnabled, setSuppressionEnabled] = useState(getNoiseSuppressionPreference);
   const [showDeviceSelector, setShowDeviceSelector] = useState(false);
   const isMobile = useIsMobile();
+  const { isSupported: pipSupported, pipWindow, open: openPip } = useCallPip();
 
   if (!localParticipant) return null;
 
@@ -149,6 +151,17 @@ export function CallControlBar({ onLeave, canUseVideo = false }: CallControlBarP
           ) : (
             <VolumeX size={16} aria-hidden="true" />
           )}
+        </button>
+      )}
+      {pipSupported && !pipWindow && (
+        <button
+          type="button"
+          aria-label="Destacar chamada"
+          title="Destacar chamada"
+          onClick={() => void openPip()}
+          className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
+        >
+          <PictureInPicture2 size={16} aria-hidden="true" />
         </button>
       )}
       <button

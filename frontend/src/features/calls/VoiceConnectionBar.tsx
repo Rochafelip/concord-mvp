@@ -6,9 +6,11 @@ import {
   MonitorUp,
   MonitorX,
   PhoneOff,
+  PictureInPicture2,
   Volume2,
 } from 'lucide-react';
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import { Tooltip } from '../../components/Tooltip';
 import { voiceClient } from '../../services/voiceClient';
@@ -16,8 +18,10 @@ import { useChannel } from '../channels/hooks';
 import { hasPermission } from '../../types/permission';
 import { useServer } from '../servers/hooks';
 import { QUALITY_ICON } from './connectionQuality';
-import { ScreenShareQualityModal } from './ScreenShareQualityModal';
 import { useVoiceParticipants, useVoiceStatus } from './hooks';
+import { MiniCallView } from './pip/MiniCallView';
+import { useCallPip } from './pip/useCallPip';
+import { ScreenShareQualityModal } from './ScreenShareQualityModal';
 
 export function VoiceConnectionBar() {
   const { status, channelId, isDeafened } = useVoiceStatus();
@@ -26,6 +30,7 @@ export function VoiceConnectionBar() {
   const navigate = useNavigate();
   const localParticipant = useVoiceParticipants().find((participant) => participant.isLocal);
   const [isQualityModalOpen, setQualityModalOpen] = useState(false);
+  const { isSupported: pipSupported, pipWindow, open: openPip, close: closePip } = useCallPip();
 
   // Cosmetic only: without SHARE_SCREEN the LiveKit token omits the screen_share source, so
   // LiveKit itself rejects the track even if this button were somehow reachable.
@@ -42,8 +47,17 @@ export function VoiceConnectionBar() {
     }
   }
 
+  function handleReturnFromPip() {
+    if (channel?.serverId) {
+      navigate(`/app/servers/${channel.serverId}/channels/${channelId}`);
+    }
+    window.focus();
+    closePip();
+  }
+
   return (
-    <div className="flex flex-shrink-0 items-center gap-3 border-t bg-surface px-4 py-2">
+    <>
+      <div className="flex flex-shrink-0 items-center gap-3 border-t bg-surface px-4 py-2">
       <Link
         to={`/app/servers/${channel?.serverId}/channels/${channelId}`}
         className="flex min-w-0 flex-col gap-0.5 hover:opacity-80"
@@ -113,6 +127,18 @@ export function VoiceConnectionBar() {
               </button>
             </Tooltip>
           )}
+          {pipSupported && !pipWindow && (
+            <Tooltip content="Destacar chamada">
+              <button
+                type="button"
+                aria-label="Destacar chamada"
+                onClick={() => void openPip()}
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-sidebar text-ink hover:bg-border"
+              >
+                <PictureInPicture2 size={18} aria-hidden="true" />
+              </button>
+            </Tooltip>
+          )}
           <Tooltip content="Leave call">
             <button
               type="button"
@@ -133,6 +159,9 @@ export function VoiceConnectionBar() {
           voiceClient.toggleScreenShare(options);
         }}
       />
-    </div>
+      </div>
+
+      {pipWindow && createPortal(<MiniCallView onReturn={handleReturnFromPip} />, pipWindow.document.body)}
+    </>
   );
 }

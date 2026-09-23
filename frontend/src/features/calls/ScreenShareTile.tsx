@@ -19,6 +19,11 @@ interface ScreenShareTileProps {
   onWatchClick?: () => void;
   canDisconnect?: boolean;
   channelId?: string | null;
+  /** The fullscreen button uses the main window's `document.fullscreenElement`/
+   * `fullscreenchange`, which is meaningless (and wrong) for a copy of this tile rendered inside
+   * a Document Picture-in-Picture window's own document — see MiniCallView. Defaults to true so
+   * every other caller is unaffected. */
+  showFullscreenButton?: boolean;
 }
 
 /**
@@ -50,7 +55,14 @@ interface ScreenShareTileProps {
  * alone in the "top layer." onWatchClick is deliberately not wired while fullscreen — exiting the
  * watched set would abruptly kill an active fullscreen session.
  */
-export function ScreenShareTile({ participant, className = '', onWatchClick, canDisconnect = false, channelId = null }: ScreenShareTileProps) {
+export function ScreenShareTile({
+  participant,
+  className = '',
+  onWatchClick,
+  canDisconnect = false,
+  channelId = null,
+  showFullscreenButton = true,
+}: ScreenShareTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -181,14 +193,16 @@ export function ScreenShareTile({ participant, className = '', onWatchClick, can
               's screen
               {participant.isLocal ? ' (you)' : ''}
             </span>
-            <button
-              type="button"
-              aria-label="Enter fullscreen"
-              onClick={handleEnterFullscreen}
-              className="absolute left-1 top-1 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity hover:bg-black/80 focus-visible:opacity-100 group-hover/camera-grid:opacity-100"
-            >
-              <Maximize2 size={16} aria-hidden="true" />
-            </button>
+            {showFullscreenButton && (
+              <button
+                type="button"
+                aria-label="Enter fullscreen"
+                onClick={handleEnterFullscreen}
+                className="absolute left-1 top-1 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity hover:bg-black/80 focus-visible:opacity-100 group-hover/camera-grid:opacity-100"
+              >
+                <Maximize2 size={16} aria-hidden="true" />
+              </button>
+            )}
             {!participant.isLocal && participant.screenShareHasAudio && participant.screenShareAudioEnabled && (
               <div
                 className="pointer-events-none absolute right-1 top-1 opacity-0 transition-opacity group-hover/participant-tile:pointer-events-auto group-hover/participant-tile:opacity-100 group-focus-within/participant-tile:pointer-events-auto group-focus-within/participant-tile:opacity-100"
