@@ -8,6 +8,7 @@ import { useDmConversations } from '../dm/hooks';
 import { useNotificationStore } from '../../stores/notificationStore';
 import { UserProfileCard } from '../users/UserProfileCard';
 import type { Friend } from '../../types/friend';
+import type { Server } from '../../types/server';
 
 /**
  * The persistent far-left "server rail" (Discord-style icon list). Selection is derived
@@ -99,36 +100,14 @@ export function ServerSidebar() {
 
       {dmFriends.length > 0 && (servers ?? []).length > 0 && <div className="w-8 border-t" />}
 
-      {(servers ?? []).map((server) => {
-        const isSelected = server.id === serverId;
-        const hasUnread = unreadServerIds.includes(server.id) && !isSelected;
-        const initial = server.name.trim().charAt(0).toUpperCase() || '?';
-
-        return (
-          <div key={server.id} className="relative flex w-full items-center justify-center">
-            {isSelected && (
-              <span className="absolute left-0 h-8 w-1 rounded-r bg-brand" aria-hidden="true" />
-            )}
-            <Link
-              to={`/app/servers/${server.id}`}
-              aria-label={server.name}
-              aria-current={isSelected ? 'page' : undefined}
-              title={server.name}
-              className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full text-body font-semibold transition-colors sm:h-12 sm:w-12 ${
-                isSelected ? 'bg-brand text-white' : 'bg-sidebar text-muted hover:bg-brand/20'
-              }`}
-            >
-              {initial}
-              {hasUnread && (
-                <span
-                  aria-label="Novas mensagens"
-                  className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-brand ring-2 ring-rail"
-                />
-              )}
-            </Link>
-          </div>
-        );
-      })}
+      {(servers ?? []).map((server) => (
+        <ServerRailIcon
+          key={server.id}
+          server={server}
+          isSelected={server.id === serverId}
+          hasUnread={unreadServerIds.includes(server.id) && server.id !== serverId}
+        />
+      ))}
 
       <div className="flex w-full flex-col items-center gap-2 border-t pt-2">
         <button
@@ -143,6 +122,56 @@ export function ServerSidebar() {
 
       <CreateServerModal open={createOpen} onClose={() => setCreateOpen(false)} />
     </nav>
+  );
+}
+
+/**
+ * One server's circle in the rail. Mirrors FriendRailIcon's local `iconFailed` flag: a dead
+ * iconUrl degrades to the initial rather than a broken image.
+ */
+function ServerRailIcon({
+  server,
+  isSelected,
+  hasUnread,
+}: {
+  server: Server;
+  isSelected: boolean;
+  hasUnread: boolean;
+}) {
+  const [iconFailed, setIconFailed] = useState(false);
+  const initial = server.name.trim().charAt(0).toUpperCase() || '?';
+
+  return (
+    <div className="relative flex w-full items-center justify-center">
+      {isSelected && <span className="absolute left-0 h-8 w-1 rounded-r bg-brand" aria-hidden="true" />}
+      <Link
+        to={`/app/servers/${server.id}`}
+        aria-label={server.name}
+        aria-current={isSelected ? 'page' : undefined}
+        title={server.name}
+        className={`flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-full text-body font-semibold transition-colors sm:h-12 sm:w-12 ${
+          isSelected ? 'bg-brand text-white' : 'bg-sidebar text-muted hover:bg-brand/20'
+        }`}
+      >
+        {server.iconUrl && !iconFailed ? (
+          <img
+            src={server.iconUrl}
+            alt=""
+            aria-hidden="true"
+            className="h-full w-full object-cover"
+            onError={() => setIconFailed(true)}
+          />
+        ) : (
+          initial
+        )}
+        {hasUnread && (
+          <span
+            aria-label="Novas mensagens"
+            className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-brand ring-2 ring-rail"
+          />
+        )}
+      </Link>
+    </div>
   );
 }
 
