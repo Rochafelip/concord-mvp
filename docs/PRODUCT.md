@@ -521,7 +521,29 @@ Can additionally:
 * Manage the server
 * Create channels
 
-Advanced permission systems are outside the MVP.
+The permission system described above was the original MVP baseline. It was
+later superseded by a real roles system — see the "Later addition" note
+below.
+
+### Later addition: roles and per-channel permissions
+
+Owner-approved scope addition (`docs/DECISIONS.md` D20), superseding the
+"Advanced permission systems are outside the MVP" line this section
+originally had:
+
+* Per-server roles with a position-based hierarchy, plus a non-deletable
+  `@everyone` role at position 0. A member may hold several roles; effective
+  permissions are the union
+* 23 permissions as a bitfield (`com.concordmvp.permissions.Permission`)
+* Per-channel overrides for a role or a single user (allow/deny/inherit),
+  resolved as: `@everyone` override, then the union of role overrides, then
+  the member's own override
+* `PermissionService` is the single authorization check point; voice
+  permissions are additionally enforced by the LiveKit grant itself
+* Deleting a server and transferring ownership stay owner-only and are not
+  delegable by permission
+* Moderation (kick, ban, timeout, mute, move) and the audit log are **not**
+  enforced yet — their permission bits exist but nothing checks them
 
 ---
 
@@ -588,12 +610,14 @@ The following features are explicitly excluded from the MVP.
 
 ## Social
 
-* Friends system
-* Direct messages
 * Group DMs
 * User discovery
 * Custom status
 * Rich presence
+
+A friends system and 1:1 direct messages were later implemented as an
+owner-approved scope addition — see §24 and `docs/DECISIONS.md` D25. Group
+DMs remain out of scope.
 
 ## Chat
 
@@ -619,13 +643,17 @@ The following features are explicitly excluded from the MVP.
 
 ## Server Management
 
-* Complex roles
-* Fine-grained permissions
 * Server discovery
 * Server verification
 * Server boosting
 * Server subscriptions
 * Moderation bots
+
+Per-server roles with a position-based hierarchy and a 23-permission bitfield
+(including per-channel overrides) were later implemented as an
+owner-approved scope addition — see §15 and `docs/DECISIONS.md` D20.
+Moderation actions (kick, ban, timeout, mute, move) and the audit log still
+have no enforcement and remain out of scope for now.
 
 ## Integrations
 
@@ -734,12 +762,9 @@ The product must maintain a clear conceptual separation between:
 
 The following features may be considered after the MVP:
 
-* Direct messages
-* Friends
 * Reactions
 * Threads
-* File sharing
-* Advanced permissions
+* Advanced permissions (moderation enforcement, audit log)
 * Bots
 * Notifications
 * Mobile applications
@@ -748,6 +773,10 @@ The following features may be considered after the MVP:
 * Moderation tools
 * Recording
 * Advanced voice features
+
+Direct messages, a friends system and file sharing were originally listed
+here as future possibilities; all three have since been implemented (see
+§15 and §24) and are removed from this list.
 
 These are not commitments and should not influence the MVP implementation unless explicitly approved.
 
@@ -762,3 +791,51 @@ When deciding whether a feature belongs in the MVP, ask:
 If the answer is no, it should generally be postponed.
 
 The MVP should remain focused on proving the core real-time communication experience.
+
+---
+
+# 24. Friends and Direct Messages (scope addition)
+
+Implemented on `feature/friends-and-dm` as an explicit, owner-approved
+addition to the MVP defined above — see `docs/DECISIONS.md` D25. §19 and §22
+originally listed this under Non-Goals / Future Possibilities; both have
+been updated to point here.
+
+## Friend system
+
+* A user can send a friend request, but only to someone they already share
+  at least one server with.
+* A request can be accepted, declined (by the addressee) or cancelled (by
+  the requester). Removing an existing friend (unfriending) is also
+  supported.
+* There is no persisted "declined" or "cancelled" state — those actions, and
+  unfriending, simply delete the friendship record. A new request can always
+  be sent again afterward.
+
+## Direct messages
+
+* Plain text only, up to 4000 characters. No attachments, no message
+  editing, no message deletion, and no unread-count tracking (all of which
+  exist for channel messages).
+* Sending requires an accepted friendship; message history remains
+  readable after unfriending, only sending new messages is blocked.
+* Delivered in real time over the existing WebSocket connection; history is
+  paginated through a REST endpoint.
+
+## 1:1 calls
+
+* Voice, video and screen sharing — not voice-only — using the same LiveKit
+  token flow as server voice channels. Requires an accepted friendship.
+* Calls are not persisted: invite, accept, decline and cancel are tracked
+  in memory only, with a 30-second ring timeout and a per-pair rate limit.
+  A missed call simply disappears, the way a real phone call would.
+* Call Picture-in-Picture is available for 1:1 calls, same as server voice
+  channels. The private whistle feature is not — it is scoped to server
+  voice channels only.
+
+## Explicitly still out of scope
+
+* Group DMs
+* Any interaction between DMs/friend calls and the roles/permissions
+  system — there are no roles, channels, or per-channel overrides involved;
+  the only authorization rule is that the two users must be friends.

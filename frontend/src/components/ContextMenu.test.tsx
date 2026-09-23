@@ -41,6 +41,21 @@ describe('ContextMenu', () => {
     expect(onSelect).toHaveBeenCalledTimes(1);
   });
 
+  it('renders a separator between two groups of items without treating it as an item', () => {
+    render(
+      <ContextMenu
+        items={[{ label: 'Enviar mensagem', onSelect: vi.fn() }, { separator: true }, { label: 'Disconnect from voice', onSelect: vi.fn() }]}
+      >
+        <div>tile</div>
+      </ContextMenu>,
+    );
+
+    fireEvent.contextMenu(screen.getByText('tile'));
+
+    expect(screen.getByText('Enviar mensagem')).toBeInTheDocument();
+    expect(screen.getByText('Disconnect from voice')).toBeInTheDocument();
+  });
+
   it('never opens a menu when disabled, leaving the native context menu untouched', () => {
     render(
       <ContextMenu disabled items={[{ label: 'Disconnect from voice', onSelect: vi.fn() }]}>

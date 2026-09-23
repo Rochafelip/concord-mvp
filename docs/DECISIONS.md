@@ -674,3 +674,57 @@ de permissão — assobiar exige apenas `SPEAK`, disponível a qualquer membro
 que já pode falar no canal, igual ao mute local. O único custo arquitetural
 é o ciclo `@Lazy` acima, documentado no javadoc de
 `VoicePresenceService.removePresence`.
+
+## D25 — Sistema de amigos e mensagens diretas 1:1: adição de escopo aprovada pelo dono do projeto; documentação estava desatualizada
+
+**Context**: `AGENTS.md` ("Explicitly Out of Scope"), `docs/PRODUCT.md` §19
+("MVP Non-Goals") e `docs/OPEN_QUESTIONS.md` Q28 listavam "Friends system" e
+"Direct messages" como explicitamente fora de escopo. Apesar disso, a feature
+foi implementada e mergeada (branch `feature/friends-and-dm`, PR #30 "Add
+friend system and 1:1 direct messages", depois estendida pela PR #65 com o
+card de perfil clicável e navegação pelo rail de amigos). O gap não era uma
+regressão de escopo silenciosa: é uma feature real, em produção, cuja adição
+nunca ganhou um registro de decisão — ao contrário do D24 (assobio), que
+documentou a aprovação do dono do projeto no mesmo commit que implementou a
+feature. Este D25 fecha esse gap retroativamente, e os três documentos acima
+foram atualizados para apontar para cá.
+
+**Decision**: Manter a feature como está implementada (nenhuma mudança de
+código motivada por este registro) e formalizar seu escopo:
+
+* Sistema de amigos: pedido de amizade só pode ser enviado a alguém que já
+  compartilha pelo menos um servidor com o remetente
+  (`FriendshipService.shareAnyServer`); aceitar, recusar, cancelar e
+  desfazer amizade são as únicas ações. `FriendshipStatus` só tem `PENDING`
+  e `ACCEPTED` — recusar/cancelar/desfazer apagam a linha, não guardam um
+  estado terminal.
+* Mensagens diretas: texto puro (até 4000 caracteres), sem anexos, sem
+  edição, sem exclusão, sem contagem de não lidas — nenhum dos recursos que
+  mensagens de canal têm. Exige amizade `ACCEPTED` para enviar
+  (`DmMessageService.requireFriends`); o histórico continua legível depois
+  de desfazer a amizade, só o envio é bloqueado. Entrega em tempo real via
+  WebSocket (`DM_MESSAGE_CREATE`); histórico paginado por REST.
+* Chamadas 1:1: voz, vídeo e compartilhamento de tela (não é só voz),
+  reaproveitando o mesmo fluxo de token do LiveKit usado nos canais de voz
+  de servidor. Convite/aceitar/recusar/cancelar (`DmCallService`) é
+  inteiramente em memória, sem tabela — uma chamada perdida simplesmente
+  desaparece, como uma ligação de telefone de verdade —, com TTL de toque de
+  30s e rate limit por par de usuários. Também exige amizade
+  (`DmCallService.requireFriends`).
+* Picture-in-Picture de chamada funciona tanto em canais de voz de servidor
+  quanto em chamadas 1:1 (`DmCallView` reaproveita o mesmo `CallControlBar`).
+  O assobio privado (`WhistleService`) não — está amarrado a um `Channel` de
+  voz de servidor e não tem caminho de código até `DmCallService`.
+* Amigos e DMs ficam inteiramente fora do sistema de cargos/permissões: não
+  há `Role`, `ChannelPermissionOverride` nem checagem via `PermissionService`
+  em nenhum dos dois — a única regra de autorização é "os dois usuários
+  precisam ser amigos".
+* Group DMs continuam fora de escopo — não foram implementados e não há
+  aprovação para eles.
+
+**Consequences**: `AGENTS.md`, `docs/PRODUCT.md` (§15, §19, §22, §24) e
+`docs/OPEN_QUESTIONS.md` (Q28) foram atualizados para descrever o sistema
+real em vez de listá-lo como não-objetivo. Nenhuma mudança de código. Para a
+próxima feature de escopo aprovada fora do fluxo normal, o padrão a seguir é
+o do D24: registrar a decisão no mesmo PR que implementa a feature, não
+meses depois.
