@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { queryClient } from '../../services/queryClient';
 import type { AuthResult, User } from '../../types/user';
 
 interface AuthState {
@@ -37,14 +38,17 @@ function clearSessionCookie() {
  * this store just tracks whether we believe we're logged in and the profile to display.
  *
  * This store intentionally has no dependency on the API layer (services/apiClient.ts,
- * features/auth/api.ts) — it only holds state and simple setters. `apiClient` depends on
- * this store (to clear it on a 401), not the other way around, which keeps the dependency graph
- * a one-way line instead of a cycle:
+ * features/auth/api.ts) — it only holds state and simple setters, plus the query client (a
+ * plain module singleton with no dependency back on this store or the API layer). `apiClient`
+ * depends on this store (to clear it on a 401), not the other way around, which keeps the
+ * dependency graph a one-way line instead of a cycle:
  *
- *   features/auth/api.ts -> services/apiClient.ts -> features/auth/authStore.ts
+ *   features/auth/api.ts -> services/apiClient.ts -> features/auth/authStore.ts -> services/queryClient.ts
  *
  * Ending a session (`logout()` and `expireSession()`) goes through `clearSessionCookie()` above,
- * which uses raw `fetch` for the same reason.
+ * which uses raw `fetch` for the same reason, and also clears the query client: without that,
+ * cached data from the ending session (profile, servers, messages, DMs — none of it namespaced
+ * by user) would still be sitting in the cache for whoever uses the browser next.
  */
 export const useAuthStore = create<AuthState>()(
   persist(
@@ -67,19 +71,25 @@ export const useAuthStore = create<AuthState>()(
       setUser: (user) => set({ user }),
       logout: () => {
         clearSessionCookie();
+        queryClient.clear();
         set({ isAuthenticated: false, user: null, sessionEndedReason: null });
       },
       // Same clearing as logout(), but records that the user didn't ask for this — LoginPage
       // reads the reason to explain why they're suddenly back at the login screen.
       expireSession: () => {
         clearSessionCookie();
+        queryClient.clear();
         set({ isAuthenticated: false, user: null, sessionEndedReason: 'expired' });
       },
       clearSessionEndedReason: () => set({ sessionEndedReason: null }),
     }),
     {
       name: 'concord-auth',
-      partialize: (state) => ({ isAuthenticated: state.isAuthenticated, user: state.user }),
+      // `user` (email, display name) is deliberately left out: persisting it would let it
+      // survive a cookie-only session end and be shown to whoever opens the app next, on a
+      // shared browser, before useMe() has a chance to confirm who's actually logged in. App.tsx
+      // already handles `isAuthenticated && user == null` as a bootstrapping state.
+      partialize: (state) => ({ isAuthenticated: state.isAuthenticated }),
     },
   ),
 );
