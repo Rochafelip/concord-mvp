@@ -239,12 +239,14 @@ exhaust RAM/swap and kill the frontend build with an opaque error:
 ```bash
 docker compose build backend
 docker compose build frontend
-docker compose up -d
+./compose-up.sh up -d
 ```
 
 Just the base `docker-compose.yml` — no `-f docker-compose.prod.yml`
 (that override is for the Let's Encrypt path in `DEPLOY.md` and doesn't
-apply here).
+apply here). `compose-up.sh` refuses to run outside the `master` branch —
+this brings up the real production stack, so it must match what CI/CD
+already gates (`CI_CD.md`).
 
 ## 10. Verify
 
@@ -313,7 +315,7 @@ git pull
 cd infrastructure
 docker compose build backend
 docker compose build frontend
-docker compose up -d
+./compose-up.sh up -d
 ```
 
 Built one at a time for the same low-memory reason as step 9 above.
