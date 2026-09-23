@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Avatar } from '../../components/Avatar';
 import { Button } from '../../components/Button';
 import { ErrorBanner } from '../../components/ErrorBanner';
@@ -16,11 +16,16 @@ import {
   useIsServerOwner,
   useLeaveServer,
   useRegenerateInvite,
+  useRemoveServerIcon,
   useServer,
   useServerMembers,
   useTransferOwnership,
   useUpdateMyServerMember,
+  useUploadServerIcon,
 } from './hooks';
+
+const ALLOWED_ICON_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+const MAX_ICON_SIZE = 5 * 1024 * 1024;
 
 interface ServerSettingsPanelProps {
   serverId: string;
@@ -51,12 +56,15 @@ export function ServerSettingsPanel({ serverId, open, onClose }: ServerSettingsP
   const { data: members } = useServerMembers(open ? serverId : undefined);
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
   const [displayNameDraft, setDisplayNameDraft] = useState<{ serverId: string; value: string } | null>(null);
+  const [iconError, setIconError] = useState<string | null>(null);
+  const iconInputRef = useRef<HTMLInputElement>(null);
 
   // Deleting the server and transferring ownership are not delegable by permission (D20), so
   // they stay on isOwner. The invite code moved to MANAGE_INVITES.
   const isOwner = useIsServerOwner(serverId);
   const canManageInvites = useHasPermission(serverId, 'MANAGE_INVITES');
   const canManageRoles = useHasPermission(serverId, 'MANAGE_ROLES');
+  const canManageServer = useHasPermission(serverId, 'MANAGE_SERVER');
   // Gated on canManageRoles, not just `open`: `roles` is only ever rendered inside RolesTab and
   // MemberRoleEditor, both already gated on the same permission — matches useInvite just below.
   const { data: roles } = useRoles(open && canManageRoles ? serverId : undefined);
@@ -67,6 +75,8 @@ export function ServerSettingsPanel({ serverId, open, onClose }: ServerSettingsP
   const updateMemberMutation = useUpdateMyServerMember(serverId);
   const deleteServerMutation = useDeleteServer();
   const leaveServerMutation = useLeaveServer();
+  const uploadIconMutation = useUploadServerIcon(serverId);
+  const removeIconMutation = useRemoveServerIcon(serverId);
 
   const currentMember = members?.find((member) => member.user.id === currentUserId);
   const memberDisplayName = currentMember?.displayName ?? currentMember?.user.displayName ?? '';
@@ -116,6 +126,23 @@ export function ServerSettingsPanel({ serverId, open, onClose }: ServerSettingsP
     }
   }
 
+  function handleIconChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!ALLOWED_ICON_TYPES.includes(file.type) || file.size > MAX_ICON_SIZE) {
+      setIconError(
+        !ALLOWED_ICON_TYPES.includes(file.type)
+          ? 'Selecione uma imagem JPEG, PNG, GIF ou WebP'
+          : 'A imagem deve ter no máximo 5 MB',
+      );
+      uploadIconMutation.reset();
+      return;
+    }
+    setIconError(null);
+    uploadIconMutation.mutate(file);
+  }
+
   return (
     <Modal open={open} onClose={onClose}>
       <div className="w-[38rem] space-y-4">
@@ -141,6 +168,68 @@ export function ServerSettingsPanel({ serverId, open, onClose }: ServerSettingsP
         <div className="max-h-[70vh] space-y-4 overflow-y-auto">
           {tab === 'overview' && (
             <>
+              {canManageServer && (
+                <section className="space-y-2">
+                  <h3 className="text-body font-medium text-muted">Server icon</h3>
+                  <ErrorBanner
+                    message={
+                      iconError ??
+                      (uploadIconMutation.error
+                        ? uploadIconMutation.error instanceof ApiError && uploadIconMutation.error.status === 413
+                          ? 'A imagem deve ter no máximo 5 MB'
+                          : uploadIconMutation.error instanceof ApiError
+                            ? uploadIconMutation.error.message
+                            : 'Algo deu errado. Tente novamente.'
+                        : removeIconMutation.error instanceof ApiError
+                          ? removeIconMutation.error.message
+                          : null)
+                    }
+                  />
+                  <div className="flex items-center gap-4 rounded border border-border bg-surface p-4">
+                    <div className="relative flex h-20 w-20 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-sidebar text-3xl font-semibold text-ink">
+                      {server?.iconUrl ? (
+                        <img src={server.iconUrl} alt="" className="h-full w-full object-cover" />
+                      ) : (
+                        (server?.name.trim().charAt(0).toUpperCase() ?? '?')
+                      )}
+                      {uploadIconMutation.isPending && (
+                        <span className="absolute inset-0 animate-pulse rounded-full bg-white/20" aria-hidden="true" />
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <input
+                        ref={iconInputRef}
+                        type="file"
+                        accept="image/jpeg,image/png,image/gif,image/webp"
+                        className="sr-only"
+                        onChange={handleIconChange}
+                      />
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          disabled={uploadIconMutation.isPending || removeIconMutation.isPending}
+                          onClick={() => iconInputRef.current?.click()}
+                        >
+                          {uploadIconMutation.isPending ? 'Enviando…' : server?.iconUrl ? 'Alterar' : 'Adicionar'}
+                        </Button>
+                        {server?.iconUrl && (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            disabled={uploadIconMutation.isPending || removeIconMutation.isPending}
+                            onClick={() => removeIconMutation.mutate()}
+                          >
+                            {removeIconMutation.isPending ? 'Removendo…' : 'Remover'}
+                          </Button>
+                        )}
+                      </div>
+                      <p className="text-caption text-muted">JPEG, PNG, GIF ou WebP · máximo de 5 MB</p>
+                    </div>
+                  </div>
+                </section>
+              )}
+
               {canManageInvites && (
                 <section className="space-y-2">
                   <h3 className="text-body font-medium text-muted">Invite code</h3>

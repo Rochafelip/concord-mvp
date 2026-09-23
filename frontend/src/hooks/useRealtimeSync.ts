@@ -266,6 +266,12 @@ export function useRealtimeSync(): void {
         queryClient.invalidateQueries({ queryKey: ['servers'] });
       }),
 
+      websocketClient.subscribe('SERVER_ICON_UPDATE', () => {
+        // Same reasoning as SERVER_OWNER_CHANGE just above: iconUrl also lives on the
+        // list-shaped Server objects, so invalidate the whole ['servers'] branch.
+        queryClient.invalidateQueries({ queryKey: ['servers'] });
+      }),
+
       websocketClient.subscribe('SERVER_DELETE', (payload) => {
         const { serverId } = payload as ServerDeletedPayload;
         queryClient.setQueryData<Server[]>(['servers'], (old) =>

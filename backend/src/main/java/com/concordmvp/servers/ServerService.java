@@ -3,9 +3,11 @@ package com.concordmvp.servers;
 import com.concordmvp.channels.Channel;
 import com.concordmvp.channels.ChannelRepository;
 import com.concordmvp.channels.ChannelType;
+import com.concordmvp.common.RateLimiter;
 import com.concordmvp.common.exception.BadRequestException;
 import com.concordmvp.common.exception.ForbiddenException;
 import com.concordmvp.common.exception.ResourceNotFoundException;
+import com.concordmvp.common.exception.TooManyRequestsException;
 import com.concordmvp.media.VoicePresenceService;
 import com.concordmvp.messages.AttachmentCleanupService;
 import com.concordmvp.messages.MessageRepository;
@@ -20,19 +22,26 @@ import com.concordmvp.realtime.WsEvent;
 import com.concordmvp.realtime.WsEventType;
 import com.concordmvp.servers.dto.InvitePreview;
 import com.concordmvp.servers.dto.ServerDeletedPayload;
+import com.concordmvp.servers.dto.ServerIconUpdatePayload;
 import com.concordmvp.servers.dto.ServerMemberEventPayload;
 import com.concordmvp.servers.dto.ServerOwnerChangePayload;
 import com.concordmvp.servers.dto.ServerMemberUpdatePayload;
 import com.concordmvp.users.User;
 import com.concordmvp.users.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.security.SecureRandom;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -47,6 +56,7 @@ import java.util.stream.Collectors;
 @Service
 public class ServerService {
 
+    private static final Logger log = LoggerFactory.getLogger(ServerService.class);
     private static final String INVITE_CODE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
     private static final int INVITE_CODE_LENGTH = 10;
 
@@ -65,7 +75,12 @@ public class ServerService {
     private final RoleRepository roleRepository;
     private final ApplicationEventPublisher applicationEventPublisher;
     private final VoicePresenceService voicePresenceService;
+    private final ServerIconStorageService serverIconStorageService;
     private final SecureRandom secureRandom = new SecureRandom();
+    // In memory rather than Redis, per docs/DECISIONS.md D3. Icon changes are rare, so this is
+    // the same tier as AvatarStorageService's own rate limiter.
+    private final RateLimiter serverIconRateLimiter =
+            new RateLimiter(3, Duration.ofMinutes(1), 10, Duration.ofHours(1));
 
     @Autowired
     public ServerService(ServerRepository serverRepository,
@@ -82,7 +97,8 @@ public class ServerService {
                           RoleRepository roleRepository,
                           ChannelReadStateService channelReadStateService,
                           ApplicationEventPublisher applicationEventPublisher,
-                          VoicePresenceService voicePresenceService) {
+                          VoicePresenceService voicePresenceService,
+                          ServerIconStorageService serverIconStorageService) {
         this.applicationEventPublisher = applicationEventPublisher;
         this.voicePresenceService = voicePresenceService;
         this.permissionService = permissionService;
@@ -98,6 +114,7 @@ public class ServerService {
         this.userRepository = userRepository;
         this.realtimeEventPublisher = realtimeEventPublisher;
         this.channelReadStateService = channelReadStateService;
+        this.serverIconStorageService = serverIconStorageService;
     }
 
     @Transactional
@@ -270,6 +287,63 @@ public class ServerService {
     }
 
     @Transactional
+    public Server updateIcon(UUID serverId, UUID requesterId, MultipartFile file) {
+        Server server = requireServer(serverId);
+        permissionService.requireServer(serverId, requesterId, Permission.MANAGE_SERVER);
+        if (!serverIconRateLimiter.tryAcquire(requesterId.toString(), Instant.now())) {
+            throw new TooManyRequestsException("Muitos uploads. Tente novamente mais tarde.");
+        }
+
+        ServerIconStorageService.StoredIcon stored = serverIconStorageService.store(serverId, file);
+        String previous = server.getIconStorageKey();
+        server.setIconStorageKey(stored.storageKey());
+        Server saved;
+        try {
+            saved = serverRepository.save(server);
+        } catch (RuntimeException ex) {
+            try {
+                serverIconStorageService.delete(stored.storageKey());
+            } catch (IOException cleanupFailure) {
+                ex.addSuppressed(cleanupFailure);
+            }
+            throw ex;
+        }
+        broadcastIconUpdate(saved);
+        if (previous != null) {
+            try {
+                serverIconStorageService.delete(previous);
+            } catch (IOException ex) {
+                log.error("Failed to remove previous server icon file {}", previous, ex);
+            }
+        }
+        return saved;
+    }
+
+    @Transactional
+    public Server removeIcon(UUID serverId, UUID requesterId) {
+        Server server = requireServer(serverId);
+        permissionService.requireServer(serverId, requesterId, Permission.MANAGE_SERVER);
+
+        String previous = server.getIconStorageKey();
+        if (previous == null) return server;
+        server.setIconStorageKey(null);
+        Server saved = serverRepository.save(server);
+        broadcastIconUpdate(saved);
+        try {
+            serverIconStorageService.delete(previous);
+        } catch (IOException ex) {
+            log.error("Failed to remove server icon file {}", previous, ex);
+        }
+        return saved;
+    }
+
+    private void broadcastIconUpdate(Server server) {
+        realtimeEventPublisher.broadcast(currentMemberIds(server.getId()),
+                new WsEvent(WsEventType.SERVER_ICON_UPDATE,
+                        new ServerIconUpdatePayload(server.getId(), ServerIconUrls.url(server))));
+    }
+
+    @Transactional
     public void deleteServer(UUID serverId, UUID requesterId) {
         Server server = requireServer(serverId);
 
@@ -300,6 +374,14 @@ public class ServerService {
         serverInviteRepository.findByServerId(serverId).ifPresent(serverInviteRepository::delete);
         serverMemberRepository.deleteAll(serverMemberRepository.findByServerId(serverId));
         serverRepository.delete(server);
+
+        if (server.getIconStorageKey() != null) {
+            try {
+                serverIconStorageService.delete(server.getIconStorageKey());
+            } catch (IOException ex) {
+                log.error("Failed to remove server icon file {}", server.getIconStorageKey(), ex);
+            }
+        }
 
         // Deferred to AFTER_COMMIT (audit A9): if any deletion above fails, the transaction
         // rolls back and this event is simply never published, so clients never hear about a

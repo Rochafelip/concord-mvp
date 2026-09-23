@@ -20,6 +20,7 @@ import com.concordmvp.realtime.RealtimeEventPublisher;
 import com.concordmvp.realtime.WsEvent;
 import com.concordmvp.realtime.WsEventType;
 import com.concordmvp.servers.dto.InvitePreview;
+import com.concordmvp.servers.dto.ServerIconUpdatePayload;
 import com.concordmvp.servers.dto.ServerMemberEventPayload;
 import com.concordmvp.servers.dto.ServerOwnerChangePayload;
 import com.concordmvp.users.User;
@@ -32,6 +33,7 @@ import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.mock.web.MockMultipartFile;
 
 import java.util.List;
 import java.util.Optional;
@@ -99,6 +101,9 @@ class ServerServiceTest {
     @Mock
     private VoicePresenceService voicePresenceService;
 
+    @Mock
+    private ServerIconStorageService serverIconStorageService;
+
     private ServerService serverService;
 
     @BeforeEach
@@ -106,7 +111,7 @@ class ServerServiceTest {
         serverService = new ServerService(serverRepository, serverMemberRepository, serverInviteRepository,
                 channelRepository, messageRepository, attachmentCleanupService, messageService, userRepository,
                 realtimeEventPublisher, permissionService, roleService, roleRepository, null, applicationEventPublisher,
-                voicePresenceService);
+                voicePresenceService, serverIconStorageService);
     }
 
     /** Mimics JPA assigning an id on save/persist for a {@link Server} that doesn't already have one. */
@@ -506,6 +511,116 @@ class ServerServiceTest {
         assertThat(eventCaptor.getValue().payload()).isEqualTo(new ServerOwnerChangePayload(serverId, newOwnerId));
     }
 
+    // --- updateIcon / removeIcon ---
+
+    @Test
+    void updateIcon_withoutManageServer_throwsForbidden() {
+        UUID serverId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        MockMultipartFile file = new MockMultipartFile("file", "icon.png", "image/png", new byte[]{1, 2, 3});
+        when(serverRepository.findById(serverId)).thenReturn(Optional.of(server(serverId, ownerId)));
+        doThrow(new ForbiddenException("denied")).when(permissionService)
+                .requireServer(serverId, requesterId, Permission.MANAGE_SERVER);
+
+        assertThatThrownBy(() -> serverService.updateIcon(serverId, requesterId, file))
+                .isInstanceOf(ForbiddenException.class);
+
+        verifyNoInteractions(serverIconStorageService);
+        verifyNoInteractions(realtimeEventPublisher);
+    }
+
+    @Test
+    void updateIcon_authorized_storesFile_savesKey_andBroadcastsIconUpdate() {
+        UUID serverId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        MockMultipartFile file = new MockMultipartFile("file", "icon.png", "image/png", new byte[]{1, 2, 3});
+        Server server = server(serverId, ownerId);
+
+        when(serverRepository.findById(serverId)).thenReturn(Optional.of(server));
+        when(serverIconStorageService.store(serverId, file))
+                .thenReturn(new ServerIconStorageService.StoredIcon("server-icons/key.png", "image/png"));
+        when(serverRepository.save(server)).thenReturn(server);
+        when(serverMemberRepository.findByServerId(serverId)).thenReturn(List.of(member(serverId, ownerId)));
+
+        Server result = serverService.updateIcon(serverId, ownerId, file);
+
+        assertThat(result.getIconStorageKey()).isEqualTo("server-icons/key.png");
+        verify(serverRepository).save(server);
+
+        ArgumentCaptor<WsEvent> eventCaptor = ArgumentCaptor.forClass(WsEvent.class);
+        verify(realtimeEventPublisher).broadcast(eq(Set.of(ownerId)), eventCaptor.capture());
+        assertThat(eventCaptor.getValue().type()).isEqualTo(WsEventType.SERVER_ICON_UPDATE);
+        assertThat(((ServerIconUpdatePayload) eventCaptor.getValue().payload()).serverId()).isEqualTo(serverId);
+    }
+
+    @Test
+    void updateIcon_replacingAnExistingIcon_deletesThePreviousFile() throws Exception {
+        UUID serverId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        MockMultipartFile file = new MockMultipartFile("file", "icon.png", "image/png", new byte[]{1, 2, 3});
+        Server server = server(serverId, ownerId);
+        server.setIconStorageKey("server-icons/old.png");
+
+        when(serverRepository.findById(serverId)).thenReturn(Optional.of(server));
+        when(serverIconStorageService.store(serverId, file))
+                .thenReturn(new ServerIconStorageService.StoredIcon("server-icons/new.png", "image/png"));
+        when(serverRepository.save(server)).thenReturn(server);
+        when(serverMemberRepository.findByServerId(serverId)).thenReturn(List.of(member(serverId, ownerId)));
+
+        serverService.updateIcon(serverId, ownerId, file);
+
+        verify(serverIconStorageService).delete("server-icons/old.png");
+    }
+
+    @Test
+    void removeIcon_withoutManageServer_throwsForbidden() {
+        UUID serverId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        when(serverRepository.findById(serverId)).thenReturn(Optional.of(server(serverId, ownerId)));
+        doThrow(new ForbiddenException("denied")).when(permissionService)
+                .requireServer(serverId, requesterId, Permission.MANAGE_SERVER);
+
+        assertThatThrownBy(() -> serverService.removeIcon(serverId, requesterId))
+                .isInstanceOf(ForbiddenException.class);
+
+        verifyNoInteractions(serverIconStorageService);
+    }
+
+    @Test
+    void removeIcon_noIconSet_isANoop() {
+        UUID serverId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        when(serverRepository.findById(serverId)).thenReturn(Optional.of(server(serverId, ownerId)));
+
+        serverService.removeIcon(serverId, ownerId);
+
+        verify(serverRepository, never()).save(any());
+        verifyNoInteractions(realtimeEventPublisher);
+    }
+
+    @Test
+    void removeIcon_iconSet_clearsKey_deletesFile_andBroadcasts() throws Exception {
+        UUID serverId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        Server server = server(serverId, ownerId);
+        server.setIconStorageKey("server-icons/key.png");
+
+        when(serverRepository.findById(serverId)).thenReturn(Optional.of(server));
+        when(serverRepository.save(server)).thenReturn(server);
+        when(serverMemberRepository.findByServerId(serverId)).thenReturn(List.of(member(serverId, ownerId)));
+
+        Server result = serverService.removeIcon(serverId, ownerId);
+
+        assertThat(result.getIconStorageKey()).isNull();
+        verify(serverIconStorageService).delete("server-icons/key.png");
+
+        ArgumentCaptor<WsEvent> eventCaptor = ArgumentCaptor.forClass(WsEvent.class);
+        verify(realtimeEventPublisher).broadcast(eq(Set.of(ownerId)), eventCaptor.capture());
+        assertThat(eventCaptor.getValue().type()).isEqualTo(WsEventType.SERVER_ICON_UPDATE);
+    }
+
     // --- deleteServer ---
 
     @Test
@@ -562,6 +677,23 @@ class ServerServiceTest {
         verify(applicationEventPublisher).publishEvent(eventCaptor.capture());
         assertThat(eventCaptor.getValue().serverId()).isEqualTo(serverId);
         assertThat(eventCaptor.getValue().recipientUserIds()).isEqualTo(Set.of(ownerId, otherMemberId));
+    }
+
+    @Test
+    void deleteServer_serverHadAnIcon_deletesTheIconFile() throws Exception {
+        UUID serverId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        Server server = server(serverId, ownerId);
+        server.setIconStorageKey("server-icons/key.png");
+
+        when(serverRepository.findById(serverId)).thenReturn(Optional.of(server));
+        when(serverMemberRepository.findByServerId(serverId)).thenReturn(List.of(member(serverId, ownerId)));
+        when(channelRepository.findByServerId(serverId)).thenReturn(List.of());
+        when(messageRepository.findByChannelIdIn(List.of())).thenReturn(List.of());
+
+        serverService.deleteServer(serverId, ownerId);
+
+        verify(serverIconStorageService).delete("server-icons/key.png");
     }
 
     @Test

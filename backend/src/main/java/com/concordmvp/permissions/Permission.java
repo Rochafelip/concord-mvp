@@ -16,7 +16,7 @@ public enum Permission {
 
     // --- Server administration ---
     ADMINISTRATOR(0),
-    /** Reserved: the server has no editable fields yet, so nothing enforces this one today. */
+    /** Gates the server icon upload/removal — the only editable server field so far. */
     MANAGE_SERVER(1),
     MANAGE_ROLES(2),
     MANAGE_CHANNELS(3),
