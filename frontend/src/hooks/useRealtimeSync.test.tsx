@@ -3,6 +3,8 @@ import { act, render, screen } from '@testing-library/react';
 import { MemoryRouter, Outlet, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAuthStore } from '../features/auth/authStore';
+import { useDmCallStore } from '../features/calls/dm/dmCallStore';
+import { getCallToken } from '../features/calls/dm/api';
 import { useNotificationStore } from '../stores/notificationStore';
 import type { Channel } from '../types/channel';
 import type { Server } from '../types/server';
@@ -64,6 +66,10 @@ vi.mock('../services/desktopNotifications', () => ({
   requestPermission: vi.fn(),
 }));
 
+vi.mock('../features/calls/dm/api', () => ({
+  getCallToken: vi.fn(() => Promise.resolve({ token: 'call-token', url: 'wss://livekit.test/call', roomName: 'dm-call-x' })),
+}));
+
 function emit(type: string, payload: unknown) {
   act(() => {
     handlers.get(type)?.forEach((handler) => handler(payload));
@@ -116,6 +122,8 @@ describe('useRealtimeSync', () => {
     vi.mocked(getWsTicket).mockClear();
     vi.mocked(notify).mockClear();
     vi.mocked(playChime).mockClear();
+    vi.mocked(getCallToken).mockClear();
+    useDmCallStore.setState({ status: 'idle', callId: null, role: null, peer: null });
     setBackgrounded(false);
     useVoiceStore.setState({
       status: 'disconnected',
@@ -868,5 +876,122 @@ describe('useRealtimeSync', () => {
     emit('FRIEND_UPDATE', { userId: 'u2', otherUserId: 'u1' });
 
     expect(useNotificationStore.getState().unreadFriendIds).toEqual([]);
+  });
+
+  describe('CALL_INVITE', () => {
+    it('puts the store into ringing-in with the caller info, when idle', () => {
+      renderHarness(newQueryClient(), '/app');
+
+      emit('CALL_INVITE', {
+        callId: 'call-1',
+        caller: { id: 'u2', username: 'bob', displayName: 'Bob', avatarUrl: null },
+      });
+
+      const state = useDmCallStore.getState();
+      expect(state.status).toBe('ringing-in');
+      expect(state.callId).toBe('call-1');
+      expect(state.role).toBe('callee');
+      expect(state.peer).toEqual({ id: 'u2', username: 'bob', displayName: 'Bob', avatarUrl: null });
+    });
+
+    it('is ignored when already busy with another call locally', () => {
+      useDmCallStore.setState({
+        status: 'ringing-out',
+        callId: 'call-existing',
+        role: 'caller',
+        peer: { id: 'u3', displayName: 'Carol', avatarUrl: null },
+      });
+      renderHarness(newQueryClient(), '/app');
+
+      emit('CALL_INVITE', {
+        callId: 'call-2',
+        caller: { id: 'u2', username: 'bob', displayName: 'Bob', avatarUrl: null },
+      });
+
+      expect(useDmCallStore.getState().callId).toBe('call-existing');
+    });
+  });
+
+  describe('CALL_RESOLVED', () => {
+    it('a stale event for a different callId than the current one is ignored', () => {
+      useDmCallStore.setState({
+        status: 'ringing-out',
+        callId: 'call-current',
+        role: 'caller',
+        peer: { id: 'u2', displayName: 'Bob', avatarUrl: null },
+      });
+      renderHarness(newQueryClient(), '/app');
+
+      emit('CALL_RESOLVED', { callId: 'call-other', outcome: 'CANCELLED', roomName: null });
+
+      expect(useDmCallStore.getState().status).toBe('ringing-out');
+    });
+
+    it('DECLINED resets the store regardless of role', () => {
+      useDmCallStore.setState({
+        status: 'ringing-out',
+        callId: 'call-1',
+        role: 'caller',
+        peer: { id: 'u2', displayName: 'Bob', avatarUrl: null },
+      });
+      renderHarness(newQueryClient(), '/app');
+
+      emit('CALL_RESOLVED', { callId: 'call-1', outcome: 'DECLINED', roomName: null });
+
+      expect(useDmCallStore.getState().status).toBe('idle');
+      expect(useDmCallStore.getState().callId).toBeNull();
+    });
+
+    it('CANCELLED resets the store for the callee side too', () => {
+      useDmCallStore.setState({
+        status: 'ringing-in',
+        callId: 'call-1',
+        role: 'callee',
+        peer: { id: 'u2', displayName: 'Bob', avatarUrl: null },
+      });
+      renderHarness(newQueryClient(), '/app');
+
+      emit('CALL_RESOLVED', { callId: 'call-1', outcome: 'CANCELLED', roomName: null });
+
+      expect(useDmCallStore.getState().status).toBe('idle');
+    });
+
+    it('ACCEPTED for the caller fetches its own token and connects', async () => {
+      useDmCallStore.setState({
+        status: 'ringing-out',
+        callId: 'call-1',
+        role: 'caller',
+        peer: { id: 'u2', displayName: 'Bob', avatarUrl: null },
+      });
+      renderHarness(newQueryClient(), '/app');
+
+      emit('CALL_RESOLVED', { callId: 'call-1', outcome: 'ACCEPTED', roomName: 'dm-call-x' });
+      // Flush the token fetch's promise chain.
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(useDmCallStore.getState().status).toBe('connected');
+      expect(getCallToken).toHaveBeenCalledWith('call-1');
+      expect(voiceClient.connect).toHaveBeenCalledWith(null, 'call-token', 'wss://livekit.test/call');
+    });
+
+    it("ACCEPTED for the callee does not fetch a token again — it already has one from accept()", async () => {
+      useDmCallStore.setState({
+        status: 'connected',
+        callId: 'call-1',
+        role: 'callee',
+        peer: { id: 'u2', displayName: 'Bob', avatarUrl: null },
+      });
+      renderHarness(newQueryClient(), '/app');
+
+      emit('CALL_RESOLVED', { callId: 'call-1', outcome: 'ACCEPTED', roomName: 'dm-call-x' });
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(getCallToken).not.toHaveBeenCalled();
+    });
   });
 });

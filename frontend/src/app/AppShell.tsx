@@ -9,6 +9,8 @@ import { Modal } from '../components/Modal';
 import { useAuthStore } from '../features/auth/authStore';
 import { VerifyEmailBanner } from '../features/auth/VerifyEmailBanner';
 import { VoiceConnectionBar } from '../features/calls/VoiceConnectionBar';
+import { IncomingCallModal } from '../features/calls/dm/IncomingCallModal';
+import { OutgoingCallOverlay } from '../features/calls/dm/OutgoingCallOverlay';
 import { useDisconnectVoiceOnLogout } from '../features/calls/hooks';
 import { ServerSidebar } from '../features/servers/ServerSidebar';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
@@ -129,6 +131,8 @@ export function AppShell() {
       </div>
 
       <VoiceConnectionBar />
+      <IncomingCallModal />
+      <OutgoingCallOverlay />
     </div>
   );
 }
