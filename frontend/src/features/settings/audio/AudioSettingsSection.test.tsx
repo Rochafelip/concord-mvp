@@ -54,8 +54,8 @@ describe('AudioSettingsSection', () => {
   it('renders the sensitivity checkbox unchecked and the slider disabled by default', () => {
     render(<AudioSettingsSection />);
 
-    expect(screen.getByRole('checkbox', { name: 'Ativar sensibilidade do microfone' })).not.toBeChecked();
-    expect(screen.getByRole('slider', { name: 'Limiar de sensibilidade do microfone' })).toBeDisabled();
+    expect(screen.getByRole('checkbox', { name: 'Enable microphone sensitivity' })).not.toBeChecked();
+    expect(screen.getByRole('slider', { name: 'Microphone sensitivity threshold' })).toBeDisabled();
   });
 
   it('renders the slider enabled, at the stored threshold, when sensitivity is already enabled', () => {
@@ -63,7 +63,7 @@ describe('AudioSettingsSection', () => {
     vi.mocked(micSensitivityPreference.getMicSensitivityThresholdDb).mockReturnValue(-30);
     render(<AudioSettingsSection />);
 
-    const slider = screen.getByRole('slider', { name: 'Limiar de sensibilidade do microfone' });
+    const slider = screen.getByRole('slider', { name: 'Microphone sensitivity threshold' });
     expect(slider).not.toBeDisabled();
     expect(slider).toHaveValue('-30');
   });
@@ -72,18 +72,18 @@ describe('AudioSettingsSection', () => {
     const user = userEvent.setup();
     render(<AudioSettingsSection />);
 
-    await user.click(screen.getByRole('checkbox', { name: 'Ativar sensibilidade do microfone' }));
+    await user.click(screen.getByRole('checkbox', { name: 'Enable microphone sensitivity' }));
 
     expect(micSensitivityPreference.setMicSensitivityEnabled).toHaveBeenCalledWith(true);
     expect(voiceClient.setMicSensitivity).toHaveBeenCalledWith(true, -50);
-    expect(screen.getByRole('slider', { name: 'Limiar de sensibilidade do microfone' })).not.toBeDisabled();
+    expect(screen.getByRole('slider', { name: 'Microphone sensitivity threshold' })).not.toBeDisabled();
   });
 
   it('persists and applies the threshold when the slider changes', () => {
     vi.mocked(micSensitivityPreference.getMicSensitivityEnabled).mockReturnValue(true);
     render(<AudioSettingsSection />);
 
-    fireEvent.change(screen.getByRole('slider', { name: 'Limiar de sensibilidade do microfone' }), {
+    fireEvent.change(screen.getByRole('slider', { name: 'Microphone sensitivity threshold' }), {
       target: { value: '-30' },
     });
 

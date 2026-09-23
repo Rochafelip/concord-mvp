@@ -1,13 +1,11 @@
 import micGateWorkletPath from './micGateWorklet.js?url';
 
+export { isAudioWorkletSupported as isMicGateSupported } from './audioWorkletSupport';
+
 // Keyed by AudioContext because voiceClient reuses one AudioContext for the whole call;
 // addModule()-ing the same worklet module into it twice must be avoided. Same pattern as
 // noiseSuppression.ts's workletModulePromises, kept separate since it's a different module URL.
 const workletModulePromises = new WeakMap<AudioContext, Promise<void>>();
-
-export function isMicGateSupported(): boolean {
-  return typeof AudioWorklet !== 'undefined';
-}
 
 function addGateWorkletModule(audioContext: AudioContext): Promise<void> {
   let promise = workletModulePromises.get(audioContext);

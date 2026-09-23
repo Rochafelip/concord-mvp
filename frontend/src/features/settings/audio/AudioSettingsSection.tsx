@@ -47,11 +47,11 @@ export function AudioSettingsSection() {
             checked={gateEnabled}
             onChange={(event) => handleGateEnabledChange(event.target.checked)}
           />
-          Ativar sensibilidade do microfone
+          Enable microphone sensitivity
         </label>
         <input
           type="range"
-          aria-label="Limiar de sensibilidade do microfone"
+          aria-label="Microphone sensitivity threshold"
           min={MIC_SENSITIVITY_MIN_THRESHOLD_DB}
           max={MIC_SENSITIVITY_MAX_THRESHOLD_DB}
           value={gateThresholdDb}

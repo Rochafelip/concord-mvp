@@ -91,6 +91,13 @@ class VoiceClient {
   // track (see syncHardwareMuteListener).
   private hardwareMuteTrack: MediaStreamTrack | null = null;
 
+  // The processor chain currently applied to the published mic track (or null if neither noise
+  // suppression nor the sensitivity gate is active), and whether the gate specifically is part of
+  // it. setMicSensitivity's fast path (just nudging the gate's threshold AudioParam) depends on
+  // both staying in sync with what applyAudioProcessing last actually did to the track.
+  private currentAudioProcessor: AudioPipelineProcessor | null = null;
+  private gateActiveInCurrentChain = false;
+
   // Synchronous half of connect(): bumps the generation guard and flips the store to
   // "connecting" immediately, before any async work happens. Split out from connect() itself so
   // a caller that first fetches something async (a voice token) can capture the generation
@@ -159,7 +166,7 @@ class VoiceClient {
       // silently fail, don't kill the session).
       await room.localParticipant.setMicrophoneEnabled(true);
       if (generation === this.connectGeneration) {
-        this.applyNoiseSuppressionPreference();
+        this.applyAudioProcessingPreferences();
         this.syncHardwareMuteListener();
       }
     } catch {
@@ -204,6 +211,10 @@ class VoiceClient {
     this.hardwareMuteTrack?.removeEventListener('mute', this.handleHardwareMicMute);
     this.hardwareMuteTrack?.removeEventListener('unmute', this.handleHardwareMicUnmute);
     this.hardwareMuteTrack = null;
+    // The processor chain dies with the track it was attached to — without this,
+    // setMicSensitivity's fast path could nudge a processor left over from the call just ended.
+    this.currentAudioProcessor = null;
+    this.gateActiveInCurrentChain = false;
     // Removed proactively rather than left for the room's own TrackUnsubscribed events to clean
     // up: livekit-client's real Room.disconnect() awaits a server round-trip before emitting
     // those, so relying on them here would leak these elements for the entire duration of that

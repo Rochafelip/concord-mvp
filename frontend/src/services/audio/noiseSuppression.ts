@@ -37,9 +37,7 @@ function addWorkletModule(audioContext: AudioContext): Promise<void> {
   return promise;
 }
 
-export function isNoiseSuppressionSupported(): boolean {
-  return typeof AudioWorklet !== 'undefined';
-}
+export { isAudioWorkletSupported as isNoiseSuppressionSupported } from './audioWorkletSupport';
 
 export interface NoiseSuppressionNode {
   node: RnnoiseWorkletNode;
