@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ContextMenu } from '../../components/ContextMenu';
 import { useVoiceStore } from '../../stores/voiceStore';
 import type { Channel } from '../../types/channel';
 import type { Server } from '../../types/server';
@@ -23,10 +24,17 @@ vi.mock('../calls/ScreenShareHoverPreview', () => ({
     <div role="tooltip" aria-label={`${displayName}'s screen`} />
   ),
 }));
-// UserProfileCard needs a `../friends/api` mock this file doesn't set up — its own behavior is
-// covered by UserProfileCard.test.tsx.
+// UserProfileCard needs a `../friends/api` mock this file doesn't set up, and its friend-action
+// right-click item is covered by UserProfileCard.test.tsx — this stub keeps only the
+// `contextMenuExtraItems` contract ChannelSidebar relies on for "Disconnect from voice".
 vi.mock('../users/UserProfileCard', () => ({
-  UserProfileCard: ({ children }: { children: React.ReactNode }) => children,
+  UserProfileCard: ({
+    children,
+    contextMenuExtraItems = [],
+  }: {
+    children: React.ReactNode;
+    contextMenuExtraItems?: import('../../components/ContextMenu').ContextMenuItem[];
+  }) => <ContextMenu items={contextMenuExtraItems}>{children}</ContextMenu>,
 }));
 
 const server: Server = {

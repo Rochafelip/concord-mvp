@@ -4,7 +4,6 @@ import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from 're
 import { Link, useParams } from 'react-router-dom';
 import { Avatar } from '../../components/Avatar';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
-import { ContextMenu } from '../../components/ContextMenu';
 import { disconnectVoiceParticipant } from '../calls/api';
 import { useVoicePresence } from '../calls/hooks';
 import { ScreenShareHoverPreview } from '../calls/ScreenShareHoverPreview';
@@ -276,42 +275,38 @@ export function ChannelSidebar({ onNavigate }: ChannelSidebarProps) {
                           }
                           onMouseLeave={canPreview ? handlePreviewHoverEnd : undefined}
                         >
-                          <ContextMenu
-                            disabled={!canDisconnect || participant.userId === currentUserId}
-                            items={[
-                              {
-                                label: 'Disconnect from voice',
-                                variant: 'danger',
-                                onSelect: () => void disconnectVoiceParticipant(channel.id, participant.userId),
-                              },
-                            ]}
-                          >
-                            {/* Plain <div>, not the UserProfileCard button: ContextMenu's own
-                                asChild needs a real DOM node as its immediate child to attach
-                                the right-click handler to — nesting it through UserProfileCard's
-                                opaque wrapper would drop that handler. The left-click popover
-                                trigger nests inside instead. */}
-                            <div className="flex min-w-0 flex-1 items-center gap-1.5">
-                              <UserProfileCard
-                                user={{
-                                  id: participant.userId,
-                                  displayName: participant.displayName,
-                                  avatarUrl: participant.avatarUrl,
-                                }}
-                              >
-                                <button type="button" className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
-                                  <span aria-hidden="true">
-                                    <Avatar
-                                      displayName={participant.displayName}
-                                      avatarUrl={participant.avatarUrl}
-                                      className={`h-5 w-5 flex-shrink-0 text-caption ${participant.speaking ? 'ring-2 ring-success' : ''}`}
-                                    />
-                                  </span>
-                                  <span className="truncate text-caption text-muted">{participant.displayName}</span>
-                                </button>
-                              </UserProfileCard>
-                            </div>
-                          </ContextMenu>
+                          <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                            <UserProfileCard
+                              user={{
+                                id: participant.userId,
+                                displayName: participant.displayName,
+                                avatarUrl: participant.avatarUrl,
+                              }}
+                              contextMenuExtraItems={
+                                canDisconnect && participant.userId !== currentUserId
+                                  ? [
+                                      {
+                                        label: 'Disconnect from voice',
+                                        variant: 'danger',
+                                        onSelect: () =>
+                                          void disconnectVoiceParticipant(channel.id, participant.userId),
+                                      },
+                                    ]
+                                  : []
+                              }
+                            >
+                              <button type="button" className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
+                                <span aria-hidden="true">
+                                  <Avatar
+                                    displayName={participant.displayName}
+                                    avatarUrl={participant.avatarUrl}
+                                    className={`h-5 w-5 flex-shrink-0 text-caption ${participant.speaking ? 'ring-2 ring-success' : ''}`}
+                                  />
+                                </span>
+                                <span className="truncate text-caption text-muted">{participant.displayName}</span>
+                              </button>
+                            </UserProfileCard>
+                          </div>
                           <span className="ml-auto flex flex-shrink-0 items-center gap-1 text-muted">
                             {participant.deafened ? (
                               <HeadphoneOff aria-label="Deafened" size={14} />
