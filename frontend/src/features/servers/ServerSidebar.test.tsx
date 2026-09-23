@@ -7,10 +7,12 @@ import type { Server } from '../../types/server';
 import type { Friend } from '../../types/friend';
 import * as api from './api';
 import * as friendsApi from '../friends/api';
+import * as dmApi from '../dm/api';
 import { ServerSidebar } from './ServerSidebar';
 
 vi.mock('./api');
 vi.mock('../friends/api');
+vi.mock('../dm/api');
 
 const servers: Server[] = [
   { id: 's1', name: 'Alpha', ownerId: 'u1', createdAt: '2026-01-01', updatedAt: '2026-01-01' },
@@ -40,6 +42,7 @@ describe('ServerSidebar', () => {
   beforeEach(() => {
     vi.mocked(api.listServers).mockResolvedValue(servers);
     vi.mocked(friendsApi.listFriends).mockResolvedValue(friends);
+    vi.mocked(dmApi.listConversations).mockResolvedValue(['u3']);
   });
 
   it("renders every server the user belongs to", async () => {
@@ -118,5 +121,20 @@ describe('ServerSidebar', () => {
     expect(
       screen.queryByRole('button', { name: 'Falha ao carregar servidores/amigos. Tentar novamente' }),
     ).not.toBeInTheDocument();
+  });
+
+  it('does not show a friend with no visible conversation in the rail', async () => {
+    vi.mocked(dmApi.listConversations).mockResolvedValue([]);
+    renderSidebar();
+    await screen.findByRole('link', { name: 'Alpha' });
+
+    expect(screen.queryByRole('button', { name: 'Lety' })).not.toBeInTheDocument();
+  });
+
+  it('shows a friend once their conversation becomes visible', async () => {
+    vi.mocked(dmApi.listConversations).mockResolvedValue(['u3']);
+    renderSidebar();
+
+    expect(await screen.findByRole('button', { name: 'Lety' })).toBeInTheDocument();
   });
 });

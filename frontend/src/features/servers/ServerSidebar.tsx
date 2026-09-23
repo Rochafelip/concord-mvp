@@ -4,6 +4,7 @@ import { Link, useLocation, useParams } from 'react-router-dom';
 import { CreateServerModal } from './CreateServerModal';
 import { useServers } from './hooks';
 import { useFriends } from '../friends/hooks';
+import { useDmConversations } from '../dm/hooks';
 import { useNotificationStore } from '../../stores/notificationStore';
 import { UserProfileCard } from '../users/UserProfileCard';
 import type { Friend } from '../../types/friend';
@@ -13,20 +14,27 @@ import type { Friend } from '../../types/friend';
  * from the URL's :serverId/:friendUserId params, not duplicated into Zustand — see
  * ARCHITECTURE.md's URL-as-source-of-truth pattern already used by ProtectedRoute/AppRouter.
  *
- * Between the friends icon and the server list, it also renders one circle per friend —
- * DMs reuse the friend list (there is no separate "conversations" concept on the backend) so
- * every friend is one tap away, the same way every server is.
+ * Between the friends icon and the server list, it also renders one circle per friend whose
+ * DM conversation is currently visible (see useDmConversations) — not every friend. A friend
+ * only appears here once the conversation has actually started; FriendsPage is still where
+ * every friend is listed and a new conversation gets opened from.
  */
 export function ServerSidebar() {
   const { serverId, friendUserId } = useParams<{ serverId: string; friendUserId: string }>();
   const location = useLocation();
   const serversQuery = useServers();
   const friendsQuery = useFriends();
+  const conversationsQuery = useDmConversations();
   const { data: servers } = serversQuery;
   const { data: friends } = friendsQuery;
+  const { data: conversationIds } = conversationsQuery;
   // A failed fetch left `data` undefined, which otherwise renders as an empty rail —
   // indistinguishable from genuinely having no servers/friends (security audit, Baixa finding).
-  const hasLoadError = serversQuery.isError || friendsQuery.isError;
+  const hasLoadError = serversQuery.isError || friendsQuery.isError || conversationsQuery.isError;
+  // DMs no longer reuse the full friend list — a friend only shows here once the conversation
+  // has actually been opened (message sent/received, call placed/received, or the chat opened
+  // directly) — see docs/superpowers/specs/2026-09-23-dm-conversation-visibility-design.md.
+  const dmFriends = (friends ?? []).filter((friend) => (conversationIds ?? []).includes(friend.user.id));
   const [createOpen, setCreateOpen] = useState(false);
   const unreadServerIds = useNotificationStore((state) => state.unreadServerIds);
   const clearServerUnread = useNotificationStore((state) => state.clearServerUnread);
@@ -72,6 +80,7 @@ export function ServerSidebar() {
           onClick={() => {
             if (serversQuery.isError) serversQuery.refetch();
             if (friendsQuery.isError) friendsQuery.refetch();
+            if (conversationsQuery.isError) conversationsQuery.refetch();
           }}
           className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-danger/10 text-danger transition-colors hover:bg-danger/20 sm:h-12 sm:w-12"
         >
@@ -79,7 +88,7 @@ export function ServerSidebar() {
         </button>
       )}
 
-      {(friends ?? []).map((friend) => (
+      {dmFriends.map((friend) => (
         <FriendRailIcon
           key={friend.friendshipId}
           friend={friend}
@@ -88,7 +97,7 @@ export function ServerSidebar() {
         />
       ))}
 
-      {(friends ?? []).length > 0 && (servers ?? []).length > 0 && <div className="w-8 border-t" />}
+      {dmFriends.length > 0 && (servers ?? []).length > 0 && <div className="w-8 border-t" />}
 
       {(servers ?? []).map((server) => {
         const isSelected = server.id === serverId;
