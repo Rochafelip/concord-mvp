@@ -301,6 +301,94 @@ describe('voiceClient', () => {
     expect(room.localParticipant.setMicrophoneEnabled).toHaveBeenLastCalledWith(true);
   });
 
+  describe('hardware microphone mute button', () => {
+    // A physical mic's own mute button fires a native `mute`/`unmute` DOM event on the underlying
+    // MediaStreamTrack (Web platform behavior — device/driver dependent, but when it does happen
+    // livekit-client only pauses upstream transmission internally; it never touches the local
+    // publication's isMuted flag or emits RoomEvent.TrackMuted, so the app's own UI never learns
+    // about it. Driving publication.mute()/unmute() ourselves from the native event reuses the
+    // existing TrackMuted-driven resync pipeline.
+    function mockMicPublication() {
+      const listeners = new Map<string, () => void>();
+      const mediaStreamTrack = {
+        addEventListener: vi.fn((event: string, handler: () => void) => {
+          listeners.set(event, handler);
+        }),
+        removeEventListener: vi.fn((event: string) => {
+          listeners.delete(event);
+        }),
+      };
+      const publication = {
+        isMuted: false,
+        mute: vi.fn(() => {
+          publication.isMuted = true;
+          return Promise.resolve(undefined);
+        }),
+        unmute: vi.fn(() => {
+          publication.isMuted = false;
+          return Promise.resolve(undefined);
+        }),
+        audioTrack: { ...mockAudioTrack(), mediaStreamTrack },
+      };
+      return { publication, mediaStreamTrack, fire: (event: string) => listeners.get(event)?.() };
+    }
+
+    it('mutes the publication when the physical microphone fires a native hardware mute event', async () => {
+      const mic = mockMicPublication();
+      const promise = voiceClient.connect('channel-1', 'token', 'wss://example.test/livekit');
+      const room = roomInstances[roomInstances.length - 1];
+      room.localParticipant.getTrackPublication = vi.fn((source?: string) =>
+        source === 'microphone' ? mic.publication : undefined,
+      );
+      connectResolvers[connectResolvers.length - 1]();
+      await promise;
+
+      mic.fire('mute');
+
+      expect(mic.publication.mute).toHaveBeenCalledTimes(1);
+    });
+
+    it('unmutes the publication when the physical microphone fires a native hardware unmute event', async () => {
+      const mic = mockMicPublication();
+      const promise = voiceClient.connect('channel-1', 'token', 'wss://example.test/livekit');
+      const room = roomInstances[roomInstances.length - 1];
+      room.localParticipant.getTrackPublication = vi.fn((source?: string) =>
+        source === 'microphone' ? mic.publication : undefined,
+      );
+      connectResolvers[connectResolvers.length - 1]();
+      await promise;
+
+      mic.fire('unmute');
+
+      expect(mic.publication.unmute).toHaveBeenCalledTimes(1);
+    });
+
+    it('re-attaches the hardware mute listener to the new microphone track after switching input devices', async () => {
+      const micA = mockMicPublication();
+      const promise = voiceClient.connect('channel-1', 'token', 'wss://example.test/livekit');
+      const room = roomInstances[roomInstances.length - 1];
+      room.localParticipant.getTrackPublication = vi.fn((source?: string) =>
+        source === 'microphone' ? micA.publication : undefined,
+      );
+      connectResolvers[connectResolvers.length - 1]();
+      await promise;
+
+      const micB = mockMicPublication();
+      room.localParticipant.getTrackPublication = vi.fn((source?: string) =>
+        source === 'microphone' ? micB.publication : undefined,
+      );
+      await voiceClient.setMicrophoneDevice('device-b');
+
+      // The old track's listener must be torn down — a stray hardware event on the device we
+      // switched away from must not fire.
+      micA.fire('mute');
+      expect(micA.publication.mute).not.toHaveBeenCalled();
+
+      micB.fire('mute');
+      expect(micB.publication.mute).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('toggles the local camera on then off', async () => {
     await connectVoice('channel-1', 'token', 'wss://example.test/livekit');
     const room = roomInstances[0];
