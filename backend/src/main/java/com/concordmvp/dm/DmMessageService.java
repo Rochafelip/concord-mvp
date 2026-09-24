@@ -145,12 +145,19 @@ public class DmMessageService {
                 .orElseThrow(() -> new ForbiddenException("Você só pode enviar mensagens para amigos"));
     }
 
+    // Ordered by the same comparison V20's chk_dm_messages_ordered_pair constraint uses:
+    // PostgreSQL's `uuid <` operator, an unsigned byte-wise comparison. java.util.UUID.compareTo()
+    // instead compares mostSigBits/leastSigBits as SIGNED longs, which disagrees with Postgres
+    // whenever the two UUIDs' leading hex digit falls on opposite sides of 8 — silently rolling
+    // back every message between such a pair (the insert violates the check constraint at commit
+    // time, after the DM_MESSAGE_CREATE broadcast has already gone out). Comparing the canonical
+    // (lowercase, per UUID#toString) hex string lexicographically reproduces Postgres's ordering.
     private UUID low(UUID a, UUID b) {
-        return a.compareTo(b) < 0 ? a : b;
+        return a.toString().compareTo(b.toString()) < 0 ? a : b;
     }
 
     private UUID high(UUID a, UUID b) {
-        return a.compareTo(b) < 0 ? b : a;
+        return a.toString().compareTo(b.toString()) < 0 ? b : a;
     }
 
     private DmMessageResponse toResponse(DmMessage message, User author) {

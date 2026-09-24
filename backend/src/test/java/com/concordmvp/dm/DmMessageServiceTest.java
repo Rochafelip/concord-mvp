@@ -183,7 +183,8 @@ class DmMessageServiceTest {
         assertThat(result.getAuthorId()).isEqualTo(authorId);
         assertThat(List.of(result.getUserLowId(), result.getUserHighId()))
                 .containsExactlyInAnyOrder(authorId, recipientId);
-        assertThat(result.getUserLowId()).isLessThan(result.getUserHighId());
+        // String-compared, not UUID.compareTo() — see the ordering regression test below for why.
+        assertThat(result.getUserLowId().toString()).isLessThan(result.getUserHighId().toString());
 
         ArgumentCaptor<WsEvent> eventCaptor = ArgumentCaptor.forClass(WsEvent.class);
         verify(realtimeEventPublisher).broadcast(eq(Set.of(authorId, recipientId)), eventCaptor.capture());
@@ -195,6 +196,35 @@ class DmMessageServiceTest {
 
         verify(dmConversationStateService).ensureVisible(authorId, recipientId);
         verify(dmConversationStateService).ensureVisible(recipientId, authorId);
+    }
+
+    /**
+     * Regression test for a real production bug: {@code chk_dm_messages_ordered_pair} (V20)
+     * enforces {@code user_low_id < user_high_id} using PostgreSQL's own {@code uuid} ordering,
+     * an unsigned byte-wise comparison. {@code java.util.UUID.compareTo()} instead compares
+     * {@code mostSigBits}/{@code leastSigBits} as SIGNED longs, which disagrees with Postgres
+     * whenever the two UUIDs' leading hex digit falls on opposite sides of 8 (~50% of random
+     * pairs) — this pair was picked because it triggers exactly that. Reproduced live: the
+     * message was persisted with the Java-ordered (wrong) low/high, the DB rejected the insert
+     * with a DataIntegrityViolationException at commit time, and the sender/recipient had
+     * already received the optimistic DM_MESSAGE_CREATE broadcast — so the message appeared to
+     * send but silently never existed, even after reopening the conversation.
+     */
+    @Test
+    void sendMessage_valid_normalizesOrderToMatchPostgresUuidOrdering() {
+        UUID authorId = UUID.fromString("ad4dc306-f803-4d0a-8d62-14b4369bbb62");
+        UUID recipientId = UUID.fromString("4f046fed-8f11-4701-bd07-1b963beeadcd");
+        when(userRepository.findById(recipientId)).thenReturn(Optional.of(user(recipientId, "bob")));
+        when(userRepository.findById(authorId)).thenReturn(Optional.of(user(authorId, "alice")));
+        stubAcceptedFriendship(authorId, recipientId);
+        stubSaveAssignsId();
+
+        DmMessage result = dmMessageService.sendMessage(authorId, recipientId, "hi");
+
+        // Compared as strings (== Postgres's real uuid ordering), not via UUID.compareTo() —
+        // asserting with the same broken comparator the code uses would make this test pass
+        // even on the buggy implementation.
+        assertThat(result.getUserLowId().toString()).isLessThan(result.getUserHighId().toString());
     }
 
     // --- getHistory ---
@@ -231,8 +261,11 @@ class DmMessageServiceTest {
     void getHistory_returnsChronologicalOrder_despiteRepositoryReturningNewestFirst() {
         UUID requesterId = UUID.randomUUID();
         UUID otherId = UUID.randomUUID();
-        UUID low = requesterId.compareTo(otherId) < 0 ? requesterId : otherId;
-        UUID high = requesterId.compareTo(otherId) < 0 ? otherId : requesterId;
+        // String-compared, matching DmMessageService's own low()/high() (see the ordering
+        // regression test above) — UUID.compareTo() would occasionally disagree and make this
+        // test's stub not match the real call.
+        UUID low = requesterId.toString().compareTo(otherId.toString()) < 0 ? requesterId : otherId;
+        UUID high = requesterId.toString().compareTo(otherId.toString()) < 0 ? otherId : requesterId;
         when(userRepository.findById(otherId)).thenReturn(Optional.of(user(otherId, "bob")));
         when(userRepository.findAllById(any())).thenReturn(List.of(user(otherId, "bob")));
 
