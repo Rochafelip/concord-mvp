@@ -219,10 +219,16 @@ services:
 
     # linuxserver.io images run their own s6-overlay init as root, then drop the actual duckdns
     # process to PUID:PGID once set — same uid/gid the backend container already uses (security
-    # audit, Baixa finding). No persistent volume is mounted here for it to chown, so there's
-    # nothing else for that init to need root for.
+    # audit, Baixa finding). That drop itself needs CHOWN/SETUID/SETGID (s6-overlay chowns its
+    # own internal dirs and calls s6-applyuidgid); with plain `cap_drop: ALL` that init failed
+    # outright (s6-rc: unable to start service init-duckdns, exit 111), so the DNS record silently
+    # stopped updating. These three are the minimum that got it working again.
     cap_drop:
       - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
     security_opt:
       - no-new-privileges:true
 
